@@ -29,7 +29,7 @@ sudo apt-get install -y nodejs
 # Créer le dossier
 mkdir -p ~/velo-journal && cd ~/velo-journal
 
-# Copier server.js et package.json ici
+# Copier app.js et package.json ici
 # (via sftp, scp, ou coller le contenu)
 
 # Installer les dépendances
@@ -38,25 +38,42 @@ npm install
 
 ### 3. Configurer (variables d'environnement)
 
-Créez un fichier `.env` ou définissez les variables au démarrage :
+Créez un fichier `.env` dans le dossier du projet :
 
-| Variable         | Défaut      | Description                              |
-|------------------|-------------|------------------------------------------|
-| `ADMIN_PASSWORD` | `velo2024`  | Mot de passe pour poster                 |
-| `PORT`           | `3000`      | Port d'écoute                            |
-| `SESSION_SECRET` | auto        | Secret de session (changez-le !)        |
-| `TRIP_TITLE`     | `Mon voyage à vélo` | Titre affiché                    |
-| `TRIP_START`     | _(vide)_    | Ville de départ (affiché dans le header) |
-| `TRIP_END`       | _(vide)_    | Ville d'arrivée                          |
+| Variable         | Défaut            | Description                              |
+|------------------|-------------------|------------------------------------------|
+| `ADMIN_PASSWORD` | `velo2024` ⚠️     | Mot de passe pour poster                 |
+| `FAMILY_PASSWORD`| `famille2024` ⚠️  | Mot de passe pour la page famille        |
+| `MARGOT_PASSWORD`| _(vide)_          | Mot de passe optionnel rôle Margot       |
+| `PORT`           | `3000`            | Port d'écoute                            |
+| `SESSION_SECRET` | _(aléatoire)_ ⚠️  | Secret de session — **à définir absolument** |
+| `TRIP_TITLE`     | `Mon voyage à vélo` | Titre affiché                          |
+| `TRIP_START`     | _(vide)_          | Ville de départ (affiché dans le header) |
+| `TRIP_END`       | _(vide)_          | Ville d'arrivée                          |
+| `NODE_ENV`       | _(vide)_          | Mettre `production` en prod (active cookie secure) |
+
+> ⚠️ **Important** — Le serveur affiche un avertissement au démarrage si `ADMIN_PASSWORD`, `FAMILY_PASSWORD` ou `SESSION_SECRET` sont encore à leur valeur par défaut. Changez-les avant de mettre le site en ligne.
+
+Exemple de fichier `.env` :
+
+```env
+ADMIN_PASSWORD=monmotdepassesolide
+FAMILY_PASSWORD=familledurandin2025
+SESSION_SECRET=une_longue_chaine_aleatoire_ici
+TRIP_TITLE=Paris → Rome
+TRIP_START=Paris
+TRIP_END=Rome
+NODE_ENV=production
+```
 
 ### 4. Démarrer
 
 ```bash
-# Démarrage simple
-ADMIN_PASSWORD=monmotdepasse TRIP_TITLE="Paris → Rome" TRIP_START="Paris" TRIP_END="Rome" node server.js
+# Démarrage simple avec .env
+node app.js
 
-# Ou avec un fichier .env
-node -e "require('fs').writeFileSync('.env','')"; # créer .env
+# Ou en passant les variables directement
+ADMIN_PASSWORD=monmotdepasse TRIP_TITLE="Paris → Rome" node app.js
 ```
 
 ### 5. Rendre accessible publiquement avec Nginx
@@ -98,15 +115,15 @@ sudo apt install certbot python3-certbot-nginx -y
 sudo certbot --nginx -d VOTRE_DOMAINE.fr
 ```
 
+> Le cookie de session est automatiquement passé en mode `secure` (HTTPS uniquement) quand `NODE_ENV=production`.
+
 ### 7. Garder actif avec PM2
 
 ```bash
 npm install -g pm2
 
-# Démarrer
-pm2 start server.js --name velo-journal \
-  --env ADMIN_PASSWORD=monmotdepasse \
-  --env TRIP_TITLE="Paris → Rome"
+# Démarrer (les variables sont lues depuis .env automatiquement)
+pm2 start app.js --name velo-journal
 
 # Démarrer automatiquement au reboot
 pm2 startup
@@ -120,7 +137,7 @@ pm2 save
 ### Poster une étape (vous, depuis le vélo)
 
 1. Ouvrez `https://votre-domaine.fr/post` sur votre téléphone
-2. Entrez le mot de passe (une seule fois, mémorisé 30 jours)
+2. Entrez le mot de passe admin (une seule fois, mémorisé 30 jours)
 3. Remplissez le titre, le texte de l'étape
 4. Appuyez sur **📍 Détecter ma position** pour la carte
 5. Ajoutez des photos (jusqu'à 10)
@@ -142,17 +159,38 @@ pm2 save
 
 ```
 velo-journal/
-├── server.js          ← tout le code (backend + templates HTML)
+├── app.js             ← tout le code (backend + templates HTML)
 ├── package.json
+├── .env               ← vos secrets (ne pas commiter !)
 ├── data/
 │   └── posts.json     ← vos étapes (auto-créé)
 └── public/
     └── uploads/       ← vos photos (auto-créé)
 ```
 
-## Sauvegardes
+---
 
-Sauvegardez régulièrement :
+## Sécurité
+
+### Mesures en place
+
+- **Headers HTTP** — [helmet](https://helmetjs.github.io/) active automatiquement `Content-Security-Policy`, `X-Frame-Options`, `X-Content-Type-Options`, etc.
+- **Protection XSS** — tous les champs utilisateur (titre, corps, lieu, commentaires) sont échappés avant rendu HTML.
+- **Protection CSRF** — un token aléatoire par session est vérifié sur tous les formulaires POST (supprimer, commenter, poster, modifier).
+- **Cookie de session sécurisé** — `httpOnly`, `sameSite: lax`, et `secure` en production.
+- **Rate limiting** — la route `/login` est limitée à **10 tentatives par 15 minutes** par IP.
+- **Sessions invalidées à la déconnexion** — `req.session.destroy()` à chaque logout.
+
+### Recommandations
+
+- Définissez `SESSION_SECRET` dans `.env` — sans ça, toutes les sessions sont perdues à chaque redémarrage.
+- Utilisez HTTPS (Let's Encrypt, voir étape 6) — requis pour le cookie `secure` et la géolocalisation mobile.
+- Ne commitez jamais votre fichier `.env` — il est déjà dans `.gitignore`.
+- Sauvegardez régulièrement `data/posts.json` et `public/uploads/`.
+
+---
+
+## Sauvegardes
 
 ```bash
 # Depuis votre machine locale

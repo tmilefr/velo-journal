@@ -1,9 +1,11 @@
-const express = require('express');
-const multer  = require('multer');
-const fs      = require('fs');
-const path    = require('path');
-const crypto  = require('crypto');
-const session = require('express-session');
+const express   = require('express');
+const helmet    = require('helmet');
+const rateLimit = require('express-rate-limit');
+const multer    = require('multer');
+const fs        = require('fs');
+const path      = require('path');
+const crypto    = require('crypto');
+const session   = require('express-session');
 let sharp; try { sharp = require('sharp'); } catch(e) { sharp = null; }
 
 // Lecture du fichier .env (pas de dépendance externe)
@@ -35,12 +37,22 @@ const TRIP_TITLE      = process.env.TRIP_TITLE      || 'Nijumatim, carnet de voy
 const TRIP_START      = process.env.TRIP_START      || '';
 const TRIP_END        = process.env.TRIP_END        || '';
 
+// Avertissement si mots de passe par défaut encore actifs
+if (ADMIN_PASSWORD === 'velo2024')    console.warn('⚠️  ADMIN_PASSWORD est la valeur par défaut — changez-la dans .env !');
+if (FAMILY_PASSWORD === 'famille2024') console.warn('⚠️  FAMILY_PASSWORD est la valeur par défaut — changez-la dans .env !');
+if (!process.env.SESSION_SECRET)      console.warn('⚠️  SESSION_SECRET non défini — les sessions seront invalidées à chaque redémarrage !');
+
 const AUTHORS = ['Julie', 'Margot', 'Nicolas', 'Timothé', 'La famille'];
 
 // ── Helpers ───────────────────────────────────────────────
 function readPosts() {
   if (!fs.existsSync(DATA)) return [];
-  return JSON.parse(fs.readFileSync(DATA, 'utf8'));
+  try {
+    return JSON.parse(fs.readFileSync(DATA, 'utf8'));
+  } catch (e) {
+    console.error('[readPosts] posts.json corrompu, retour tableau vide :', e.message);
+    return [];
+  }
 }
 function writePosts(posts) {
   fs.writeFileSync(DATA, JSON.stringify(posts, null, 2));
@@ -55,12 +67,44 @@ function totalDPlus(posts) {
 // ── Middleware ────────────────────────────────────────────
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
+
+// ── Helmet — headers de sécurité HTTP ────────────────────
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc:  ["'self'", "'unsafe-inline'", "unpkg.com"],
+      styleSrc:   ["'self'", "'unsafe-inline'", "fonts.googleapis.com", "unpkg.com"],
+      fontSrc:    ["'self'", "fonts.gstatic.com"],
+      imgSrc:     ["'self'", "data:", "*.tile.openstreetmap.org", "nominatim.openstreetmap.org"],
+      connectSrc: ["'self'", "nominatim.openstreetmap.org"],
+    }
+  },
+  crossOriginEmbedderPolicy: false,
+}));
+
+// ── Sessions ──────────────────────────────────────────────
 app.use(session({
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
-  cookie: { maxAge: 30 * 24 * 60 * 60 * 1000 }
+  cookie: {
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax'
+  }
 }));
+
+// ── Rate limiting ─────────────────────────────────────────
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,
+  message: 'Trop de tentatives de connexion. Réessayez dans 15 minutes.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 app.use('/uploads', requireFamily, express.static(path.join(__dirname, 'public', 'uploads')));
 app.use('/public', express.static(path.join(__dirname, 'public')));
 
@@ -92,12 +136,11 @@ async function resizeUploadedImages(files) {
     const tmpPath = file.path + '.tmp';
     try {
       await sharp(file.path)
-        .rotate()                          // respect EXIF orientation
+        .rotate()
         .resize(1800, 1800, { fit: 'inside', withoutEnlargement: true })
         .jpeg({ quality: 85, progressive: true })
         .toFile(tmpPath);
       fs.renameSync(tmpPath, file.path);
-      // Rename to .jpg if not already
       if (!file.path.endsWith('.jpg') && !file.path.endsWith('.jpeg')) {
         const newPath = file.path.replace(/\.[^.]+$/, '.jpg');
         fs.renameSync(file.path, newPath);
@@ -105,7 +148,6 @@ async function resizeUploadedImages(files) {
         file.filename = path.basename(newPath);
       }
     } catch(e) {
-      // Keep original on error
       if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
     }
   }
@@ -123,6 +165,23 @@ function deletePostFiles(post) {
   }
 }
 
+// ── CSRF ──────────────────────────────────────────────────
+// Génère un token CSRF par session, le vérifie sur les POST sensibles
+function csrfToken(req) {
+  if (!req.session.csrf) {
+    req.session.csrf = crypto.randomBytes(24).toString('hex');
+  }
+  return req.session.csrf;
+}
+
+function requireCsrf(req, res, next) {
+  const token = req.body._csrf || req.headers['x-csrf-token'];
+  if (!token || token !== req.session.csrf) {
+    return res.status(403).send('Token CSRF invalide ou manquant.');
+  }
+  next();
+}
+
 // ── Auth middleware ───────────────────────────────────────
 function requireAuth(req, res, next) {
   if (req.session.auth || req.session.margot) return next();
@@ -135,14 +194,19 @@ function requireFamily(req, res, next) {
 
 // Filtre les posts selon le rôle de la session
 function filterPostsByRole(posts, req) {
-  if (req.session.auth || req.session.margot) return posts; // admin et Margot voient tout
-  return posts.filter(p => !p.visibility || p.visibility === 'all'); // famille
+  if (req.session.auth || req.session.margot) return posts;
+  return posts.filter(p => !p.visibility || p.visibility === 'all');
 }
 
 // ── Routes publiques ──────────────────────────────────────
 app.get('/', requireFamily, (req, res) => {
-  const posts = filterPostsByRole(readPosts().sort((a, b) => new Date(b.date) - new Date(a.date)), req);
-  res.send(renderPublic(posts, !!req.session.auth || !!req.session.margot));
+  const allPosts    = readPosts().sort((a, b) => new Date(b.date) - new Date(a.date));
+  const filtered    = filterPostsByRole(allPosts, req);
+  const activeAuthor = req.query.author || '';
+  const posts = activeAuthor
+    ? filtered.filter(p => p.author === activeAuthor)
+    : filtered;
+  res.send(renderPublic(posts, !!req.session.auth || !!req.session.margot, activeAuthor, filtered, csrfToken(req)));
 });
 
 app.get('/timeline', requireFamily, (req, res) => {
@@ -162,7 +226,7 @@ app.get('/rss', requireFamily, (req, res) => {
 });
 
 // ── Commentaires ──────────────────────────────────────────
-app.post('/comment/:id', requireFamily, (req, res) => {
+app.post('/comment/:id', requireFamily, requireCsrf, (req, res) => {
   const posts = readPosts();
   const post  = posts.find(p => p.id === req.params.id);
   if (!post) return res.status(404).send('Étape introuvable');
@@ -185,7 +249,7 @@ app.get('/login', (req, res) => {
   res.send(renderLogin(false, req.query.next || '/'));
 });
 
-app.post('/login', (req, res) => {
+app.post('/login', loginLimiter, (req, res) => {
   const next = req.body.next || '/';
   const pw   = req.body.password;
   if (pw === ADMIN_PASSWORD) {
@@ -215,19 +279,18 @@ app.get('/logout', (req, res) => {
 app.get('/post', requireAuth, (req, res) => {
   const posts = readPosts().sort((a, b) => new Date(b.date) - new Date(a.date));
   const lastLocation = posts.length > 0 ? (posts[0].location || '') : '';
-  res.send(renderPostForm(null, lastLocation, !!req.session.margot));
+  res.send(renderPostForm(null, lastLocation, !!req.session.margot, csrfToken(req)));
 });
 
-app.post('/post', requireAuth, upload.fields([{name:'photos', maxCount:10},{name:'gpx', maxCount:1}]), async (req, res) => {
+app.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', maxCount:10},{name:'gpx', maxCount:1}]), async (req, res) => {
   const { title, body, location, lat, lon, km, dplus, author, visibility } = req.body;
   if (!title?.trim() || !body?.trim()) {
-    return res.send(renderPostForm('Titre et texte obligatoires.', '', !!req.session.margot));
+    return res.send(renderPostForm('Titre et texte obligatoires.', '', !!req.session.margot, csrfToken(req)));
   }
   await resizeUploadedImages(req.files?.photos || []);
   const photos  = (req.files?.photos || []).map(f => '/uploads/' + f.filename);
   const gpxFile = req.files?.gpx?.[0] ? '/uploads/' + req.files.gpx[0].filename : null;
 
-  // Extract last point from GPX as arrival coordinates
   let finalLat = parseFloat(lat) || null;
   let finalLon = parseFloat(lon) || null;
   if (gpxFile) {
@@ -267,7 +330,7 @@ app.post('/post', requireAuth, upload.fields([{name:'photos', maxCount:10},{name
 });
 
 // ── Admin : supprimer ─────────────────────────────────────
-app.post('/delete/:id', requireAuth, (req, res) => {
+app.post('/delete/:id', requireAuth, requireCsrf, (req, res) => {
   const posts    = readPosts();
   const post     = posts.find(p => p.id === req.params.id);
   if (post) deletePostFiles(post);
@@ -281,16 +344,16 @@ app.get('/edit/:id', requireAuth, (req, res) => {
   const posts = readPosts();
   const post  = posts.find(p => p.id === req.params.id);
   if (!post) return res.status(404).send('Étape introuvable');
-  res.send(renderEditForm(post, null, !!req.session.margot));
+  res.send(renderEditForm(post, null, !!req.session.margot, csrfToken(req)));
 });
 
-app.post('/edit/:id', requireAuth, upload.fields([{name:'photos', maxCount:10},{name:'gpx', maxCount:1}]), async (req, res) => {
+app.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos', maxCount:10},{name:'gpx', maxCount:1}]), async (req, res) => {
   const posts = readPosts();
   const idx   = posts.findIndex(p => p.id === req.params.id);
   if (idx === -1) return res.status(404).send('Étape introuvable');
   const { title, body, location, lat, lon, km, dplus, author, visibility } = req.body;
   if (!title?.trim() || !body?.trim()) {
-    return res.send(renderEditForm(posts[idx], 'Titre et texte obligatoires.', !!req.session.margot));
+    return res.send(renderEditForm(posts[idx], 'Titre et texte obligatoires.', !!req.session.margot, csrfToken(req)));
   }
   const existing = posts[idx];
   await resizeUploadedImages(req.files?.photos || []);
@@ -298,7 +361,6 @@ app.post('/edit/:id', requireAuth, upload.fields([{name:'photos', maxCount:10},{
   const keepPhotos = req.body.keepPhotos ? (Array.isArray(req.body.keepPhotos) ? req.body.keepPhotos : [req.body.keepPhotos]) : [];
   const photos = [...keepPhotos, ...newPhotos];
 
-  // Delete photos that were unchecked
   for (const old of (existing.photos || [])) {
     if (!keepPhotos.includes(old)) {
       const abs = path.join(__dirname, 'public', old);
@@ -308,13 +370,11 @@ app.post('/edit/:id', requireAuth, upload.fields([{name:'photos', maxCount:10},{
 
   const gpxFile = req.files?.gpx?.[0] ? '/uploads/' + req.files.gpx[0].filename : (req.body.keepGpx ? existing.gpx : null);
 
-  // Delete old GPX if replaced
   if (req.files?.gpx?.[0] && existing.gpx && existing.gpx !== gpxFile) {
     const abs = path.join(__dirname, 'public', existing.gpx);
     if (fs.existsSync(abs)) { try { fs.unlinkSync(abs); } catch(e){} }
   }
 
-  // Extract last point from GPX as arrival coordinates
   let finalLat = parseFloat(lat) || null;
   let finalLon = parseFloat(lon) || null;
   if (gpxFile) {
@@ -1385,6 +1445,16 @@ function initials(name) {
   return name.split(' ').map(w => w[0]).join('').toUpperCase().substring(0, 2);
 }
 
+// ── Échappement HTML — protection XSS ─────────────────────
+function esc(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const AUTHOR_EMOJI = {
   'Julie': '👩',
   'Margot': '👧',
@@ -1397,11 +1467,25 @@ const AUTHOR_EMOJI = {
 //  renderPublic
 // ══════════════════════════════════════════════════════════
 
-function renderPublic(posts, isAdmin = false) {
-  const km    = Math.round(totalKm(posts));
-  const dp    = Math.round(totalDPlus(posts)).toLocaleString('fr-FR');
-  const days  = posts.length;
-  const withGps = posts.filter(p => p.lat && p.lon);
+function renderPublic(posts, isAdmin = false, activeAuthor = '', allPosts = [], csrf = '') {
+  const km    = Math.round(totalKm(allPosts));
+  const dp    = Math.round(totalDPlus(allPosts)).toLocaleString('fr-FR');
+  const days  = allPosts.length;
+  const withGps = allPosts.filter(p => p.lat && p.lon);
+
+  // Build filter chips
+  const authorsInPosts = [...new Set(allPosts.map(p => p.author).filter(Boolean))];
+  const filterChips = authorsInPosts.length > 1 ? `
+    <div class="filter-bar">
+      <span class="filter-label">🔍 Filtrer</span>
+      <a href="/" class="filter-chip ${!activeAuthor ? 'active' : ''}">🌍 Tous</a>
+      ${authorsInPosts.map(a => `
+        <a href="/?author=${encodeURIComponent(a)}" class="filter-chip ${activeAuthor === a ? 'active' : ''}">
+          ${AUTHOR_EMOJI[a] || '👤'} ${esc(a)}
+        </a>
+      `).join('')}
+    </div>
+  ` : '';
 
   const postCards = posts.length === 0
     ? `<div class="empty">
@@ -1430,43 +1514,45 @@ function renderPublic(posts, isAdmin = false) {
           </div>
         </div>
         <div class="card-date-right">
-          ${p.location ? `<span class="card-loc">📍 ${p.location}</span>` : ''}
+          ${p.author ? `<span class="author-badge">${AUTHOR_EMOJI[p.author] || '👤'} ${esc(p.author)}</span>` : ''}
+          ${p.location ? `<span class="card-loc">📍 ${esc(p.location)}</span>` : ''}
         </div>
       </div>
 
       <div class="card-divider"></div>
 
       <div class="card-body">
-        <h2 class="card-title">${p.title}</h2>
+        <h2 class="card-title">${esc(p.title)}</h2>
 
         <!-- Badges km / D+ -->
         ${(p.km || p.dplus) ? `
         <div class="card-badges" style="margin-bottom:14px">
-          ${p.km   ? `<span class="km-badge">🚴 +${p.km} km</span>` : ''}
-          ${p.dplus ? `<span class="dplus-badge">⛰️ ${p.dplus} m D+</span>` : ''}
+          ${p.km   ? `<span class="km-badge">🚴 +${esc(String(p.km))} km</span>` : ''}
+          ${p.dplus ? `<span class="dplus-badge">⛰️ ${esc(String(p.dplus))} m D+</span>` : ''}
         </div>` : ''}
 
         <!-- Photos APRÈS le titre -->
         ${p.photos?.length ? `
         <div class="card-photos${p.photos.length === 1 ? ' single' : ''}" style="margin:0 -18px 16px;border-radius:0">
-          ${p.photos.map(ph=>`<img src="${ph}" alt="photo" loading="lazy" data-postid="${p.id}">`).join('')}
+          ${p.photos.map(ph=>`<img src="${esc(ph)}" alt="photo" loading="lazy" data-postid="${p.id}">`).join('')}
         </div>
         ` : ''}
 
-        <p class="card-text">${p.body}</p>
+        <p class="card-text">${esc(p.body)}</p>
         ${p.gpx ? `
-        <div class="gpx-map-wrap" data-gpx="${p.gpx}">
+        <div class="gpx-map-wrap" data-gpx="${esc(p.gpx)}">
           <div class="gpx-leaflet" id="gpxmap-${p.id}" style="height:260px"></div>
           <div class="gpx-map-footer">
             <span class="gpx-map-lbl">🗺️ Trace GPX</span>
-            <a class="gpx-link" href="${p.gpx}" download>⬇️ Télécharger</a>
+            <a class="gpx-link" href="${esc(p.gpx)}" download>⬇️ Télécharger</a>
           </div>
         </div>` : ''}
         ${isAdmin ? `
         <div class="admin-actions">
           <a href="/edit/${p.id}" class="btn-edit">✏️ Modifier</a>
-          ${p.visibility && p.visibility !== 'all' ? `<span style="font-size:11px;padding:4px 10px;border-radius:20px;background:#fef9c3;color:#92400e">⏳ À valider</span>` : ''}
+          ${p.visibility && p.visibility !== 'all' ? `<span style="font-size:11px;padding:4px 10px;border-radius:20px;background:${p.visibility==='margot'?'#fef9c3;color:#92400e':'#fee2e2;color:#991b1b'}">${p.visibility==='margot'?'👧 Margot+':'🔒 Admin seul'}</span>` : ''}
           <form method="POST" action="/delete/${p.id}" style="margin-left:auto" onsubmit="return confirm('Supprimer définitivement cette étape ?')">
+            <input type="hidden" name="_csrf" value="${csrf}">
             <button type="submit" class="btn-del">🗑️ Supprimer</button>
           </form>
         </div>` : ''}
@@ -1474,15 +1560,16 @@ function renderPublic(posts, isAdmin = false) {
       <div class="comments">
         ${(p.comments||[]).map(c=>`
           <div class="comment">
-            <div class="comment-avatar">${initials(c.author)}</div>
+            <div class="comment-avatar">${esc(initials(c.author))}</div>
             <div class="comment-bubble">
-              <span class="comment-author">${c.author}</span>
+              <span class="comment-author">${esc(c.author)}</span>
               <span class="comment-date">${formatDate(c.date)}</span>
-              <p class="comment-text">${c.text}</p>
+              <p class="comment-text">${esc(c.text)}</p>
             </div>
           </div>
         `).join('')}
         <form class="comment-form" action="/comment/${p.id}" method="POST">
+          <input type="hidden" name="_csrf" value="${csrf}">
           <input name="author" placeholder="Votre prénom" required maxlength="40">
           <textarea name="text" placeholder="Laisser un commentaire..." required maxlength="300"></textarea>
           <button type="submit">💬 Commenter</button>
@@ -1493,11 +1580,18 @@ function renderPublic(posts, isAdmin = false) {
 
   return `<!DOCTYPE html><html lang="fr"><head>
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>${TRIP_TITLE}</title>
+    <title>${esc(TRIP_TITLE)}</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <style>${CSS}</style>
   </head><body>
     ${renderHeader({ activePage: 'journal', isAdmin, showMap: withGps.length > 0 })}
+
+    ${isAdmin ? `
+    <div class="admin-banner">
+      <span class="admin-banner-label">🔧 Mode administrateur</span>
+      <a href="/post" class="admin-banner-btn">✏️ Nouvelle étape</a>
+      <a href="/logout" class="admin-banner-btn danger">🔓 Déconnexion</a>
+    </div>` : ''}
 
     <div class="stats-bar">
       <div class="stat">
@@ -1513,6 +1607,8 @@ function renderPublic(posts, isAdmin = false) {
         <div class="stat-lbl">m D+</div>
       </div>
     </div>
+
+    ${filterChips}
 
     <div class="feed">${postCards}</div>
 
@@ -1571,7 +1667,6 @@ function renderPublic(posts, isAdmin = false) {
 
         document.querySelectorAll('.card-photos img').forEach(function(img){
           img.addEventListener('click', function(){
-            // Collect only photos from the same post card
             var card = img.closest('.card');
             postImgs = Array.from(card.querySelectorAll('.card-photos img')).map(function(i){return i.src;});
             cur = postImgs.indexOf(img.src);
@@ -1629,16 +1724,16 @@ function renderTimeline(posts, isAdmin = false) {
             <div class="timeline-card-inner-row">
               <div style="flex:1">
                 <div class="timeline-date">📅 ${formatDateShort(p.date)}</div>
-                <div class="timeline-loc">${p.location || p.title}</div>
-                ${p.location ? `<div class="timeline-snippet" style="font-size:13px;color:#555;font-style:italic">${p.title}</div>` : ''}
-                <p class="timeline-snippet">${p.body}</p>
+                <div class="timeline-loc">${esc(p.location || p.title)}</div>
+                ${p.location ? `<div class="timeline-snippet" style="font-size:13px;color:#555;margin-bottom:2px;font-style:italic">${esc(p.title)}</div>` : ''}
+                <p class="timeline-snippet">${esc(p.body)}</p>
                 <div class="timeline-meta">
-                  ${p.km ? `<span class="timeline-badge tl-km">🚴 ${p.km} km</span>` : ''}
-                  ${p.dplus ? `<span class="timeline-badge tl-km">⛰️ ${p.dplus} m D+</span>` : ''}
-                  ${p.author ? `<span class="timeline-badge tl-author">${AUTHOR_EMOJI[p.author]||'👤'} ${p.author}</span>` : ''}
+                  ${p.km ? `<span class="timeline-badge tl-km">🚴 ${esc(String(p.km))} km</span>` : ''}
+                  ${p.dplus ? `<span class="timeline-badge tl-km">⛰️ ${esc(String(p.dplus))} m D+</span>` : ''}
+                  ${p.author ? `<span class="timeline-badge tl-author">${AUTHOR_EMOJI[p.author]||'👤'} ${esc(p.author)}</span>` : ''}
                 </div>
               </div>
-              ${p.photos?.length ? `<img src="${p.photos[0]}" class="timeline-thumb" alt="photo" loading="lazy">` : ''}
+              ${p.photos?.length ? `<img src="${esc(p.photos[0])}" class="timeline-thumb" alt="photo" loading="lazy">` : ''}
             </div>
           </div>
         </a>
@@ -1647,7 +1742,7 @@ function renderTimeline(posts, isAdmin = false) {
 
   return `<!DOCTYPE html><html lang="fr"><head>
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Timeline — ${TRIP_TITLE}</title>
+    <title>Timeline — ${esc(TRIP_TITLE)}</title>
     <style>${CSS}</style>
   </head><body>
     ${renderHeader({ activePage: 'timeline', isAdmin, showMap: true })}
@@ -1688,10 +1783,9 @@ function renderMap(posts, isAdmin = false) {
 
   return `<!DOCTYPE html><html lang="fr"><head>
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Carte — ${TRIP_TITLE}</title>
+    <title>Carte — ${esc(TRIP_TITLE)}</title>
     <style>${CSS}
       html, body { height: 100%; margin: 0; }
-      /* Sur la page carte : layout flex sans overflow:hidden sur body */
       .map-page { display: flex; flex-direction: column; height: 100%; }
       .map-page .header { position: relative; flex-shrink: 0; overflow: visible; z-index: 1000; }
       .map-page .mobile-menu { position: absolute; z-index: 1001; }
@@ -1803,9 +1897,9 @@ function renderMap(posts, isAdmin = false) {
           </div>
         </div>
         ` : ''}
-      </div><!-- #fullmap -->
-      </div><!-- #map-container -->
-    </div><!-- .map-page -->
+      </div>
+      </div>
+    </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
@@ -1821,7 +1915,6 @@ function renderMap(posts, isAdmin = false) {
 
         const pts = gpsData.map(p => [p.lat, p.lon]);
 
-        // Tracé
         if (pts.length > 1) L.polyline(pts, { color: 'rgba(0,0,0,.10)', weight: 8 }).addTo(map);
         if (pts.length > 1) L.polyline(pts, { color: '#2a7a7a', weight: 4, opacity: .9 }).addTo(map);
         if (pts.length > 1) L.polyline(pts, { color: '#fff', weight: 1.5, opacity: .5, dashArray: '8,10' }).addTo(map);
@@ -1877,13 +1970,13 @@ function renderMap(posts, isAdmin = false) {
 }
 
 // ══════════════════════════════════════════════════════════
-//  renderFamilyLogin
+//  renderLogin
 // ══════════════════════════════════════════════════════════
 
 function renderLogin(error, next = '/') {
   return `<!DOCTYPE html><html lang="fr"><head>
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>${TRIP_TITLE} — Accès</title>
+    <title>${esc(TRIP_TITLE)} — Accès</title>
     <style>${CSS}
       body{min-height:100vh;display:flex;flex-direction:column;justify-content:center;background:var(--warm-white);}
     </style>
@@ -1892,7 +1985,7 @@ function renderLogin(error, next = '/') {
       <div style="display:flex;justify-content:center;margin-bottom:8px">
         <img src="/public/logo_nijumatim.png" alt="Nijumatim" style="height:70px;width:auto;background:#fff;border-radius:12px;padding:6px 14px;">
       </div>
-      <p>${TRIP_START && TRIP_END ? TRIP_START + ' → ' + TRIP_END : 'Journal de voyage privé'}</p>
+      <p>${TRIP_START && TRIP_END ? esc(TRIP_START) + ' → ' + esc(TRIP_END) : 'Journal de voyage privé'}</p>
     </div>
 
     <div class="form-wrap" style="max-width:420px;padding-top:28px">
@@ -1903,7 +1996,7 @@ function renderLogin(error, next = '/') {
           Entrez votre mot de passe pour accéder au journal.
         </p>
         <form method="POST" action="/login">
-          <input type="hidden" name="next" value="${next}">
+          <input type="hidden" name="next" value="${esc(next)}">
           <div class="field">
             <label>Mot de passe</label>
             <input type="password" name="password" placeholder="••••••••" autofocus required
@@ -1911,52 +2004,6 @@ function renderLogin(error, next = '/') {
           </div>
           <button class="btn-submit" type="submit">Accéder au journal 🚴</button>
         </form>
-      </div>
-    </div>
-  </body></html>`;
-}
-
-// ══════════════════════════════════════════════════════════
-//  renderFamilyLogin (legacy stub — plus utilisé)
-// ══════════════════════════════════════════════════════════
-
-function renderFamilyLogin(error, next) {
-  return `<!DOCTYPE html><html lang="fr"><head>
-    <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>${TRIP_TITLE} — Accès</title>
-    <style>${CSS}
-      body{min-height:100vh;display:flex;flex-direction:column;justify-content:center;background:var(--warm-white);}
-    </style>
-  </head><body>
-    <div class="login-hero">
-      <div class="login-hero-icon">🚴</div>
-      <h2>${TRIP_TITLE}</h2>
-      <p>${TRIP_START && TRIP_END ? TRIP_START+' → '+TRIP_END : 'Journal de voyage privé'}</p>
-    </div>
-
-    <div class="form-wrap" style="max-width:420px;padding-top:28px">
-      <div class="form-card">
-        ${error ? '<div class="error-msg">Mot de passe incorrect. Demandez-le à votre aventurier !</div>' : ''}
-        <h2 style="text-align:center;margin-bottom:6px">Accès famille</h2>
-        <p style="text-align:center;font-size:13px;color:var(--ink-light);margin-bottom:20px">
-          Entrez le mot de passe partagé pour suivre le voyage.
-        </p>
-        <form method="POST" action="/family-login">
-          <input type="hidden" name="next" value="${next}">
-          <div class="field">
-            <label>Mot de passe</label>
-            <input type="password" name="password" placeholder="••••••••" autofocus required
-              style="text-align:center;font-size:18px;letter-spacing:.1em">
-          </div>
-          <button class="btn-submit" type="submit">Accéder au journal 🚴</button>
-        </form>
-        <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--sand)">
-          <a href="/login" style="font-size:12px;color:var(--ink-light);display:inline-flex;align-items:center;gap:5px;
-            padding:6px 14px;border:1px solid var(--sand);border-radius:8px;transition:background .15s"
-            onmouseover="this.style.background='var(--mist)'" onmouseout="this.style.background='transparent'">
-            🔧 Accès administrateur
-          </a>
-        </div>
       </div>
     </div>
   </body></html>`;
@@ -1966,9 +2013,9 @@ function renderFamilyLogin(error, next) {
 //  renderPostForm
 // ══════════════════════════════════════════════════════════
 
-function renderPostForm(err, lastLocation = '', isMargot = false) {
+function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '') {
   const authorOptions = AUTHORS.map(a =>
-    `<option value="${a}">${AUTHOR_EMOJI[a]||''} ${a}</option>`
+    `<option value="${esc(a)}">${AUTHOR_EMOJI[a]||''} ${esc(a)}</option>`
   ).join('');
 
   return `<!DOCTYPE html><html lang="fr"><head>
@@ -1979,12 +2026,13 @@ function renderPostForm(err, lastLocation = '', isMargot = false) {
     <div class="form-wrap">
       <div class="form-card">
         <h2>Poster une étape</h2>
-        ${err ? `<div class="error-msg">${err}</div>` : ''}
+        ${err ? `<div class="error-msg">${esc(err)}</div>` : ''}
         ${lastLocation ? `
         <div class="prev-location-hint">
-          📍 Dernière position connue : <strong>${lastLocation}</strong>
+          📍 Dernière position connue : <strong>${esc(lastLocation)}</strong>
         </div>` : ''}
         <form method="POST" action="/post" enctype="multipart/form-data" id="postForm">
+          <input type="hidden" name="_csrf" value="${csrf}">
           <div class="field">
             <label>Titre de l'étape *</label>
             <input name="title" type="text" placeholder="Ex : Arrivée à Lyon !" required maxlength="100">
@@ -2009,6 +2057,10 @@ function renderPostForm(err, lastLocation = '', isMargot = false) {
               <label>D+ (mètres)</label>
               <input name="dplus" type="number" min="0" max="10000" placeholder="1200">
             </div>
+          </div>
+          <div class="field">
+            <label>Auteur</label>
+            <select name="author">${authorOptions}</select>
           </div>
           <div class="field">
             <label>Photos (max 10, 20 Mo chacune)</label>
@@ -2126,9 +2178,9 @@ function renderPostForm(err, lastLocation = '', isMargot = false) {
 //  renderEditForm
 // ══════════════════════════════════════════════════════════
 
-function renderEditForm(post, err, isMargot = false) {
+function renderEditForm(post, err, isMargot = false, csrf = '') {
   const authorOptions = AUTHORS.map(a =>
-    `<option value="${a}" ${post.author===a?'selected':''}>${AUTHOR_EMOJI[a]||''} ${a}</option>`
+    `<option value="${esc(a)}" ${post.author===a?'selected':''}>${AUTHOR_EMOJI[a]||''} ${esc(a)}</option>`
   ).join('');
 
   return `<!DOCTYPE html><html lang="fr"><head>
@@ -2139,35 +2191,36 @@ function renderEditForm(post, err, isMargot = false) {
     <div class="form-wrap">
       <div class="form-card">
         <h2>Modifier l'étape</h2>
-        ${err ? `<div class="error-msg">${err}</div>` : ''}
+        ${err ? `<div class="error-msg">${esc(err)}</div>` : ''}
         <form method="POST" action="/edit/${post.id}" enctype="multipart/form-data">
+          <input type="hidden" name="_csrf" value="${csrf}">
           <div class="field">
             <label>Auteur</label>
             <select name="author">${authorOptions}</select>
           </div>
           <div class="field">
             <label>Titre de l'étape *</label>
-            <input name="title" type="text" value="${post.title.replace(/"/g,'&quot;')}" required maxlength="100">
+            <input name="title" type="text" value="${esc(post.title)}" required maxlength="100">
           </div>
           <div class="field">
             <label>Raconte ta journée *</label>
-            <textarea name="body" required maxlength="2000">${post.body}</textarea>
+            <textarea name="body" required maxlength="2000">${esc(post.body)}</textarea>
           </div>
           <div class="field">
             <label>Lieu</label>
-            <input name="location" id="locationField" type="text" value="${(post.location||'').replace(/"/g,'&quot;')}" placeholder="Ex : Lyon, Bord de Saône">
+            <input name="location" id="locationField" type="text" value="${esc(post.location||'')}" placeholder="Ex : Lyon, Bord de Saône">
             <button type="button" class="gps-btn" onclick="getGPS()">📍 Détecter ma position</button>
           </div>
-          <input type="hidden" name="lat" id="lat" value="${post.lat||''}">
-          <input type="hidden" name="lon" id="lon" value="${post.lon||''}">
+          <input type="hidden" name="lat" id="lat" value="${esc(String(post.lat||''))}">
+          <input type="hidden" name="lon" id="lon" value="${esc(String(post.lon||''))}">
           <div class="field-row">
             <div class="field">
               <label>Km du jour</label>
-              <input name="km" type="number" min="0" max="500" step="0.1" value="${post.km||''}">
+              <input name="km" type="number" min="0" max="500" step="0.1" value="${esc(String(post.km||''))}">
             </div>
             <div class="field">
               <label>D+ (mètres)</label>
-              <input name="dplus" type="number" min="0" max="10000" value="${post.dplus||''}">
+              <input name="dplus" type="number" min="0" max="10000" value="${esc(String(post.dplus||''))}">
             </div>
           </div>
           ${post.photos?.length ? `
@@ -2176,8 +2229,8 @@ function renderEditForm(post, err, isMargot = false) {
             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px">
               ${post.photos.map(ph=>`
                 <label style="position:relative;cursor:pointer">
-                  <input type="checkbox" name="keepPhotos" value="${ph}" checked style="position:absolute;top:4px;left:4px;z-index:1;accent-color:var(--teal)">
-                  <img src="${ph}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:2px solid var(--teal-light)">
+                  <input type="checkbox" name="keepPhotos" value="${esc(ph)}" checked style="position:absolute;top:4px;left:4px;z-index:1;accent-color:var(--teal)">
+                  <img src="${esc(ph)}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:2px solid var(--teal-light)">
                 </label>
               `).join('')}
             </div>
@@ -2276,7 +2329,7 @@ function renderEditForm(post, err, isMargot = false) {
 function renderRSS(posts) {
   const items = posts.slice(0, 20).map(p => `
     <item>
-      <title>${p.title}</title>
+      <title>${esc(p.title)}</title>
       <description><![CDATA[${p.body}]]></description>
       <pubDate>${new Date(p.date).toUTCString()}</pubDate>
       <guid>${p.id}</guid>
@@ -2284,7 +2337,7 @@ function renderRSS(posts) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
   <channel>
-    <title>${TRIP_TITLE}</title>
+    <title>${esc(TRIP_TITLE)}</title>
     <description>Journal de voyage vélo</description>
     ${items}
   </channel>
