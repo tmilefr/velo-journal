@@ -881,7 +881,7 @@ const CSS = `
   /* ── GPX CANVAS MAP ──────────────────────────────── */
   .gpx-canvas-wrap{
     margin:14px -18px 0;
-    background:var(--mist);
+    background:#e8f0e0;
     border-top:1px solid var(--sand);
     border-bottom:1px solid var(--sand);
     position:relative;
@@ -891,8 +891,11 @@ const CSS = `
   .gpx-canvas-wrap canvas{
     display:block;
     width:100%;
+    height:260px;
     pointer-events:none;
     touch-action:none;
+    user-select:none;
+    -webkit-user-select:none;
   }
 
   .gpx-canvas-footer{
@@ -900,8 +903,9 @@ const CSS = `
     align-items:center;
     justify-content:space-between;
     padding:6px 14px;
-    background:rgba(255,255,255,0.85);
+    background:rgba(255,255,255,0.88);
     border-top:1px solid var(--sand);
+    backdrop-filter:blur(4px);
   }
 
   .gpx-map-lbl{
@@ -1586,9 +1590,9 @@ function renderPublic(posts, isAdmin = false) {
 
         ${p.gpx ? `
         <div class="gpx-canvas-wrap">
-          <canvas id="gpxcanvas-${p.id}" height="220" data-gpx="${p.gpx}"></canvas>
+          <canvas id="gpxcanvas-${p.id}" data-gpx="${p.gpx}" style="display:block;width:100%;height:260px"></canvas>
           <div class="gpx-canvas-footer">
-            <span class="gpx-map-lbl">🗺️ Trace GPX</span>
+            <span class="gpx-map-lbl">🗺️ Trace GPX · chargement…</span>
             <a class="gpx-link" href="${p.gpx}" download>⬇️ Télécharger</a>
           </div>
         </div>` : ''}
@@ -1658,30 +1662,62 @@ function renderPublic(posts, isAdmin = false) {
     </div>
 
     <script>
-    // ── Rendu GPX sur canvas (pas de scroll parasite) ──────
+    // ── Rendu GPX sur fond de carte OSM (canvas statique) ──
     (function(){
-      // Palette carte claire inspirée OSM
-      var BG_WATER  = '#c8dff5';
-      var BG_LAND   = '#eef0e8';
-      var TRACK_COL = '#2a7a7a';
-      var TRACK_SHD = 'rgba(0,0,0,0.15)';
+
+      // ── Projection Mercator Web (EPSG:3857 / tuiles XYZ) ──
+      function lon2x(lon, z) { return Math.floor((lon + 180) / 360 * Math.pow(2, z)); }
+      function lat2y(lat, z) {
+        var r = lat * Math.PI / 180;
+        return Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * Math.pow(2, z));
+      }
+      // Coordonnées fractionnelles (précises) pour projection pixel
+      function lon2xf(lon, z) { return (lon + 180) / 360 * Math.pow(2, z); }
+      function lat2yf(lat, z) {
+        var r = lat * Math.PI / 180;
+        return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * Math.pow(2, z);
+      }
+
+      // Choisit le zoom optimal pour que la trace rentre dans le canvas
+      function bestZoom(pts, W, H, padding) {
+        var minLat=Infinity,maxLat=-Infinity,minLon=Infinity,maxLon=-Infinity;
+        pts.forEach(function(p){
+          if(p.lat<minLat)minLat=p.lat; if(p.lat>maxLat)maxLat=p.lat;
+          if(p.lon<minLon)minLon=p.lon; if(p.lon>maxLon)maxLon=p.lon;
+        });
+        for (var z = 16; z >= 5; z--) {
+          var x0=lon2xf(minLon,z), x1=lon2xf(maxLon,z);
+          var y0=lat2yf(maxLat,z), y1=lat2yf(minLat,z);
+          var pw=(x1-x0)*256, ph=(y1-y0)*256;
+          if (pw <= W-padding*2 && ph <= H-padding*2) return z;
+        }
+        return 5;
+      }
 
       function drawGpxCanvas(canvas) {
-        var url = canvas.dataset.gpx;
-        if (!url) return;
-        fetch(url)
+        var gpxUrl = canvas.dataset.gpx;
+        if (!gpxUrl) return;
+
+        fetch(gpxUrl)
           .then(function(r){ return r.text(); })
           .then(function(txt){
             var parser = new DOMParser();
             var xml = parser.parseFromString(txt, 'text/xml');
-            var pts = Array.from(xml.querySelectorAll('trkpt')).map(function(p){
+            var raw = Array.from(xml.querySelectorAll('trkpt')).map(function(p){
               return { lat: parseFloat(p.getAttribute('lat')), lon: parseFloat(p.getAttribute('lon')) };
             });
-            if (pts.length < 2) return;
+            if (raw.length < 2) return;
 
-            var dpr = window.devicePixelRatio || 1;
-            var W = canvas.parentElement.clientWidth || 580;
-            var H = 220;
+            // Sous-échantillonnage pour la performance
+            var pts = raw.length > 600
+              ? raw.filter(function(_,i){ return i % Math.ceil(raw.length/600) === 0; })
+              : raw;
+            if (pts[pts.length-1] !== raw[raw.length-1]) pts.push(raw[raw.length-1]);
+
+            // Dimensions canvas (DPR-aware)
+            var dpr = Math.min(window.devicePixelRatio || 1, 2);
+            var W   = canvas.parentElement.clientWidth || 560;
+            var H   = 260;
             canvas.width  = W * dpr;
             canvas.height = H * dpr;
             canvas.style.width  = W + 'px';
@@ -1690,96 +1726,174 @@ function renderPublic(posts, isAdmin = false) {
             var ctx = canvas.getContext('2d');
             ctx.scale(dpr, dpr);
 
-            // Fond dégradé carte
-            var grad = ctx.createLinearGradient(0,0,0,H);
-            grad.addColorStop(0, '#ddeef6');
-            grad.addColorStop(1, '#e8f2e0');
-            ctx.fillStyle = grad;
-            ctx.fillRect(0,0,W,H);
+            // Fond neutre pendant le chargement
+            ctx.fillStyle = '#e8f0e8';
+            ctx.fillRect(0, 0, W, H);
 
-            // Grille légère
-            ctx.strokeStyle = 'rgba(160,180,160,0.25)';
-            ctx.lineWidth = 1;
-            for (var gx = 0; gx < W; gx += 40) {
-              ctx.beginPath(); ctx.moveTo(gx,0); ctx.lineTo(gx,H); ctx.stroke();
-            }
-            for (var gy = 0; gy < H; gy += 40) {
-              ctx.beginPath(); ctx.moveTo(0,gy); ctx.lineTo(W,gy); ctx.stroke();
-            }
+            var PAD = 48; // pixels de marge autour de la trace
+            var z   = bestZoom(pts, W, H, PAD);
 
-            // Calcul bounding box
+            // Bounding box en coordonnées tuiles fractionnelles
             var minLat=Infinity,maxLat=-Infinity,minLon=Infinity,maxLon=-Infinity;
             pts.forEach(function(p){
               if(p.lat<minLat)minLat=p.lat; if(p.lat>maxLat)maxLat=p.lat;
               if(p.lon<minLon)minLon=p.lon; if(p.lon>maxLon)maxLon=p.lon;
             });
 
-            var pad = 28;
-            var dLat = maxLat - minLat || 0.001;
-            var dLon = maxLon - minLon || 0.001;
-            // Ratio lat/lon (approximation)
-            var cosLat = Math.cos((minLat+maxLat)/2 * Math.PI/180);
-            var scaleX = (W - pad*2) / dLon;
-            var scaleY = (H - pad*2) / (dLat / cosLat);
-            var scale  = Math.min(scaleX, scaleY);
-            var offX = (W - dLon * scale) / 2;
-            var offY = (H - dLat / cosLat * scale) / 2;
+            var cx = (lon2xf(minLon,z) + lon2xf(maxLon,z)) / 2; // centre X en tuiles
+            var cy = (lat2yf(minLat,z) + lat2yf(maxLat,z)) / 2; // centre Y en tuiles
 
-            function proj(p) {
+            // Origine pixel du coin supérieur gauche du canvas (en unités tuiles*256)
+            var ox = cx - W/2/256;  // tuile X correspondant au pixel 0
+            var oy = cy - H/2/256;  // tuile Y correspondant au pixel 0
+
+            // Convertit une coordonnée lat/lon en pixel canvas
+            function toPixel(lat, lon) {
               return {
-                x: offX + (p.lon - minLon) * scale,
-                y: H - offY - (p.lat - minLat) / cosLat * scale
+                x: (lon2xf(lon, z) - ox) * 256,
+                y: (lat2yf(lat, z) - oy) * 256
               };
             }
 
-            // Tracé ombre
-            ctx.beginPath();
-            var p0 = proj(pts[0]);
-            ctx.moveTo(p0.x+2, p0.y+2);
-            pts.forEach(function(p){ var c=proj(p); ctx.lineTo(c.x+2, c.y+2); });
-            ctx.strokeStyle = TRACK_SHD;
-            ctx.lineWidth = 5;
-            ctx.lineJoin = 'round';
-            ctx.lineCap  = 'round';
-            ctx.stroke();
+            // Plage de tuiles à charger
+            var tx0 = Math.floor(ox), tx1 = Math.floor(ox + W/256) + 1;
+            var ty0 = Math.floor(oy), ty1 = Math.floor(oy + H/256) + 1;
+            var tileMax = Math.pow(2, z) - 1;
 
-            // Tracé principal
-            ctx.beginPath();
-            ctx.moveTo(p0.x, p0.y);
-            pts.forEach(function(p){ var c=proj(p); ctx.lineTo(c.x, c.y); });
-            ctx.strokeStyle = TRACK_COL;
-            ctx.lineWidth = 3.5;
-            ctx.lineJoin = 'round';
-            ctx.lineCap  = 'round';
-            ctx.stroke();
+            var totalTiles = (tx1-tx0+1) * (ty1-ty0+1);
+            var loadedTiles = 0;
 
-            // Point départ (orange)
-            var start = proj(pts[0]);
-            ctx.beginPath();
-            ctx.arc(start.x, start.y, 6, 0, Math.PI*2);
-            ctx.fillStyle = '#e67e22';
-            ctx.fill();
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 2;
-            ctx.stroke();
+            // Met à jour le label du footer quand toutes les tuiles sont prêtes
+            function onTileLoaded() {
+              loadedTiles++;
+              // Redessiner le fond + trace à chaque tuile
+              redraw();
+              if (loadedTiles >= totalTiles) {
+                var footer = canvas.parentElement.querySelector('.gpx-map-lbl');
+                if (footer) footer.textContent = '🗺️ Trace GPX';
+              }
+            }
 
-            // Point arrivée (vert)
-            var end = proj(pts[pts.length-1]);
-            ctx.beginPath();
-            ctx.arc(end.x, end.y, 6, 0, Math.PI*2);
-            ctx.fillStyle = '#2d7a5a';
-            ctx.fill();
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 2;
-            ctx.stroke();
+            // Stockage des tuiles chargées
+            var tiles = [];
+            for (var tx = tx0; tx <= tx1; tx++) {
+              for (var ty = ty0; ty <= ty1; ty++) {
+                if (tx < 0 || ty < 0 || tx > tileMax || ty > tileMax) { loadedTiles++; continue; }
+                (function(tx, ty) {
+                  var img   = new Image();
+                  img.crossOrigin = 'anonymous';
+                  // Alterner entre les sous-domaines a/b/c pour respecter les limites OSM
+                  var sub = ['a','b','c'][(tx + ty) % 3];
+                  img.src = 'https://' + sub + '.tile.openstreetmap.org/' + z + '/' + tx + '/' + ty + '.png';
+                  img.onload  = function() { tiles.push({img:img, tx:tx, ty:ty}); onTileLoaded(); };
+                  img.onerror = function() { onTileLoaded(); }; // continue si tuile manquante
+                })(tx, ty);
+              }
+            }
 
-            // Légende
-            ctx.font = '11px DM Sans, sans-serif';
-            ctx.fillStyle = 'rgba(90,128,128,0.8)';
-            ctx.fillText('▶ départ', start.x + 9, start.y + 4);
-            ctx.fillText('■ arrivée', end.x + 9, end.y + 4);
+            function redraw() {
+              ctx.clearRect(0, 0, W, H);
+
+              // 1. Fond de secours
+              ctx.fillStyle = '#e8ede8';
+              ctx.fillRect(0, 0, W, H);
+
+              // 2. Tuiles OSM
+              tiles.forEach(function(t) {
+                var px = (t.tx - ox) * 256;
+                var py = (t.ty - oy) * 256;
+                ctx.drawImage(t.img, px, py, 256, 256);
+              });
+
+              // 3. Voile semi-transparent très léger pour améliorer contraste de la trace
+              ctx.fillStyle = 'rgba(255,255,255,0.10)';
+              ctx.fillRect(0, 0, W, H);
+
+              // 4. Ombre de la trace
+              ctx.beginPath();
+              var s = toPixel(pts[0].lat, pts[0].lon);
+              ctx.moveTo(s.x + 2, s.y + 2);
+              pts.forEach(function(p){ var c=toPixel(p.lat,p.lon); ctx.lineTo(c.x+2, c.y+2); });
+              ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+              ctx.lineWidth   = 7;
+              ctx.lineJoin    = 'round';
+              ctx.lineCap     = 'round';
+              ctx.stroke();
+
+              // 5. Trace principale dégradée orange → teal → vert
+              var startPx = toPixel(pts[0].lat, pts[0].lon);
+              var endPx   = toPixel(pts[pts.length-1].lat, pts[pts.length-1].lon);
+              var grad = ctx.createLinearGradient(startPx.x, startPx.y, endPx.x, endPx.y);
+              grad.addColorStop(0,   '#e67e22');
+              grad.addColorStop(0.5, '#2a7a7a');
+              grad.addColorStop(1,   '#2d7a5a');
+
+              ctx.beginPath();
+              ctx.moveTo(startPx.x, startPx.y);
+              pts.forEach(function(p){ var c=toPixel(p.lat,p.lon); ctx.lineTo(c.x,c.y); });
+              ctx.strokeStyle = grad;
+              ctx.lineWidth   = 4;
+              ctx.lineJoin    = 'round';
+              ctx.lineCap     = 'round';
+              ctx.stroke();
+
+              // Contour blanc fin pour lisibilité
+              ctx.beginPath();
+              ctx.moveTo(startPx.x, startPx.y);
+              pts.forEach(function(p){ var c=toPixel(p.lat,p.lon); ctx.lineTo(c.x,c.y); });
+              ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+              ctx.lineWidth   = 1.5;
+              ctx.stroke();
+
+              // 6. Point de départ (orange)
+              var sp = toPixel(pts[0].lat, pts[0].lon);
+              ctx.beginPath();
+              ctx.arc(sp.x, sp.y, 8, 0, Math.PI*2);
+              ctx.fillStyle = '#e67e22';
+              ctx.fill();
+              ctx.strokeStyle = '#fff';
+              ctx.lineWidth = 2.5;
+              ctx.stroke();
+
+              // 7. Point d'arrivée (vert)
+              var ep = toPixel(pts[pts.length-1].lat, pts[pts.length-1].lon);
+              ctx.beginPath();
+              ctx.arc(ep.x, ep.y, 8, 0, Math.PI*2);
+              ctx.fillStyle = '#2d7a5a';
+              ctx.fill();
+              ctx.strokeStyle = '#fff';
+              ctx.lineWidth = 2.5;
+              ctx.stroke();
+
+              // 8. Labels
+              ctx.font = 'bold 11px DM Sans, sans-serif';
+              // Halo blanc pour lisibilité sur toute couleur de fond
+              function labelHalo(text, x, y) {
+                ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+                ctx.lineWidth = 3;
+                ctx.strokeText(text, x, y);
+                ctx.fillText(text, x, y);
+              }
+              ctx.fillStyle = '#e67e22';
+              labelHalo('Départ', sp.x + 12, sp.y + 4);
+              ctx.fillStyle = '#2d7a5a';
+              labelHalo('Arrivée', ep.x + 12, ep.y + 4);
+
+              // 9. Attribution OSM (obligatoire par licence)
+              ctx.font = '9px DM Sans, sans-serif';
+              ctx.fillStyle = 'rgba(0,0,0,0.5)';
+              var attr = '© OpenStreetMap contributors';
+              var aw = ctx.measureText(attr).width;
+              ctx.fillStyle = 'rgba(255,255,255,0.75)';
+              ctx.fillRect(W - aw - 10, H - 16, aw + 8, 14);
+              ctx.fillStyle = 'rgba(0,0,0,0.6)';
+              ctx.fillText(attr, W - aw - 6, H - 5);
+            }
+
+            // Premier dessin immédiat (fond + trace sans tuiles)
+            redraw();
           })
-          .catch(function(){});
+          .catch(function(e){ console.warn('[GPX canvas] erreur :', e); });
       }
 
       document.querySelectorAll('canvas[data-gpx]').forEach(drawGpxCanvas);
