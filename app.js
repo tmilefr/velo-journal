@@ -1,11 +1,9 @@
-const express   = require('express');
-const helmet    = require('helmet');
-const rateLimit = require('express-rate-limit');
-const multer    = require('multer');
-const fs        = require('fs');
-const path      = require('path');
-const crypto    = require('crypto');
-const session   = require('express-session');
+const express = require('express');
+const multer  = require('multer');
+const fs      = require('fs');
+const path    = require('path');
+const crypto  = require('crypto');
+const session = require('express-session');
 let sharp; try { sharp = require('sharp'); } catch(e) { sharp = null; }
 
 // Lecture du fichier .env (pas de dépendance externe)
@@ -37,22 +35,12 @@ const TRIP_TITLE      = process.env.TRIP_TITLE      || 'Nijumatim, carnet de voy
 const TRIP_START      = process.env.TRIP_START      || '';
 const TRIP_END        = process.env.TRIP_END        || '';
 
-// Avertissement si mots de passe par défaut encore actifs
-if (ADMIN_PASSWORD === 'velo2024')    console.warn('⚠️  ADMIN_PASSWORD est la valeur par défaut — changez-la dans .env !');
-if (FAMILY_PASSWORD === 'famille2024') console.warn('⚠️  FAMILY_PASSWORD est la valeur par défaut — changez-la dans .env !');
-if (!process.env.SESSION_SECRET)      console.warn('⚠️  SESSION_SECRET non défini — les sessions seront invalidées à chaque redémarrage !');
-
 const AUTHORS = ['Julie', 'Margot', 'Nicolas', 'Timothé', 'La famille'];
 
 // ── Helpers ───────────────────────────────────────────────
 function readPosts() {
   if (!fs.existsSync(DATA)) return [];
-  try {
-    return JSON.parse(fs.readFileSync(DATA, 'utf8'));
-  } catch (e) {
-    console.error('[readPosts] posts.json corrompu, retour tableau vide :', e.message);
-    return [];
-  }
+  return JSON.parse(fs.readFileSync(DATA, 'utf8'));
 }
 function writePosts(posts) {
   fs.writeFileSync(DATA, JSON.stringify(posts, null, 2));
@@ -67,44 +55,12 @@ function totalDPlus(posts) {
 // ── Middleware ────────────────────────────────────────────
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
-
-// ── Helmet — headers de sécurité HTTP ────────────────────
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc:  ["'self'", "'unsafe-inline'", "unpkg.com"],
-      styleSrc:   ["'self'", "'unsafe-inline'", "fonts.googleapis.com", "unpkg.com"],
-      fontSrc:    ["'self'", "fonts.gstatic.com"],
-      imgSrc:     ["'self'", "data:", "*.tile.openstreetmap.org", "nominatim.openstreetmap.org"],
-      connectSrc: ["'self'", "nominatim.openstreetmap.org"],
-    }
-  },
-  crossOriginEmbedderPolicy: false,
-}));
-
-// ── Sessions ──────────────────────────────────────────────
 app.use(session({
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
-  cookie: {
-    maxAge: 30 * 24 * 60 * 60 * 1000,
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax'
-  }
+  cookie: { maxAge: 30 * 24 * 60 * 60 * 1000 }
 }));
-
-// ── Rate limiting ─────────────────────────────────────────
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10,
-  message: 'Trop de tentatives de connexion. Réessayez dans 15 minutes.',
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
 app.use('/uploads', requireFamily, express.static(path.join(__dirname, 'public', 'uploads')));
 app.use('/public', express.static(path.join(__dirname, 'public')));
 
@@ -165,23 +121,6 @@ function deletePostFiles(post) {
   }
 }
 
-// ── CSRF ──────────────────────────────────────────────────
-// Génère un token CSRF par session, le vérifie sur les POST sensibles
-function csrfToken(req) {
-  if (!req.session.csrf) {
-    req.session.csrf = crypto.randomBytes(24).toString('hex');
-  }
-  return req.session.csrf;
-}
-
-function requireCsrf(req, res, next) {
-  const token = req.body._csrf || req.headers['x-csrf-token'];
-  if (!token || token !== req.session.csrf) {
-    return res.status(403).send('Token CSRF invalide ou manquant.');
-  }
-  next();
-}
-
 // ── Auth middleware ───────────────────────────────────────
 function requireAuth(req, res, next) {
   if (req.session.auth || req.session.margot) return next();
@@ -200,13 +139,8 @@ function filterPostsByRole(posts, req) {
 
 // ── Routes publiques ──────────────────────────────────────
 app.get('/', requireFamily, (req, res) => {
-  const allPosts    = readPosts().sort((a, b) => new Date(b.date) - new Date(a.date));
-  const filtered    = filterPostsByRole(allPosts, req);
-  const activeAuthor = req.query.author || '';
-  const posts = activeAuthor
-    ? filtered.filter(p => p.author === activeAuthor)
-    : filtered;
-  res.send(renderPublic(posts, !!req.session.auth || !!req.session.margot, activeAuthor, filtered, csrfToken(req)));
+  const posts = filterPostsByRole(readPosts().sort((a, b) => new Date(b.date) - new Date(a.date)), req);
+  res.send(renderPublic(posts, !!req.session.auth || !!req.session.margot));
 });
 
 app.get('/timeline', requireFamily, (req, res) => {
@@ -226,7 +160,7 @@ app.get('/rss', requireFamily, (req, res) => {
 });
 
 // ── Commentaires ──────────────────────────────────────────
-app.post('/comment/:id', requireFamily, requireCsrf, (req, res) => {
+app.post('/comment/:id', requireFamily, (req, res) => {
   const posts = readPosts();
   const post  = posts.find(p => p.id === req.params.id);
   if (!post) return res.status(404).send('Étape introuvable');
@@ -249,7 +183,7 @@ app.get('/login', (req, res) => {
   res.send(renderLogin(false, req.query.next || '/'));
 });
 
-app.post('/login', loginLimiter, (req, res) => {
+app.post('/login', (req, res) => {
   const next = req.body.next || '/';
   const pw   = req.body.password;
   if (pw === ADMIN_PASSWORD) {
@@ -267,7 +201,6 @@ app.post('/login', loginLimiter, (req, res) => {
   res.send(renderLogin(true, next));
 });
 
-// Redirections legacy
 app.get('/family-login', (req, res) => res.redirect('/login' + (req.query.next ? '?next=' + encodeURIComponent(req.query.next) : '')));
 
 app.get('/logout', (req, res) => {
@@ -279,18 +212,26 @@ app.get('/logout', (req, res) => {
 app.get('/post', requireAuth, (req, res) => {
   const posts = readPosts().sort((a, b) => new Date(b.date) - new Date(a.date));
   const lastLocation = posts.length > 0 ? (posts[0].location || '') : '';
-  res.send(renderPostForm(null, lastLocation, !!req.session.margot, csrfToken(req)));
+  res.send(renderPostForm(null, lastLocation, !!req.session.margot));
 });
 
-app.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', maxCount:10},{name:'gpx', maxCount:1}]), async (req, res) => {
-  const { title, body, location, lat, lon, km, dplus, author, visibility } = req.body;
+app.post('/post', requireAuth, upload.fields([{name:'photos', maxCount:10},{name:'gpx', maxCount:1}]), async (req, res) => {
+  const { title, body, location, lat, lon, km, dplus, author, visibility, postDate } = req.body;
   if (!title?.trim() || !body?.trim()) {
-    return res.send(renderPostForm('Titre et texte obligatoires.', '', !!req.session.margot, csrfToken(req)));
+    return res.send(renderPostForm('Titre et texte obligatoires.', '', !!req.session.margot));
   }
   await resizeUploadedImages(req.files?.photos || []);
   const photos  = (req.files?.photos || []).map(f => '/uploads/' + f.filename);
   const gpxFile = req.files?.gpx?.[0] ? '/uploads/' + req.files.gpx[0].filename : null;
 
+  // Déterminer la date du post
+  let finalDate = new Date().toISOString();
+  if (postDate) {
+    const parsed = new Date(postDate);
+    if (!isNaN(parsed.getTime())) finalDate = parsed.toISOString();
+  }
+
+  // Extract last point from GPX as arrival coordinates
   let finalLat = parseFloat(lat) || null;
   let finalLon = parseFloat(lon) || null;
   if (gpxFile) {
@@ -311,7 +252,7 @@ app.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', maxCo
   const forcedViz = req.session.margot ? 'margot' : (validViz.includes(visibility) ? visibility : 'all');
   posts.push({
     id:         crypto.randomBytes(8).toString('hex'),
-    date:       new Date().toISOString(),
+    date:       finalDate,
     title:      title.trim(),
     body:       body.trim(),
     location:   location?.trim() || '',
@@ -330,7 +271,7 @@ app.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', maxCo
 });
 
 // ── Admin : supprimer ─────────────────────────────────────
-app.post('/delete/:id', requireAuth, requireCsrf, (req, res) => {
+app.post('/delete/:id', requireAuth, (req, res) => {
   const posts    = readPosts();
   const post     = posts.find(p => p.id === req.params.id);
   if (post) deletePostFiles(post);
@@ -344,23 +285,32 @@ app.get('/edit/:id', requireAuth, (req, res) => {
   const posts = readPosts();
   const post  = posts.find(p => p.id === req.params.id);
   if (!post) return res.status(404).send('Étape introuvable');
-  res.send(renderEditForm(post, null, !!req.session.margot, csrfToken(req)));
+  res.send(renderEditForm(post, null, !!req.session.margot));
 });
 
-app.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos', maxCount:10},{name:'gpx', maxCount:1}]), async (req, res) => {
+app.post('/edit/:id', requireAuth, upload.fields([{name:'photos', maxCount:10},{name:'gpx', maxCount:1}]), async (req, res) => {
   const posts = readPosts();
   const idx   = posts.findIndex(p => p.id === req.params.id);
   if (idx === -1) return res.status(404).send('Étape introuvable');
-  const { title, body, location, lat, lon, km, dplus, author, visibility } = req.body;
+  const { title, body, location, lat, lon, km, dplus, visibility, postDate } = req.body;
   if (!title?.trim() || !body?.trim()) {
-    return res.send(renderEditForm(posts[idx], 'Titre et texte obligatoires.', !!req.session.margot, csrfToken(req)));
+    return res.send(renderEditForm(posts[idx], 'Titre et texte obligatoires.', !!req.session.margot));
   }
   const existing = posts[idx];
+
+  // Date du post
+  let finalDate = existing.date;
+  if (postDate) {
+    const parsed = new Date(postDate);
+    if (!isNaN(parsed.getTime())) finalDate = parsed.toISOString();
+  }
+
   await resizeUploadedImages(req.files?.photos || []);
   const newPhotos  = (req.files?.photos || []).map(f => '/uploads/' + f.filename);
   const keepPhotos = req.body.keepPhotos ? (Array.isArray(req.body.keepPhotos) ? req.body.keepPhotos : [req.body.keepPhotos]) : [];
   const photos = [...keepPhotos, ...newPhotos];
 
+  // Delete photos that were unchecked
   for (const old of (existing.photos || [])) {
     if (!keepPhotos.includes(old)) {
       const abs = path.join(__dirname, 'public', old);
@@ -393,6 +343,7 @@ app.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos', m
   const validViz = ['all', 'margot', 'admin'];
   posts[idx] = {
     ...existing,
+    date:       finalDate,
     title:      title.trim(),
     body:       body.trim(),
     location:   location?.trim() || '',
@@ -400,7 +351,6 @@ app.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos', m
     lon:        finalLon,
     km:         parseFloat(km)   || 0,
     dplus:      parseInt(dplus)  || 0,
-    author:     AUTHORS.includes(author) ? author : (existing.author || AUTHORS[0]),
     visibility: validViz.includes(visibility) ? visibility : (existing.visibility || 'all'),
     photos,
     gpx:        gpxFile,
@@ -422,13 +372,13 @@ app.listen(PORT, () => {
   console.log(`   Poster une étape     : http://localhost:${PORT}/post\n`);
 });
 
+
 // ══════════════════════════════════════════════════════════
-//  Logo SVG inline (white version for dark header)
+//  Logo SVG inline
 // ══════════════════════════════════════════════════════════
 
 const LOGO_SVG = `<img src="/public/logo_nijumatim.png" class="header-logo" alt="${TRIP_TITLE || 'Nijumatim'}">`;
 
-// Génère le bloc header + menu mobile hamburger
 function renderHeader({ activePage = '', isAdmin = false, showMap = false } = {}) {
   const links = [
     { href: '/', label: 'Journal', key: 'journal' },
@@ -483,8 +433,9 @@ function renderHeader({ activePage = '', isAdmin = false, showMap = false } = {}
     </script>`;
 }
 
+
 // ══════════════════════════════════════════════════════════
-//  Design System & CSS
+//  CSS
 // ══════════════════════════════════════════════════════════
 
 const CSS = `
@@ -706,68 +657,6 @@ const CSS = `
     margin-top:3px;
   }
 
-  /* ── MAP ─────────────────────────────────────────── */
-  .map-wrap{
-    background:var(--mist);
-    height:320px;
-    position:relative;
-    overflow:hidden;
-    border-bottom:3px solid var(--teal-light);
-  }
-  #map{width:100%;height:100%}
-
-  /* ── FILTER BAR ──────────────────────────────────── */
-  .filter-bar{
-    background:#fff;
-    border-bottom:1px solid var(--sand);
-    padding:10px 16px;
-    display:flex;
-    gap:8px;
-    align-items:center;
-    overflow-x:auto;
-    scrollbar-width:none;
-  }
-
-  .filter-bar::-webkit-scrollbar{display:none}
-
-  .filter-label{
-    font-size:11px;
-    color:var(--ink-light);
-    font-weight:600;
-    text-transform:uppercase;
-    letter-spacing:0.08em;
-    white-space:nowrap;
-    margin-right:4px;
-  }
-
-  .filter-chip{
-    display:inline-flex;
-    align-items:center;
-    gap:5px;
-    padding:5px 12px;
-    border-radius:20px;
-    font-size:12px;
-    font-weight:500;
-    border:1.5px solid var(--sand);
-    background:#fff;
-    color:var(--ink-mid);
-    text-decoration:none;
-    white-space:nowrap;
-    transition:all .15s;
-    cursor:pointer;
-  }
-
-  .filter-chip:hover{
-    border-color:var(--teal);
-    color:var(--teal);
-  }
-
-  .filter-chip.active{
-    background:linear-gradient(135deg, var(--ocean-mid), var(--teal));
-    border-color:transparent;
-    color:#fff;
-  }
-
   /* ── FEED ────────────────────────────────────────── */
   .feed{
     max-width:620px;
@@ -793,7 +682,6 @@ const CSS = `
     transform:translateY(-1px);
   }
 
-  /* ── CARD DATE HEADER ────────────────────────────── */
   .card-date-header{
     display:flex;
     align-items:center;
@@ -937,12 +825,6 @@ const CSS = `
     flex-wrap:wrap;
   }
 
-  .card-date{
-    font-size:11px;
-    color:var(--ink-light);
-    font-weight:400;
-  }
-
   .card-loc{
     font-size:12px;
     background:var(--sage);
@@ -980,19 +862,6 @@ const CSS = `
     gap:3px;
   }
 
-  .author-badge{
-    font-size:11px;
-    background:var(--mist);
-    color:var(--ocean-mid);
-    padding:3px 9px;
-    border-radius:20px;
-    font-weight:500;
-    display:inline-flex;
-    align-items:center;
-    gap:4px;
-    margin-left:auto;
-  }
-
   .card-title{
     font-family:'Playfair Display',serif;
     font-size:20px;
@@ -1007,6 +876,47 @@ const CSS = `
     color:var(--ink-mid);
     line-height:1.75;
     white-space:pre-wrap;
+  }
+
+  /* ── GPX CANVAS MAP ──────────────────────────────── */
+  .gpx-canvas-wrap{
+    margin:14px -18px 0;
+    background:var(--mist);
+    border-top:1px solid var(--sand);
+    border-bottom:1px solid var(--sand);
+    position:relative;
+    overflow:hidden;
+  }
+
+  .gpx-canvas-wrap canvas{
+    display:block;
+    width:100%;
+    pointer-events:none;
+    touch-action:none;
+  }
+
+  .gpx-canvas-footer{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:6px 14px;
+    background:rgba(255,255,255,0.85);
+    border-top:1px solid var(--sand);
+  }
+
+  .gpx-map-lbl{
+    font-size:11px;
+    color:var(--ink-light);
+    font-weight:500;
+  }
+
+  .gpx-link{
+    display:inline-flex;align-items:center;gap:5px;
+    font-size:12px;background:var(--accent-light);
+    color:var(--accent);padding:4px 10px;
+    border-radius:20px;
+    border:1px solid rgba(230,126,34,0.2);
+    font-weight:500;
   }
 
   /* ── COMMENTS ────────────────────────────────────── */
@@ -1070,38 +980,6 @@ const CSS = `
   .comment-form button:hover{opacity:.9}
 
   /* ── ADMIN ───────────────────────────────────────── */
-  .admin-banner{
-    background:var(--ocean);
-    border-bottom:2px solid var(--teal-light);
-    padding:10px 18px;
-    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
-  }
-
-  .admin-banner-label{
-    color:var(--emerald-light);
-    font-size:12px;font-weight:600;flex:1;
-  }
-
-  .admin-banner a,.admin-banner-btn{
-    display:inline-flex;align-items:center;gap:5px;
-    background:rgba(255,255,255,0.12);
-    color:#fff;border:1px solid rgba(255,255,255,0.2);
-    border-radius:8px;padding:6px 14px;
-    font-size:12px;font-weight:500;cursor:pointer;text-decoration:none;
-    transition:background .15s;
-  }
-
-  .admin-banner a:hover,.admin-banner-btn:hover{
-    background:rgba(255,255,255,0.2);
-  }
-
-  .admin-banner-btn.danger{
-    background:rgba(155,28,28,0.5);
-    border-color:rgba(220,50,50,0.4);
-  }
-
-  .admin-banner-btn.danger:hover{background:rgba(155,28,28,0.8)}
-
   .admin-actions{
     margin-top:12px;
     padding-top:10px;
@@ -1224,54 +1102,54 @@ const CSS = `
     padding:10px 14px;margin-bottom:14px;font-size:13px;
   }
 
-  .gpx-link{
-    display:inline-flex;align-items:center;gap:5px;
-    font-size:12px;background:var(--accent-light);
-    color:var(--accent);padding:4px 10px;
-    border-radius:20px;
-    border:1px solid rgba(230,126,34,0.2);
-    font-weight:500;
+  /* ── LOCATION AUTOCOMPLETE ───────────────────────── */
+  .loc-wrap{position:relative}
+
+  .loc-suggestions{
+    position:absolute;
+    top:100%;left:0;right:0;
+    background:#fff;
+    border:1.5px solid var(--teal-light);
+    border-top:none;
+    border-radius:0 0 10px 10px;
+    z-index:500;
+    max-height:220px;
+    overflow-y:auto;
+    box-shadow:0 8px 24px rgba(42,122,122,0.15);
+    display:none;
   }
 
-  .gpx-map-wrap{
-    margin:14px -18px 0;
-    background:var(--mist);
-    border-top:1px solid var(--sand);
+  .loc-suggestions.open{display:block}
+
+  .loc-suggestion-item{
+    padding:10px 14px;
+    font-size:13px;
+    color:var(--ink);
+    cursor:pointer;
     border-bottom:1px solid var(--sand);
-    overflow:hidden;
-  }
-
-  .gpx-leaflet{
-    border-top:1px solid var(--sand);
-  }
-
-  .gpx-map-footer{
     display:flex;
-    align-items:center;
-    justify-content:space-between;
-    padding:6px 14px;
-    background:rgba(255,255,255,0.7);
-    border-top:1px solid var(--sand);
+    flex-direction:column;
+    gap:2px;
+    transition:background .1s;
   }
 
-  .gpx-map-lbl{
-    font-size:11px;
-    color:var(--ink-light);
-    font-weight:500;
-  }
+  .loc-suggestion-item:last-child{border-bottom:none}
+  .loc-suggestion-item:hover,.loc-suggestion-item.active{background:var(--sage)}
 
-  .prev-location-hint{
+  .loc-suggestion-name{font-weight:600;color:var(--ink)}
+  .loc-suggestion-detail{font-size:11px;color:var(--ink-light)}
+
+  .loc-search-btn{
     background:var(--mist);
-    border:1px solid rgba(23,162,184,0.2);
-    border-radius:8px;
-    padding:8px 12px;
-    font-size:12px;
     color:var(--ocean-mid);
-    margin-bottom:14px;
-    display:flex;
-    align-items:center;
-    gap:6px;
+    border:1.5px solid var(--teal-light);
+    border-radius:8px;padding:7px 12px;
+    font-size:13px;cursor:pointer;margin-top:6px;margin-right:6px;
+    font-family:inherit;font-weight:500;
+    transition:background .15s;
+    display:inline-flex;align-items:center;gap:5px;
   }
+  .loc-search-btn:hover{background:var(--sage)}
 
   /* ── EMPTY STATE ─────────────────────────────────── */
   .empty{
@@ -1423,7 +1301,21 @@ const CSS = `
     font-size:13px;color:rgba(255,255,255,0.7);
     position:relative;
   }
+
+  .prev-location-hint{
+    background:var(--mist);
+    border:1px solid rgba(23,162,184,0.2);
+    border-radius:8px;
+    padding:8px 12px;
+    font-size:12px;
+    color:var(--ocean-mid);
+    margin-bottom:14px;
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
 `;
+
 
 // ══════════════════════════════════════════════════════════
 //  Template helpers
@@ -1445,14 +1337,24 @@ function initials(name) {
   return name.split(' ').map(w => w[0]).join('').toUpperCase().substring(0, 2);
 }
 
-// ── Échappement HTML — protection XSS ─────────────────────
-function esc(s) {
-  return String(s ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+// Convertit un ISO en valeur datetime-local (format: YYYY-MM-DDTHH:MM) en heure Europe/Paris
+function isoToDatetimeLocal(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  // Format Paris time
+  const parts = new Intl.DateTimeFormat('fr-FR', {
+    timeZone: 'Europe/Paris',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false
+  }).formatToParts(d);
+  const p = {};
+  parts.forEach(x => { p[x.type] = x.value; });
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
+}
+
+// Retourne la date/heure actuelle en Paris pour le champ datetime-local
+function nowDatetimeLocal() {
+  return isoToDatetimeLocal(new Date().toISOString());
 }
 
 const AUTHOR_EMOJI = {
@@ -1463,29 +1365,176 @@ const AUTHOR_EMOJI = {
   'La famille': '👨‍👩‍👧‍👦',
 };
 
+// ── JS partagé pour formulaires (autocomplete lieu + GPS) ─
+const FORM_SCRIPTS = `
+<script>
+// ── Autocomplete lieu (Nominatim) ──────────────────────────
+function initLocAutocomplete(fieldId, latId, lonId, suggestId) {
+  var field = document.getElementById(fieldId);
+  var list  = document.getElementById(suggestId);
+  var timer = null;
+  var items = [];
+  var sel   = -1;
+
+  if (!field || !list) return;
+
+  field.addEventListener('input', function() {
+    clearTimeout(timer);
+    var q = field.value.trim();
+    if (q.length < 3) { list.classList.remove('open'); return; }
+    timer = setTimeout(function() { doSearch(q); }, 350);
+  });
+
+  field.addEventListener('keydown', function(e) {
+    if (!list.classList.contains('open')) return;
+    if (e.key === 'ArrowDown') { sel = Math.min(sel+1, items.length-1); highlight(); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { sel = Math.max(sel-1, 0); highlight(); e.preventDefault(); }
+    else if (e.key === 'Enter' && sel >= 0) { pick(sel); e.preventDefault(); }
+    else if (e.key === 'Escape') { list.classList.remove('open'); }
+  });
+
+  document.addEventListener('click', function(e) {
+    if (!field.contains(e.target) && !list.contains(e.target)) list.classList.remove('open');
+  });
+
+  function highlight() {
+    Array.from(list.children).forEach(function(c,i){ c.classList.toggle('active', i===sel); });
+  }
+
+  function pick(i) {
+    var item = items[i];
+    field.value = item.display;
+    document.getElementById(latId).value = parseFloat(item.lat).toFixed(6);
+    document.getElementById(lonId).value = parseFloat(item.lon).toFixed(6);
+    list.classList.remove('open');
+    sel = -1;
+  }
+
+  function doSearch(q) {
+    fetch('https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(q) + '&format=json&limit=6&addressdetails=1')
+      .then(function(r){ return r.json(); })
+      .then(function(data) {
+        items = data.map(function(r) {
+          var a = r.address || {};
+          var name = a.city || a.town || a.village || a.hamlet || a.county || r.display_name.split(',')[0];
+          var detail = [a.state, a.country].filter(Boolean).join(', ');
+          return { display: name + (detail ? ', '+detail : ''), lat: r.lat, lon: r.lon, detail: detail };
+        });
+        if (!items.length) { list.classList.remove('open'); return; }
+        sel = -1;
+        list.innerHTML = items.map(function(it, i) {
+          return '<div class="loc-suggestion-item" data-idx="'+i+'">'
+            + '<span class="loc-suggestion-name">'+escHtml(it.display.split(',')[0])+'</span>'
+            + '<span class="loc-suggestion-detail">'+escHtml(it.display.split(',').slice(1).join(',').trim())+'</span>'
+            + '</div>';
+        }).join('');
+        list.classList.add('open');
+        Array.from(list.querySelectorAll('.loc-suggestion-item')).forEach(function(el) {
+          el.addEventListener('mousedown', function(e) { e.preventDefault(); pick(parseInt(el.dataset.idx)); });
+        });
+      })
+      .catch(function(){});
+  }
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── GPS auto-detect ────────────────────────────────────────
+function getGPS(fieldId, latId, lonId) {
+  if (!navigator.geolocation) return alert('Géolocalisation non disponible sur ce navigateur.');
+  if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+    return alert('La géolocalisation nécessite HTTPS.');
+  }
+  navigator.geolocation.getCurrentPosition(
+    function(pos) {
+      document.getElementById(latId).value = pos.coords.latitude.toFixed(6);
+      document.getElementById(lonId).value = pos.coords.longitude.toFixed(6);
+      var field = document.getElementById(fieldId);
+      if (!field.value) {
+        fetch('https://nominatim.openstreetmap.org/reverse?lat=' + pos.coords.latitude + '&lon=' + pos.coords.longitude + '&format=json')
+          .then(function(r){ return r.json(); })
+          .then(function(d) {
+            var a = d.address;
+            field.value = [a.town||a.city||a.village, a.state].filter(Boolean).join(', ');
+          }).catch(function(){});
+      }
+      alert('Position enregistrée : ' + pos.coords.latitude.toFixed(4) + ', ' + pos.coords.longitude.toFixed(4));
+    },
+    function(err) {
+      var msgs = {1:'Permission refusée',2:'Position indisponible',3:'Délai dépassé'};
+      alert('Erreur GPS : ' + (msgs[err.code] || err.message));
+    },
+    { timeout: 10000, maximumAge: 60000 }
+  );
+}
+
+// ── Parsing GPX ────────────────────────────────────────────
+function parseGPX(input, fieldId, latId, lonId) {
+  var file = input.files[0]; if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var parser = new DOMParser();
+      var xml = parser.parseFromString(e.target.result, 'text/xml');
+      var trkpts = Array.from(xml.querySelectorAll('trkpt'));
+      if (!trkpts.length) { alert('Aucun point trouvé dans ce fichier GPX.'); return; }
+      var dist = 0;
+      for (var i = 1; i < trkpts.length; i++) {
+        var lat1=parseFloat(trkpts[i-1].getAttribute('lat')),lon1=parseFloat(trkpts[i-1].getAttribute('lon'));
+        var lat2=parseFloat(trkpts[i].getAttribute('lat')),lon2=parseFloat(trkpts[i].getAttribute('lon'));
+        var R=6371000,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180;
+        var a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
+        dist+=R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+      }
+      var dplus=0;
+      var elevs=trkpts.map(function(p){return parseFloat(p.querySelector('ele')?.textContent||0);}).filter(function(v){return !isNaN(v);});
+      for (var j=1;j<elevs.length;j++){if(elevs[j]>elevs[j-1])dplus+=elevs[j]-elevs[j-1];}
+      var last=trkpts[trkpts.length-1];
+      var lat=parseFloat(last.getAttribute('lat')),lon=parseFloat(last.getAttribute('lon'));
+      var kmVal=(dist/1000).toFixed(1);
+      var dpVal=Math.round(dplus);
+      document.querySelector('[name=km]').value=kmVal;
+      document.querySelector('[name=dplus]').value=dpVal;
+      document.getElementById(latId).value=lat.toFixed(6);
+      document.getElementById(lonId).value=lon.toFixed(6);
+      fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json')
+        .then(function(r){return r.json();}).then(function(d){
+          var a=d.address;
+          var field=document.getElementById(fieldId);
+          if(!field.value) field.value=[a.town||a.city||a.village,a.state].filter(Boolean).join(', ');
+        }).catch(function(){});
+      var info = document.getElementById('gpxInfo');
+      if (info) { info.style.display='block'; info.innerHTML='✅ Trace importée — <strong>'+kmVal+' km</strong> · <strong>'+dpVal.toLocaleString()+' m D+</strong> · '+trkpts.length+' points'; }
+    } catch(err) { alert('Erreur lors de la lecture du GPX : '+err.message); }
+  };
+  reader.readAsText(file);
+}
+
+function previewPhotos(input) {
+  var preview = document.getElementById('photoPreview');
+  if (!preview) return;
+  preview.innerHTML='';
+  Array.from(input.files).forEach(function(f){
+    var img=document.createElement('img');
+    img.src=URL.createObjectURL(f);
+    preview.appendChild(img);
+  });
+}
+</script>
+`;
+
+
 // ══════════════════════════════════════════════════════════
 //  renderPublic
 // ══════════════════════════════════════════════════════════
 
-function renderPublic(posts, isAdmin = false, activeAuthor = '', allPosts = [], csrf = '') {
-  const km    = Math.round(totalKm(allPosts));
-  const dp    = Math.round(totalDPlus(allPosts)).toLocaleString('fr-FR');
-  const days  = allPosts.length;
-  const withGps = allPosts.filter(p => p.lat && p.lon);
-
-  // Build filter chips
-  const authorsInPosts = [...new Set(allPosts.map(p => p.author).filter(Boolean))];
-  const filterChips = authorsInPosts.length > 1 ? `
-    <div class="filter-bar">
-      <span class="filter-label">🔍 Filtrer</span>
-      <a href="/" class="filter-chip ${!activeAuthor ? 'active' : ''}">🌍 Tous</a>
-      ${authorsInPosts.map(a => `
-        <a href="/?author=${encodeURIComponent(a)}" class="filter-chip ${activeAuthor === a ? 'active' : ''}">
-          ${AUTHOR_EMOJI[a] || '👤'} ${esc(a)}
-        </a>
-      `).join('')}
-    </div>
-  ` : '';
+function renderPublic(posts, isAdmin = false) {
+  const km    = Math.round(totalKm(posts));
+  const dp    = Math.round(totalDPlus(posts)).toLocaleString('fr-FR');
+  const days  = posts.length;
+  const withGps = posts.filter(p => p.lat && p.lon);
 
   const postCards = posts.length === 0
     ? `<div class="empty">
@@ -1502,8 +1551,6 @@ function renderPublic(posts, isAdmin = false, activeAuthor = '', allPosts = [], 
       const time    = d.toLocaleTimeString('fr-FR', { timeZone:'Europe/Paris', hour:'2-digit', minute:'2-digit' });
       return `
     <div class="card" id="post-${p.id}">
-
-      <!-- Date en vedette -->
       <div class="card-date-header">
         <div class="card-date-block">
           <div class="card-day-num">${day}</div>
@@ -1514,45 +1561,43 @@ function renderPublic(posts, isAdmin = false, activeAuthor = '', allPosts = [], 
           </div>
         </div>
         <div class="card-date-right">
-          ${p.author ? `<span class="author-badge">${AUTHOR_EMOJI[p.author] || '👤'} ${esc(p.author)}</span>` : ''}
-          ${p.location ? `<span class="card-loc">📍 ${esc(p.location)}</span>` : ''}
+          ${p.location ? `<span class="card-loc">📍 ${p.location}</span>` : ''}
         </div>
       </div>
 
       <div class="card-divider"></div>
 
       <div class="card-body">
-        <h2 class="card-title">${esc(p.title)}</h2>
+        <h2 class="card-title">${p.title}</h2>
 
-        <!-- Badges km / D+ -->
         ${(p.km || p.dplus) ? `
         <div class="card-badges" style="margin-bottom:14px">
-          ${p.km   ? `<span class="km-badge">🚴 +${esc(String(p.km))} km</span>` : ''}
-          ${p.dplus ? `<span class="dplus-badge">⛰️ ${esc(String(p.dplus))} m D+</span>` : ''}
+          ${p.km   ? `<span class="km-badge">🚴 +${p.km} km</span>` : ''}
+          ${p.dplus ? `<span class="dplus-badge">⛰️ ${p.dplus} m D+</span>` : ''}
         </div>` : ''}
 
-        <!-- Photos APRÈS le titre -->
         ${p.photos?.length ? `
         <div class="card-photos${p.photos.length === 1 ? ' single' : ''}" style="margin:0 -18px 16px;border-radius:0">
-          ${p.photos.map(ph=>`<img src="${esc(ph)}" alt="photo" loading="lazy" data-postid="${p.id}">`).join('')}
+          ${p.photos.map(ph=>`<img src="${ph}" alt="photo" loading="lazy" data-postid="${p.id}">`).join('')}
         </div>
         ` : ''}
 
-        <p class="card-text">${esc(p.body)}</p>
+        <p class="card-text">${p.body}</p>
+
         ${p.gpx ? `
-        <div class="gpx-map-wrap" data-gpx="${esc(p.gpx)}">
-          <div class="gpx-leaflet" id="gpxmap-${p.id}" style="height:260px"></div>
-          <div class="gpx-map-footer">
+        <div class="gpx-canvas-wrap">
+          <canvas id="gpxcanvas-${p.id}" height="220" data-gpx="${p.gpx}"></canvas>
+          <div class="gpx-canvas-footer">
             <span class="gpx-map-lbl">🗺️ Trace GPX</span>
-            <a class="gpx-link" href="${esc(p.gpx)}" download>⬇️ Télécharger</a>
+            <a class="gpx-link" href="${p.gpx}" download>⬇️ Télécharger</a>
           </div>
         </div>` : ''}
+
         ${isAdmin ? `
         <div class="admin-actions">
           <a href="/edit/${p.id}" class="btn-edit">✏️ Modifier</a>
-          ${p.visibility && p.visibility !== 'all' ? `<span style="font-size:11px;padding:4px 10px;border-radius:20px;background:${p.visibility==='margot'?'#fef9c3;color:#92400e':'#fee2e2;color:#991b1b'}">${p.visibility==='margot'?'👧 Margot+':'🔒 Admin seul'}</span>` : ''}
+          ${p.visibility && p.visibility !== 'all' ? `<span style="font-size:11px;padding:4px 10px;border-radius:20px;background:#fef9c3;color:#92400e">⏳ À valider</span>` : ''}
           <form method="POST" action="/delete/${p.id}" style="margin-left:auto" onsubmit="return confirm('Supprimer définitivement cette étape ?')">
-            <input type="hidden" name="_csrf" value="${csrf}">
             <button type="submit" class="btn-del">🗑️ Supprimer</button>
           </form>
         </div>` : ''}
@@ -1560,16 +1605,15 @@ function renderPublic(posts, isAdmin = false, activeAuthor = '', allPosts = [], 
       <div class="comments">
         ${(p.comments||[]).map(c=>`
           <div class="comment">
-            <div class="comment-avatar">${esc(initials(c.author))}</div>
+            <div class="comment-avatar">${initials(c.author)}</div>
             <div class="comment-bubble">
-              <span class="comment-author">${esc(c.author)}</span>
+              <span class="comment-author">${c.author}</span>
               <span class="comment-date">${formatDate(c.date)}</span>
-              <p class="comment-text">${esc(c.text)}</p>
+              <p class="comment-text">${c.text}</p>
             </div>
           </div>
         `).join('')}
         <form class="comment-form" action="/comment/${p.id}" method="POST">
-          <input type="hidden" name="_csrf" value="${csrf}">
           <input name="author" placeholder="Votre prénom" required maxlength="40">
           <textarea name="text" placeholder="Laisser un commentaire..." required maxlength="300"></textarea>
           <button type="submit">💬 Commenter</button>
@@ -1580,18 +1624,10 @@ function renderPublic(posts, isAdmin = false, activeAuthor = '', allPosts = [], 
 
   return `<!DOCTYPE html><html lang="fr"><head>
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>${esc(TRIP_TITLE)}</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <title>${TRIP_TITLE}</title>
     <style>${CSS}</style>
   </head><body>
     ${renderHeader({ activePage: 'journal', isAdmin, showMap: withGps.length > 0 })}
-
-    ${isAdmin ? `
-    <div class="admin-banner">
-      <span class="admin-banner-label">🔧 Mode administrateur</span>
-      <a href="/post" class="admin-banner-btn">✏️ Nouvelle étape</a>
-      <a href="/logout" class="admin-banner-btn danger">🔓 Déconnexion</a>
-    </div>` : ''}
 
     <div class="stats-bar">
       <div class="stat">
@@ -1608,13 +1644,11 @@ function renderPublic(posts, isAdmin = false, activeAuthor = '', allPosts = [], 
       </div>
     </div>
 
-    ${filterChips}
-
     <div class="feed">${postCards}</div>
 
     ${isAdmin ? '<a class="fab" href="/post" title="Nouvelle étape">+</a>' : ''}
 
-    <!-- Lightbox (photos du post seulement) -->
+    <!-- Lightbox -->
     <div class="lightbox" id="lb" role="dialog" aria-modal="true">
       <button class="lb-close" id="lb-close" title="Fermer">&#x2715;</button>
       <button class="lb-nav lb-prev" id="lb-prev">&#8249;</button>
@@ -1623,39 +1657,133 @@ function renderPublic(posts, isAdmin = false, activeAuthor = '', allPosts = [], 
       <div class="lb-counter" id="lb-counter"></div>
     </div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-      // ── GPX Leaflet map renderer ─────────────────────
-      (function(){
-        function drawGpx(wrap) {
-          var url = wrap.dataset.gpx;
-          var mapDiv = wrap.querySelector('.gpx-leaflet');
-          if (!url || !mapDiv) return;
-          fetch(url)
-            .then(function(r){ return r.text(); })
-            .then(function(txt){
-              var parser = new DOMParser();
-              var xml = parser.parseFromString(txt, 'text/xml');
-              var pts = Array.from(xml.querySelectorAll('trkpt')).map(function(p){
-                return [parseFloat(p.getAttribute('lat')), parseFloat(p.getAttribute('lon'))];
-              });
-              if (pts.length < 2) return;
-              var map = L.map(mapDiv, { zoomControl: true, scrollWheelZoom: false, attributionControl: true });
-              L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 18, attribution: '© OpenStreetMap'
-              }).addTo(map);
-              L.polyline(pts, { color: 'rgba(0,0,0,0.12)', weight: 7 }).addTo(map);
-              L.polyline(pts, { color: '#3a9090', weight: 3.5, opacity: 0.95 }).addTo(map);
-              var mk = function(color){ return L.divIcon({ html: '<div style="background:'+color+';border:2px solid #fff;border-radius:50%;width:12px;height:12px;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>', iconSize:[12,12], iconAnchor:[6,6], className:'' }); };
-              L.marker(pts[0], { icon: mk('#e67e22') }).addTo(map);
-              L.marker(pts[pts.length-1], { icon: mk('#2d7a5a') }).addTo(map);
-              map.fitBounds(L.latLngBounds(pts).pad(0.15));
-              setTimeout(function(){ map.invalidateSize(); }, 100);
-            })
-            .catch(function(){});
-        }
-        document.querySelectorAll('.gpx-map-wrap').forEach(drawGpx);
-      })();
+    // ── Rendu GPX sur canvas (pas de scroll parasite) ──────
+    (function(){
+      // Palette carte claire inspirée OSM
+      var BG_WATER  = '#c8dff5';
+      var BG_LAND   = '#eef0e8';
+      var TRACK_COL = '#2a7a7a';
+      var TRACK_SHD = 'rgba(0,0,0,0.15)';
+
+      function drawGpxCanvas(canvas) {
+        var url = canvas.dataset.gpx;
+        if (!url) return;
+        fetch(url)
+          .then(function(r){ return r.text(); })
+          .then(function(txt){
+            var parser = new DOMParser();
+            var xml = parser.parseFromString(txt, 'text/xml');
+            var pts = Array.from(xml.querySelectorAll('trkpt')).map(function(p){
+              return { lat: parseFloat(p.getAttribute('lat')), lon: parseFloat(p.getAttribute('lon')) };
+            });
+            if (pts.length < 2) return;
+
+            var dpr = window.devicePixelRatio || 1;
+            var W = canvas.parentElement.clientWidth || 580;
+            var H = 220;
+            canvas.width  = W * dpr;
+            canvas.height = H * dpr;
+            canvas.style.width  = W + 'px';
+            canvas.style.height = H + 'px';
+
+            var ctx = canvas.getContext('2d');
+            ctx.scale(dpr, dpr);
+
+            // Fond dégradé carte
+            var grad = ctx.createLinearGradient(0,0,0,H);
+            grad.addColorStop(0, '#ddeef6');
+            grad.addColorStop(1, '#e8f2e0');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0,0,W,H);
+
+            // Grille légère
+            ctx.strokeStyle = 'rgba(160,180,160,0.25)';
+            ctx.lineWidth = 1;
+            for (var gx = 0; gx < W; gx += 40) {
+              ctx.beginPath(); ctx.moveTo(gx,0); ctx.lineTo(gx,H); ctx.stroke();
+            }
+            for (var gy = 0; gy < H; gy += 40) {
+              ctx.beginPath(); ctx.moveTo(0,gy); ctx.lineTo(W,gy); ctx.stroke();
+            }
+
+            // Calcul bounding box
+            var minLat=Infinity,maxLat=-Infinity,minLon=Infinity,maxLon=-Infinity;
+            pts.forEach(function(p){
+              if(p.lat<minLat)minLat=p.lat; if(p.lat>maxLat)maxLat=p.lat;
+              if(p.lon<minLon)minLon=p.lon; if(p.lon>maxLon)maxLon=p.lon;
+            });
+
+            var pad = 28;
+            var dLat = maxLat - minLat || 0.001;
+            var dLon = maxLon - minLon || 0.001;
+            // Ratio lat/lon (approximation)
+            var cosLat = Math.cos((minLat+maxLat)/2 * Math.PI/180);
+            var scaleX = (W - pad*2) / dLon;
+            var scaleY = (H - pad*2) / (dLat / cosLat);
+            var scale  = Math.min(scaleX, scaleY);
+            var offX = (W - dLon * scale) / 2;
+            var offY = (H - dLat / cosLat * scale) / 2;
+
+            function proj(p) {
+              return {
+                x: offX + (p.lon - minLon) * scale,
+                y: H - offY - (p.lat - minLat) / cosLat * scale
+              };
+            }
+
+            // Tracé ombre
+            ctx.beginPath();
+            var p0 = proj(pts[0]);
+            ctx.moveTo(p0.x+2, p0.y+2);
+            pts.forEach(function(p){ var c=proj(p); ctx.lineTo(c.x+2, c.y+2); });
+            ctx.strokeStyle = TRACK_SHD;
+            ctx.lineWidth = 5;
+            ctx.lineJoin = 'round';
+            ctx.lineCap  = 'round';
+            ctx.stroke();
+
+            // Tracé principal
+            ctx.beginPath();
+            ctx.moveTo(p0.x, p0.y);
+            pts.forEach(function(p){ var c=proj(p); ctx.lineTo(c.x, c.y); });
+            ctx.strokeStyle = TRACK_COL;
+            ctx.lineWidth = 3.5;
+            ctx.lineJoin = 'round';
+            ctx.lineCap  = 'round';
+            ctx.stroke();
+
+            // Point départ (orange)
+            var start = proj(pts[0]);
+            ctx.beginPath();
+            ctx.arc(start.x, start.y, 6, 0, Math.PI*2);
+            ctx.fillStyle = '#e67e22';
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Point arrivée (vert)
+            var end = proj(pts[pts.length-1]);
+            ctx.beginPath();
+            ctx.arc(end.x, end.y, 6, 0, Math.PI*2);
+            ctx.fillStyle = '#2d7a5a';
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Légende
+            ctx.font = '11px DM Sans, sans-serif';
+            ctx.fillStyle = 'rgba(90,128,128,0.8)';
+            ctx.fillText('▶ départ', start.x + 9, start.y + 4);
+            ctx.fillText('■ arrivée', end.x + 9, end.y + 4);
+          })
+          .catch(function(){});
+      }
+
+      document.querySelectorAll('canvas[data-gpx]').forEach(drawGpxCanvas);
+    })();
     </script>
 
     <script>
@@ -1709,6 +1837,7 @@ function renderPublic(posts, isAdmin = false, activeAuthor = '', allPosts = [], 
   </body></html>`;
 }
 
+
 // ══════════════════════════════════════════════════════════
 //  renderTimeline
 // ══════════════════════════════════════════════════════════
@@ -1724,16 +1853,16 @@ function renderTimeline(posts, isAdmin = false) {
             <div class="timeline-card-inner-row">
               <div style="flex:1">
                 <div class="timeline-date">📅 ${formatDateShort(p.date)}</div>
-                <div class="timeline-loc">${esc(p.location || p.title)}</div>
-                ${p.location ? `<div class="timeline-snippet" style="font-size:13px;color:#555;margin-bottom:2px;font-style:italic">${esc(p.title)}</div>` : ''}
-                <p class="timeline-snippet">${esc(p.body)}</p>
+                <div class="timeline-loc">${p.location || p.title}</div>
+                ${p.location ? `<div class="timeline-snippet" style="font-size:13px;color:#555;font-style:italic">${p.title}</div>` : ''}
+                <p class="timeline-snippet">${p.body}</p>
                 <div class="timeline-meta">
-                  ${p.km ? `<span class="timeline-badge tl-km">🚴 ${esc(String(p.km))} km</span>` : ''}
-                  ${p.dplus ? `<span class="timeline-badge tl-km">⛰️ ${esc(String(p.dplus))} m D+</span>` : ''}
-                  ${p.author ? `<span class="timeline-badge tl-author">${AUTHOR_EMOJI[p.author]||'👤'} ${esc(p.author)}</span>` : ''}
+                  ${p.km ? `<span class="timeline-badge tl-km">🚴 ${p.km} km</span>` : ''}
+                  ${p.dplus ? `<span class="timeline-badge tl-km">⛰️ ${p.dplus} m D+</span>` : ''}
+                  ${p.author ? `<span class="timeline-badge tl-author">${AUTHOR_EMOJI[p.author]||'👤'} ${p.author}</span>` : ''}
                 </div>
               </div>
-              ${p.photos?.length ? `<img src="${esc(p.photos[0])}" class="timeline-thumb" alt="photo" loading="lazy">` : ''}
+              ${p.photos?.length ? `<img src="${p.photos[0]}" class="timeline-thumb" alt="photo" loading="lazy">` : ''}
             </div>
           </div>
         </a>
@@ -1742,27 +1871,25 @@ function renderTimeline(posts, isAdmin = false) {
 
   return `<!DOCTYPE html><html lang="fr"><head>
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Timeline — ${esc(TRIP_TITLE)}</title>
+    <title>Timeline — ${TRIP_TITLE}</title>
     <style>${CSS}</style>
   </head><body>
     ${renderHeader({ activePage: 'timeline', isAdmin, showMap: true })}
-
     <div class="timeline-wrap">
       <h2 class="timeline-title">📍 Itinéraire chronologique</h2>
-      <div class="timeline">
-        ${timelineItems}
-      </div>
+      <div class="timeline">${timelineItems}</div>
     </div>
   </body></html>`;
 }
 
 // ══════════════════════════════════════════════════════════
-//  renderMap
+//  renderMap  — avec traces GPX chargées côté client
 // ══════════════════════════════════════════════════════════
 
 function renderMap(posts, isAdmin = false) {
   const withGps = posts.filter(p => p.lat && p.lon);
 
+  // On passe aussi les URLs GPX pour les charger côté client
   const gpsJson = JSON.stringify(withGps.map(p => ({
     lat: p.lat, lon: p.lon,
     title: p.title,
@@ -1772,6 +1899,7 @@ function renderMap(posts, isAdmin = false) {
     date: p.date,
     id: p.id,
     photo: p.photos?.[0] || null,
+    gpx: p.gpx || null,
   })));
 
   const emptyState = `
@@ -1783,127 +1911,92 @@ function renderMap(posts, isAdmin = false) {
 
   return `<!DOCTYPE html><html lang="fr"><head>
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Carte — ${esc(TRIP_TITLE)}</title>
+    <title>Carte — ${TRIP_TITLE}</title>
     <style>${CSS}
       html, body { height: 100%; margin: 0; }
       .map-page { display: flex; flex-direction: column; height: 100%; }
       .map-page .header { position: relative; flex-shrink: 0; overflow: visible; z-index: 1000; }
       .map-page .mobile-menu { position: absolute; z-index: 1001; }
       #map-container { flex: 1; position: relative; overflow: hidden; }
-      #fullmap {
-        position: absolute;
-        top: 0; left: 0; right: 0; bottom: 0;
-      }
+      #fullmap { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
       .map-sidebar {
-        position: absolute;
-        top: 12px; left: 12px;
-        z-index: 500;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        max-width: 280px;
-        pointer-events: none;
+        position: absolute; top: 12px; left: 12px;
+        z-index: 500; display: flex; flex-direction: column; gap: 8px;
+        max-width: 280px; pointer-events: none;
       }
       .map-legend {
-        background: rgba(255,255,255,0.94);
-        border-radius: 12px;
-        padding: 12px 14px;
-        font-size: 12px;
-        box-shadow: 0 4px 16px rgba(10,61,98,0.15);
-        border: 1px solid rgba(10,61,98,0.08);
-        pointer-events: all;
+        background: rgba(255,255,255,0.94); border-radius: 12px; padding: 12px 14px;
+        font-size: 12px; box-shadow: 0 4px 16px rgba(10,61,98,0.15);
+        border: 1px solid rgba(10,61,98,0.08); pointer-events: all;
       }
-      .map-legend-title {
-        font-family: 'Playfair Display', serif;
-        font-size: 13px;
-        font-weight: 700;
-        color: var(--ink);
-        margin-bottom: 8px;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
-      .map-legend-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin-bottom: 5px;
-        color: var(--ink-mid);
-      }
-      .map-legend-dot {
-        width: 14px; height: 14px;
-        border-radius: 50%;
-        border: 2px solid #fff;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.25);
-        flex-shrink: 0;
-      }
+      .map-legend-title { font-family:'Playfair Display',serif; font-size:13px; font-weight:700; color:var(--ink); margin-bottom:8px; display:flex; align-items:center; gap:6px; }
+      .map-legend-row { display:flex; align-items:center; gap:8px; margin-bottom:5px; color:var(--ink-mid); }
+      .map-legend-dot { width:14px; height:14px; border-radius:50%; border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,0.25); flex-shrink:0; }
       .map-stats {
-        background: rgba(42,122,122,0.88);
-        border-radius: 12px;
-        padding: 10px 14px;
-        color: #fff;
-        display: flex;
-        gap: 16px;
-        box-shadow: 0 4px 16px rgba(10,61,98,0.3);
-        pointer-events: all;
+        background: rgba(42,122,122,0.88); border-radius:12px; padding:10px 14px; color:#fff;
+        display:flex; gap:16px; box-shadow:0 4px 16px rgba(10,61,98,0.3); pointer-events:all;
       }
-      .map-stat-item { text-align: center; }
-      .map-stat-num { font-family: 'Playfair Display', serif; font-size: 18px; font-weight: 700; line-height: 1; }
-      .map-stat-lbl { font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(255,255,255,0.6); margin-top: 2px; }
-      .map-popup-photo { width: 100%; height: 100px; object-fit: cover; border-radius: 6px; margin-bottom: 6px; display: block; }
-      .map-popup-title { font-family: 'Playfair Display', serif; font-size: 14px; font-weight: 700; color: var(--ink); margin-bottom: 4px; }
-      .map-popup-meta { font-size: 11px; color: var(--ink-light); display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
-      .map-popup-badge { background: var(--mist); color: var(--ocean-mid); padding: 2px 7px; border-radius: 20px; font-weight: 500; }
-      .map-popup-link { display: inline-block; margin-top: 6px; font-size: 12px; color: var(--ocean-mid); font-weight: 600; text-decoration: underline; }
+      .map-stat-item { text-align:center; }
+      .map-stat-num { font-family:'Playfair Display',serif; font-size:18px; font-weight:700; line-height:1; }
+      .map-stat-lbl { font-size:9px; text-transform:uppercase; letter-spacing:0.1em; color:rgba(255,255,255,0.6); margin-top:2px; }
+      .map-popup-photo { width:100%; height:100px; object-fit:cover; border-radius:6px; margin-bottom:6px; display:block; }
+      .map-popup-title { font-family:'Playfair Display',serif; font-size:14px; font-weight:700; color:var(--ink); margin-bottom:4px; }
+      .map-popup-meta { font-size:11px; color:var(--ink-light); display:flex; flex-wrap:wrap; gap:4px; margin-bottom:4px; }
+      .map-popup-badge { background:var(--mist); color:var(--ocean-mid); padding:2px 7px; border-radius:20px; font-weight:500; }
+      .map-popup-link { display:inline-block; margin-top:6px; font-size:12px; color:var(--ocean-mid); font-weight:600; text-decoration:underline; }
     </style>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   </head><body>
     <div class="map-page">
       ${renderHeader({ activePage: 'map', isAdmin, showMap: true })}
-
       <div id="map-container" style="position:relative; flex:1;">
         <div id="fullmap">
-        ${withGps.length === 0 ? emptyState : ''}
-        ${withGps.length > 0 ? `
-        <div class="map-sidebar">
-          <div class="map-stats">
-            <div class="map-stat-item">
-              <div class="map-stat-num">${withGps.length}</div>
-              <div class="map-stat-lbl">étapes</div>
+          ${withGps.length === 0 ? emptyState : ''}
+          ${withGps.length > 0 ? `
+          <div class="map-sidebar">
+            <div class="map-stats">
+              <div class="map-stat-item">
+                <div class="map-stat-num">${withGps.length}</div>
+                <div class="map-stat-lbl">étapes</div>
+              </div>
+              <div class="map-stat-item">
+                <div class="map-stat-num">${Math.round(withGps.reduce((s,p)=>s+(p.km||0),0)).toLocaleString('fr-FR')}</div>
+                <div class="map-stat-lbl">km</div>
+              </div>
+              <div class="map-stat-item">
+                <div class="map-stat-num">${Math.round(withGps.reduce((s,p)=>s+(p.dplus||0),0)).toLocaleString('fr-FR')}</div>
+                <div class="map-stat-lbl">m D+</div>
+              </div>
             </div>
-            <div class="map-stat-item">
-              <div class="map-stat-num">${Math.round(withGps.reduce((s,p)=>s+(p.km||0),0)).toLocaleString('fr-FR')}</div>
-              <div class="map-stat-lbl">km</div>
-            </div>
-            <div class="map-stat-item">
-              <div class="map-stat-num">${Math.round(withGps.reduce((s,p)=>s+(p.dplus||0),0)).toLocaleString('fr-FR')}</div>
-              <div class="map-stat-lbl">m D+</div>
+            <div class="map-legend">
+              <div class="map-legend-title">🗺️ Légende</div>
+              <div class="map-legend-row">
+                <div class="map-legend-dot" style="background:linear-gradient(135deg,#e67e22,#f39c12)"></div>
+                Point de départ
+              </div>
+              <div class="map-legend-row">
+                <div class="map-legend-dot" style="background:linear-gradient(135deg,#2a7a7a,#4aabab)"></div>
+                Étape intermédiaire
+              </div>
+              <div class="map-legend-row">
+                <div class="map-legend-dot" style="background:linear-gradient(135deg,#1a7a4a,#2ecc71)"></div>
+                Dernière position connue
+              </div>
+              <div class="map-legend-row" style="margin-top:6px;padding-top:6px;border-top:1px solid var(--sand)">
+                <div style="width:28px;height:4px;background:#3a9090;border-radius:2px;flex-shrink:0"></div>
+                Trace GPS du jour
+              </div>
             </div>
           </div>
-          <div class="map-legend">
-            <div class="map-legend-title">🗺️ Légende</div>
-            <div class="map-legend-row">
-              <div class="map-legend-dot" style="background:linear-gradient(135deg,#e67e22,#f39c12)"></div>
-              Point de départ
-            </div>
-            <div class="map-legend-row">
-              <div class="map-legend-dot" style="background:linear-gradient(135deg,#2a7a7a,#4aabab)"></div>
-              Étape intermédiaire
-            </div>
-            <div class="map-legend-row">
-              <div class="map-legend-dot" style="background:linear-gradient(135deg,#1a7a4a,#2ecc71)"></div>
-              Dernière position connue
-            </div>
-          </div>
+          ` : ''}
         </div>
-        ` : ''}
-      </div>
       </div>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
       const gpsData = ${gpsJson};
+
       function initMap() {
         if (gpsData.length === 0) return;
 
@@ -1915,10 +2008,33 @@ function renderMap(posts, isAdmin = false) {
 
         const pts = gpsData.map(p => [p.lat, p.lon]);
 
+        // Tracé entre les points GPS
         if (pts.length > 1) L.polyline(pts, { color: 'rgba(0,0,0,.10)', weight: 8 }).addTo(map);
         if (pts.length > 1) L.polyline(pts, { color: '#2a7a7a', weight: 4, opacity: .9 }).addTo(map);
         if (pts.length > 1) L.polyline(pts, { color: '#fff', weight: 1.5, opacity: .5, dashArray: '8,10' }).addTo(map);
 
+        // Charger et afficher les traces GPX de chaque étape
+        const gpxPromises = gpsData
+          .filter(p => p.gpx)
+          .map(function(p) {
+            return fetch(p.gpx)
+              .then(function(r){ return r.text(); })
+              .then(function(txt){
+                const parser = new DOMParser();
+                const xml = parser.parseFromString(txt, 'text/xml');
+                const trkpts = Array.from(xml.querySelectorAll('trkpt')).map(function(tp){
+                  return [parseFloat(tp.getAttribute('lat')), parseFloat(tp.getAttribute('lon'))];
+                });
+                if (trkpts.length < 2) return;
+                // Ombre
+                L.polyline(trkpts, { color: 'rgba(0,0,0,0.12)', weight: 6 }).addTo(map);
+                // Trace colorée
+                L.polyline(trkpts, { color: '#3a9090', weight: 3, opacity: 0.85 }).addTo(map);
+              })
+              .catch(function(){});
+          });
+
+        // Marqueurs des étapes
         gpsData.forEach((p, i) => {
           const isFirst = i === 0;
           const isLast  = i === gpsData.length - 1;
@@ -1931,14 +2047,14 @@ function renderMap(posts, isAdmin = false) {
           const ic = L.divIcon({ html: dot, iconSize: [size,size], iconAnchor: [size/2,size/2], className: '' });
           const marker = L.marker([p.lat, p.lon], { icon: ic }).addTo(map);
 
-          var dateStr = new Date(p.date).toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' });
-          var esc = function(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); };
-          var label = esc(p.location || p.title);
-          var sub   = p.location ? '<div style="font-size:12px;color:#555;margin-bottom:2px;font-style:italic">' + esc(p.title) + '</div>' : '';
-          var photoHtml = p.photo ? '<img src="' + esc(p.photo) + '" class="map-popup-photo" alt="">' : '';
-          var kmHtml    = p.km    ? '<span class="map-popup-badge">' + p.km + ' km</span>' : '';
-          var dplusHtml = p.dplus ? '<span class="map-popup-badge">' + p.dplus + ' m D+</span>' : '';
-          var popupHtml = '<div style="min-width:180px;max-width:240px">'
+          const dateStr = new Date(p.date).toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' });
+          const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+          const label = esc(p.location || p.title);
+          const sub   = p.location ? '<div style="font-size:12px;color:#555;margin-bottom:2px;font-style:italic">' + esc(p.title) + '</div>' : '';
+          const photoHtml = p.photo ? '<img src="' + esc(p.photo) + '" class="map-popup-photo" alt="">' : '';
+          const kmHtml    = p.km    ? '<span class="map-popup-badge">' + p.km + ' km</span>' : '';
+          const dplusHtml = p.dplus ? '<span class="map-popup-badge">' + p.dplus + ' m D+</span>' : '';
+          const popupHtml = '<div style="min-width:180px;max-width:240px">'
             + photoHtml
             + '<div class="map-popup-title">' + label + '</div>'
             + '<div class="map-popup-meta"><span>' + dateStr + '</span>' + kmHtml + dplusHtml + '</div>'
@@ -1953,21 +2069,20 @@ function renderMap(posts, isAdmin = false) {
         setTimeout(() => map.invalidateSize(), 400);
         window.addEventListener('resize', () => map.invalidateSize());
       }
+
       document.addEventListener('DOMContentLoaded', initMap);
     </script>
     <style>
       .map-custom-popup .leaflet-popup-content-wrapper {
-        border-radius: 12px;
-        box-shadow: 0 8px 24px rgba(10,61,98,0.18);
-        border: 1px solid rgba(10,61,98,0.08);
-        padding: 0;
-        overflow: hidden;
+        border-radius: 12px; box-shadow: 0 8px 24px rgba(10,61,98,0.18);
+        border: 1px solid rgba(10,61,98,0.08); padding: 0; overflow: hidden;
       }
       .map-custom-popup .leaflet-popup-content { margin: 12px 14px; }
       .map-custom-popup .leaflet-popup-tip { background: #fff; }
     </style>
   </body></html>`;
 }
+
 
 // ══════════════════════════════════════════════════════════
 //  renderLogin
@@ -1976,7 +2091,7 @@ function renderMap(posts, isAdmin = false) {
 function renderLogin(error, next = '/') {
   return `<!DOCTYPE html><html lang="fr"><head>
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>${esc(TRIP_TITLE)} — Accès</title>
+    <title>${TRIP_TITLE} — Accès</title>
     <style>${CSS}
       body{min-height:100vh;display:flex;flex-direction:column;justify-content:center;background:var(--warm-white);}
     </style>
@@ -1985,9 +2100,8 @@ function renderLogin(error, next = '/') {
       <div style="display:flex;justify-content:center;margin-bottom:8px">
         <img src="/public/logo_nijumatim.png" alt="Nijumatim" style="height:70px;width:auto;background:#fff;border-radius:12px;padding:6px 14px;">
       </div>
-      <p>${TRIP_START && TRIP_END ? esc(TRIP_START) + ' → ' + esc(TRIP_END) : 'Journal de voyage privé'}</p>
+      <p>${TRIP_START && TRIP_END ? TRIP_START + ' → ' + TRIP_END : 'Journal de voyage privé'}</p>
     </div>
-
     <div class="form-wrap" style="max-width:420px;padding-top:28px">
       <div class="form-card">
         ${error ? '<div class="error-msg">Mot de passe incorrect. Demandez-le à votre aventurier !</div>' : ''}
@@ -1996,7 +2110,7 @@ function renderLogin(error, next = '/') {
           Entrez votre mot de passe pour accéder au journal.
         </p>
         <form method="POST" action="/login">
-          <input type="hidden" name="next" value="${esc(next)}">
+          <input type="hidden" name="next" value="${next}">
           <div class="field">
             <label>Mot de passe</label>
             <input type="password" name="password" placeholder="••••••••" autofocus required
@@ -2010,13 +2124,15 @@ function renderLogin(error, next = '/') {
 }
 
 // ══════════════════════════════════════════════════════════
-//  renderPostForm
+//  renderPostForm  — avec date éditable + autocomplete lieu
 // ══════════════════════════════════════════════════════════
 
-function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '') {
+function renderPostForm(err, lastLocation = '', isMargot = false) {
   const authorOptions = AUTHORS.map(a =>
-    `<option value="${esc(a)}">${AUTHOR_EMOJI[a]||''} ${esc(a)}</option>`
+    `<option value="${a}">${AUTHOR_EMOJI[a]||''} ${a}</option>`
   ).join('');
+
+  const defaultDate = nowDatetimeLocal();
 
   return `<!DOCTYPE html><html lang="fr"><head>
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -2026,13 +2142,18 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '') {
     <div class="form-wrap">
       <div class="form-card">
         <h2>Poster une étape</h2>
-        ${err ? `<div class="error-msg">${esc(err)}</div>` : ''}
+        ${err ? `<div class="error-msg">${err}</div>` : ''}
         ${lastLocation ? `
         <div class="prev-location-hint">
-          📍 Dernière position connue : <strong>${esc(lastLocation)}</strong>
+          📍 Dernière position connue : <strong>${lastLocation}</strong>
         </div>` : ''}
         <form method="POST" action="/post" enctype="multipart/form-data" id="postForm">
-          <input type="hidden" name="_csrf" value="${csrf}">
+
+          <div class="field">
+            <label>Date et heure de l'étape</label>
+            <input type="datetime-local" name="postDate" value="${defaultDate}" required>
+          </div>
+
           <div class="field">
             <label>Titre de l'étape *</label>
             <input name="title" type="text" placeholder="Ex : Arrivée à Lyon !" required maxlength="100">
@@ -2041,13 +2162,20 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '') {
             <label>Raconte ta journée *</label>
             <textarea name="body" placeholder="Décris ton étape, tes rencontres, la météo..." required maxlength="2000"></textarea>
           </div>
+
           <div class="field">
             <label>Lieu d'arrivée</label>
-            <input name="location" id="locationField" type="text" placeholder="Ex : Lyon, Bord de Saône">
-            <button type="button" class="gps-btn" onclick="getGPS()">📍 Détecter ma position</button>
+            <div class="loc-wrap">
+              <input name="location" id="locationField" type="text"
+                placeholder="Tapez un lieu pour chercher, ou utilisez le GPS..."
+                autocomplete="off">
+              <div class="loc-suggestions" id="locSuggestions"></div>
+            </div>
+            <input type="hidden" name="lat" id="lat">
+            <input type="hidden" name="lon" id="lon">
+            <button type="button" class="loc-search-btn" onclick="getGPS('locationField','lat','lon')">📍 GPS auto</button>
           </div>
-          <input type="hidden" name="lat" id="lat">
-          <input type="hidden" name="lon" id="lon">
+
           <div class="field-row">
             <div class="field">
               <label>Km du jour</label>
@@ -2069,7 +2197,8 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '') {
           </div>
           <div class="field">
             <label>Trace GPX (optionnel)</label>
-            <input type="file" name="gpx" accept=".gpx,application/gpx+xml" onchange="parseGPX(this)">
+            <input type="file" name="gpx" accept=".gpx,application/gpx+xml"
+              onchange="parseGPX(this,'locationField','lat','lon')">
             <div id="gpxInfo" style="display:none;margin-top:8px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px 12px;font-size:13px;color:#166534"></div>
           </div>
           <div class="field">
@@ -2089,99 +2218,21 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '') {
         </form>
       </div>
     </div>
+    ${FORM_SCRIPTS}
     <script>
-      function getGPS() {
-        if (!navigator.geolocation) {
-          return alert('Géolocalisation non disponible sur ce navigateur.');
-        }
-        if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-          return alert('La géolocalisation nécessite HTTPS. Configurez un certificat SSL sur votre domaine.');
-        }
-        navigator.geolocation.getCurrentPosition(
-          pos => {
-            document.getElementById('lat').value = pos.coords.latitude.toFixed(6);
-            document.getElementById('lon').value = pos.coords.longitude.toFixed(6);
-            if (!document.getElementById('locationField').value) {
-              fetch('https://nominatim.openstreetmap.org/reverse?lat=' + pos.coords.latitude + '&lon=' + pos.coords.longitude + '&format=json')
-                .then(r => r.json())
-                .then(d => {
-                  const a = d.address;
-                  document.getElementById('locationField').value = [a.town || a.city || a.village, a.state].filter(Boolean).join(', ');
-                })
-                .catch(() => {
-                  alert('Position GPS enregistrée ! (Nom du lieu non trouvé, remplissez-le manuellement)');
-                });
-            }
-            alert('Position enregistrée : ' + pos.coords.latitude.toFixed(4) + ', ' + pos.coords.longitude.toFixed(4));
-          },
-          err => {
-            const msgs = {1: 'Permission refusée', 2: 'Position indisponible', 3: 'Délai dépassé'};
-            alert('Erreur GPS : ' + (msgs[err.code] || err.message));
-          },
-          { timeout: 10000, maximumAge: 60000 }
-        );
-      }
-      function parseGPX(input) {
-        const file = input.files[0]; if (!file) return;
-        const reader = new FileReader();
-        reader.onload = e => {
-          try {
-            const parser = new DOMParser();
-            const xml = parser.parseFromString(e.target.result, 'text/xml');
-            const trkpts = Array.from(xml.querySelectorAll('trkpt'));
-            if (!trkpts.length) { alert('Aucun point trouvé dans ce fichier GPX.'); return; }
-            let dist = 0;
-            for (let i = 1; i < trkpts.length; i++) {
-              const lat1=parseFloat(trkpts[i-1].getAttribute('lat')),lon1=parseFloat(trkpts[i-1].getAttribute('lon'));
-              const lat2=parseFloat(trkpts[i].getAttribute('lat')),lon2=parseFloat(trkpts[i].getAttribute('lon'));
-              const R=6371000,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180;
-              const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
-              dist+=R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
-            }
-            let dplus=0;
-            const elevs=trkpts.map(p=>parseFloat(p.querySelector('ele')?.textContent||0)).filter(v=>!isNaN(v));
-            for(let i=1;i<elevs.length;i++){if(elevs[i]>elevs[i-1])dplus+=elevs[i]-elevs[i-1];}
-            const last=trkpts[trkpts.length-1];
-            const lat=parseFloat(last.getAttribute('lat')),lon=parseFloat(last.getAttribute('lon'));
-            const kmVal=(dist/1000).toFixed(1);
-            const dpVal=Math.round(dplus);
-            document.querySelector('[name=km]').value=kmVal;
-            document.querySelector('[name=dplus]').value=dpVal;
-            document.getElementById('lat').value=lat.toFixed(6);
-            document.getElementById('lon').value=lon.toFixed(6);
-            fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json')
-              .then(r=>r.json()).then(d=>{
-                const a=d.address;
-                if(!document.getElementById('locationField').value)
-                  document.getElementById('locationField').value=[a.town||a.city||a.village,a.state].filter(Boolean).join(', ');
-              }).catch(()=>{});
-            document.getElementById('gpxInfo').style.display='block';
-            document.getElementById('gpxInfo').innerHTML='✅ Trace importée — <strong>'+kmVal+' km</strong> · <strong>'+dpVal.toLocaleString()+' m D+</strong> · '+trkpts.length+' points';
-          } catch(err) { alert('Erreur lors de la lecture du GPX : '+err.message); }
-        };
-        reader.readAsText(file);
-      }
-      function previewPhotos(input) {
-        const preview = document.getElementById('photoPreview');
-        preview.innerHTML='';
-        Array.from(input.files).forEach(f=>{
-          const img=document.createElement('img');
-          img.src=URL.createObjectURL(f);
-          preview.appendChild(img);
-        });
-      }
+      document.addEventListener('DOMContentLoaded', function() {
+        initLocAutocomplete('locationField', 'lat', 'lon', 'locSuggestions');
+      });
     </script>
   </body></html>`;
 }
 
 // ══════════════════════════════════════════════════════════
-//  renderEditForm
+//  renderEditForm  — avec date éditable, sans auteur, autocomplete lieu
 // ══════════════════════════════════════════════════════════
 
-function renderEditForm(post, err, isMargot = false, csrf = '') {
-  const authorOptions = AUTHORS.map(a =>
-    `<option value="${esc(a)}" ${post.author===a?'selected':''}>${AUTHOR_EMOJI[a]||''} ${esc(a)}</option>`
-  ).join('');
+function renderEditForm(post, err, isMargot = false) {
+  const postDateLocal = isoToDatetimeLocal(post.date);
 
   return `<!DOCTYPE html><html lang="fr"><head>
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -2191,46 +2242,56 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
     <div class="form-wrap">
       <div class="form-card">
         <h2>Modifier l'étape</h2>
-        ${err ? `<div class="error-msg">${esc(err)}</div>` : ''}
+        ${err ? `<div class="error-msg">${err}</div>` : ''}
         <form method="POST" action="/edit/${post.id}" enctype="multipart/form-data">
-          <input type="hidden" name="_csrf" value="${csrf}">
+
           <div class="field">
-            <label>Auteur</label>
-            <select name="author">${authorOptions}</select>
+            <label>Date et heure de l'étape</label>
+            <input type="datetime-local" name="postDate" value="${postDateLocal}" required>
           </div>
+
           <div class="field">
             <label>Titre de l'étape *</label>
-            <input name="title" type="text" value="${esc(post.title)}" required maxlength="100">
+            <input name="title" type="text" value="${post.title.replace(/"/g,'&quot;')}" required maxlength="100">
           </div>
           <div class="field">
             <label>Raconte ta journée *</label>
-            <textarea name="body" required maxlength="2000">${esc(post.body)}</textarea>
+            <textarea name="body" required maxlength="2000">${post.body}</textarea>
           </div>
+
           <div class="field">
             <label>Lieu</label>
-            <input name="location" id="locationField" type="text" value="${esc(post.location||'')}" placeholder="Ex : Lyon, Bord de Saône">
-            <button type="button" class="gps-btn" onclick="getGPS()">📍 Détecter ma position</button>
+            <div class="loc-wrap">
+              <input name="location" id="locationField" type="text"
+                value="${(post.location||'').replace(/"/g,'&quot;')}"
+                placeholder="Tapez un lieu pour chercher, ou utilisez le GPS..."
+                autocomplete="off">
+              <div class="loc-suggestions" id="locSuggestions"></div>
+            </div>
+            <input type="hidden" name="lat" id="lat" value="${post.lat||''}">
+            <input type="hidden" name="lon" id="lon" value="${post.lon||''}">
+            <button type="button" class="loc-search-btn" onclick="getGPS('locationField','lat','lon')">📍 GPS auto</button>
           </div>
-          <input type="hidden" name="lat" id="lat" value="${esc(String(post.lat||''))}">
-          <input type="hidden" name="lon" id="lon" value="${esc(String(post.lon||''))}">
+
           <div class="field-row">
             <div class="field">
               <label>Km du jour</label>
-              <input name="km" type="number" min="0" max="500" step="0.1" value="${esc(String(post.km||''))}">
+              <input name="km" type="number" min="0" max="500" step="0.1" value="${post.km||''}">
             </div>
             <div class="field">
               <label>D+ (mètres)</label>
-              <input name="dplus" type="number" min="0" max="10000" value="${esc(String(post.dplus||''))}">
+              <input name="dplus" type="number" min="0" max="10000" value="${post.dplus||''}">
             </div>
           </div>
+
           ${post.photos?.length ? `
           <div class="field">
             <label>Photos actuelles — décochez pour supprimer</label>
             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px">
               ${post.photos.map(ph=>`
                 <label style="position:relative;cursor:pointer">
-                  <input type="checkbox" name="keepPhotos" value="${esc(ph)}" checked style="position:absolute;top:4px;left:4px;z-index:1;accent-color:var(--teal)">
-                  <img src="${esc(ph)}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:2px solid var(--teal-light)">
+                  <input type="checkbox" name="keepPhotos" value="${ph}" checked style="position:absolute;top:4px;left:4px;z-index:1;accent-color:var(--teal)">
+                  <img src="${ph}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:2px solid var(--teal-light)">
                 </label>
               `).join('')}
             </div>
@@ -2249,7 +2310,8 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
           </div>` : ''}
           <div class="field">
             <label>Remplacer la trace GPX</label>
-            <input type="file" name="gpx" accept=".gpx,application/gpx+xml" onchange="parseGPX(this)">
+            <input type="file" name="gpx" accept=".gpx,application/gpx+xml"
+              onchange="parseGPX(this,'locationField','lat','lon')">
             <div id="gpxInfo" style="display:none;margin-top:8px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px 12px;font-size:13px;color:#166534"></div>
           </div>
           <div class="field">
@@ -2268,56 +2330,11 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
         </form>
       </div>
     </div>
+    ${FORM_SCRIPTS}
     <script>
-      function getGPS() {
-        if(!navigator.geolocation) return alert('Géolocalisation non disponible');
-        navigator.geolocation.getCurrentPosition(pos=>{
-          document.getElementById('lat').value=pos.coords.latitude.toFixed(6);
-          document.getElementById('lon').value=pos.coords.longitude.toFixed(6);
-          if(!document.getElementById('locationField').value){
-            fetch('https://nominatim.openstreetmap.org/reverse?lat='+pos.coords.latitude+'&lon='+pos.coords.longitude+'&format=json')
-              .then(r=>r.json()).then(d=>{const a=d.address;document.getElementById('locationField').value=[a.town||a.city||a.village,a.state].filter(Boolean).join(', ');}).catch(()=>{});
-          }
-          alert('Position mise à jour !');
-        },()=>alert('Impossible d\'obtenir la position.'));
-      }
-      function parseGPX(input){
-        const file=input.files[0];if(!file)return;
-        const reader=new FileReader();
-        reader.onload=e=>{
-          try{
-            const parser=new DOMParser();
-            const xml=parser.parseFromString(e.target.result,'text/xml');
-            const trkpts=Array.from(xml.querySelectorAll('trkpt'));
-            if(!trkpts.length){alert('Aucun point trouvé dans ce fichier GPX.');return;}
-            let dist=0;
-            for(let i=1;i<trkpts.length;i++){
-              const lat1=parseFloat(trkpts[i-1].getAttribute('lat')),lon1=parseFloat(trkpts[i-1].getAttribute('lon'));
-              const lat2=parseFloat(trkpts[i].getAttribute('lat')),lon2=parseFloat(trkpts[i].getAttribute('lon'));
-              const R=6371000,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180;
-              const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
-              dist+=R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
-            }
-            let dplus=0;
-            const elevs=trkpts.map(p=>parseFloat(p.querySelector('ele')?.textContent||0)).filter(v=>!isNaN(v));
-            for(let i=1;i<elevs.length;i++){if(elevs[i]>elevs[i-1])dplus+=elevs[i]-elevs[i-1];}
-            const last=trkpts[trkpts.length-1];
-            const lat=parseFloat(last.getAttribute('lat')),lon=parseFloat(last.getAttribute('lon'));
-            const kmVal=(dist/1000).toFixed(1);const dpVal=Math.round(dplus);
-            document.querySelector('[name=km]').value=kmVal;document.querySelector('[name=dplus]').value=dpVal;
-            document.getElementById('lat').value=lat.toFixed(6);document.getElementById('lon').value=lon.toFixed(6);
-            fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json')
-              .then(r=>r.json()).then(d=>{const a=d.address;if(!document.getElementById('locationField').value)document.getElementById('locationField').value=[a.town||a.city||a.village,a.state].filter(Boolean).join(', ');}).catch(()=>{});
-            document.getElementById('gpxInfo').style.display='block';
-            document.getElementById('gpxInfo').innerHTML='✅ Trace importée — <strong>'+kmVal+' km</strong> · <strong>'+dpVal.toLocaleString()+' m D+</strong> · '+trkpts.length+' points';
-          }catch(err){alert('Erreur GPX : '+err.message);}
-        };
-        reader.readAsText(file);
-      }
-      function previewPhotos(input){
-        const preview=document.getElementById('photoPreview');preview.innerHTML='';
-        Array.from(input.files).forEach(f=>{const img=document.createElement('img');img.src=URL.createObjectURL(f);preview.appendChild(img);});
-      }
+      document.addEventListener('DOMContentLoaded', function() {
+        initLocAutocomplete('locationField', 'lat', 'lon', 'locSuggestions');
+      });
     </script>
   </body></html>`;
 }
@@ -2329,7 +2346,7 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
 function renderRSS(posts) {
   const items = posts.slice(0, 20).map(p => `
     <item>
-      <title>${esc(p.title)}</title>
+      <title>${p.title}</title>
       <description><![CDATA[${p.body}]]></description>
       <pubDate>${new Date(p.date).toUTCString()}</pubDate>
       <guid>${p.id}</guid>
@@ -2337,9 +2354,10 @@ function renderRSS(posts) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
   <channel>
-    <title>${esc(TRIP_TITLE)}</title>
+    <title>${TRIP_TITLE}</title>
     <description>Journal de voyage vélo</description>
     ${items}
   </channel>
 </rss>`;
 }
+
