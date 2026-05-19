@@ -499,6 +499,14 @@ app.get('/backup', requireAuth, (req, res) => {
   res.send(fs.readFileSync(DATA, 'utf8'));
 });
 
+// ── Admin : page paramètres ───────────────────────────────
+app.get('/settings', requireAuth, (req, res) => {
+  const token = csrfToken(req);
+  req.session.save(() => {
+    res.send(renderSettings(token, req.query.restored === '1'));
+  });
+});
+
 // ── Admin : restaurer une sauvegarde ─────────────────────
 app.post('/restore', requireAuth, requireCsrf, upload.single('backup'), (req, res) => {
   if (!req.file) return res.status(400).send('Aucun fichier reçu.');
@@ -509,7 +517,7 @@ app.post('/restore', requireAuth, requireCsrf, upload.single('backup'), (req, re
     if (!Array.isArray(parsed)) throw new Error('Format invalide — tableau attendu.');
     // Écriture atomique : on ne touche à rien si le JSON est invalide
     writePosts(parsed);
-    res.redirect('/?restored=1');
+    res.redirect('/settings?restored=1');
   } catch(e) {
     res.status(400).send('Fichier invalide : ' + e.message);
   } finally {
@@ -546,6 +554,7 @@ function renderHeader({ activePage = '', isAdmin = false, showMap = false } = {}
     { href: '/preparation', label: '🛠️ Préparation', key: 'preparation' },
     { href: '/rss', label: 'RSS', key: 'rss' },
     ...(!isAdmin ? [{ href: '/login', label: '🔧', key: 'login' }] : []),
+    ...(isAdmin ? [{ href: '/settings', label: '⚙️ Paramètres', key: 'settings' }] : []),
     { href: '/logout', label: '🔓 Déconnexion', key: 'logout' },
   ];
 
@@ -2861,3 +2870,55 @@ function renderRSS(posts) {
 </rss>`;
 }
 
+// ══════════════════════════════════════════════════════════
+//  renderSettings
+// ══════════════════════════════════════════════════════════
+
+function renderSettings(csrf = '', restored = false) {
+  return `<!DOCTYPE html><html lang="fr"><head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Paramètres — ${TRIP_TITLE}</title>
+    <style>${CSS}</style>
+  </head><body>
+    ${renderHeader({ activePage: 'settings', isAdmin: true, showMap: false })}
+    <div class="form-wrap">
+
+        ${restored ? `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:14px;color:#166534;font-weight:500">
+        ✅ Données restaurées avec succès.
+      </div>` : ''}
+
+      <div class="form-card" style="margin-bottom:16px">
+        <h2>⬇️ Sauvegarder</h2>
+        <p style="font-size:14px;color:var(--ink-light);margin-bottom:18px;line-height:1.6">
+          Télécharge un fichier <code>velo-backup-….json</code> contenant toutes les étapes.
+          Conserve-le précieusement — il suffit à tout restaurer.
+        </p>
+        <a href="/backup" class="btn-submit" style="display:block;text-align:center;text-decoration:none">
+          ⬇️ Télécharger la sauvegarde
+        </a>
+      </div>
+
+      <div class="form-card">
+        <h2>⬆️ Restaurer</h2>
+        <p style="font-size:14px;color:var(--ink-light);margin-bottom:18px;line-height:1.6">
+          Importe un fichier de sauvegarde JSON. <strong style="color:#dc2626">Les étapes actuelles
+          seront remplacées</strong> par celles du fichier.
+        </p>
+        <form method="POST" action="/restore" enctype="multipart/form-data"
+              onsubmit="return confirm('Restaurer depuis ce fichier ?\\nLes étapes actuelles seront définitivement remplacées.')">
+          <input type="hidden" name="_csrf" value="${csrf}">
+          <div class="field">
+            <label>Fichier de sauvegarde (.json)</label>
+            <input type="file" name="backup" accept=".json,application/json" required
+                   style="padding:8px;background:#fff">
+          </div>
+          <button class="btn-submit" type="submit"
+                  style="background:linear-gradient(135deg,#dc2626,#b91c1c)">
+            ⬆️ Restaurer les données
+          </button>
+        </form>
+      </div>
+
+    </div>
+  </body></html>`;
+}
