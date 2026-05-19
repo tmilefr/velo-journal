@@ -1490,42 +1490,6 @@ const CSS = `
     align-items:center;
     gap:6px;
   }
-
-  /* ── BACKUP BAR ──────────────────────────────────── */
-  .backup-bar {
-    position: fixed;
-    bottom: 24px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    gap: 8px;
-    z-index: 100;
-  }
-
-  .backup-btn {
-    background: rgba(255,255,255,0.95);
-    color: var(--ocean-mid);
-    border: 1.5px solid var(--teal-light);
-    border-radius: 24px;
-    padding: 9px 18px;
-    font-size: 13px;
-    font-weight: 600;
-    font-family: inherit;
-    box-shadow: 0 4px 16px rgba(10,61,98,0.18);
-    cursor: pointer;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    transition: background .15s, transform .15s;
-    backdrop-filter: blur(6px);
-    white-space: nowrap;
-  }
-
-  .backup-btn:hover { background: var(--sage); transform: translateY(-1px); }
-  .restore-btn { color: var(--emerald); border-color: var(--emerald-light); }
-  .restore-btn:hover { background: #f0fdf4; }
-
 `;
 
 
@@ -1870,24 +1834,7 @@ function renderPublic(posts, isAdmin = false, csrf = '') {
 
     <div class="feed">${postCards}</div>
 
-    ${isAdmin ? `
-    <a class="fab" href="/post" title="Nouvelle étape">+</a>
-    <div class="backup-bar">
-      <a href="/backup" class="backup-btn" title="Télécharger une sauvegarde JSON">
-        ⬇️ Sauvegarder
-      </a>
-      <form method="POST" action="/restore" enctype="multipart/form-data"
-            style="display:inline"
-            onsubmit="return confirm('Restaurer ces données ? Les étapes actuelles seront remplacées.')">
-        <input type="hidden" name="_csrf" value="${csrf}">
-        <label class="backup-btn restore-btn" title="Restaurer depuis une sauvegarde JSON">
-          ⬆️ Restaurer
-          <input type="file" name="backup" accept=".json,application/json"
-                 style="display:none"
-                 onchange="this.closest('form').requestSubmit()">
-        </label>
-      </form>
-    </div>` : ''}
+    ${isAdmin ? `<a class="fab" href="/post" title="Nouvelle étape">+</a>` : ''}
 
     <!-- Lightbox -->
     <div class="lightbox" id="lb" role="dialog" aria-modal="true">
