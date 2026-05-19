@@ -395,7 +395,7 @@ app.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', maxCo
     comments:   []
   });
   writePosts(posts);
-  res.redirect('/');
+  res.redirect(type === 'preparation' ? '/preparation' : '/');
 });
 
 // ── Admin : supprimer ─────────────────────────────────────
@@ -2611,7 +2611,7 @@ function renderLogin(error, next = '/') {
           <input type="hidden" name="next" value="${esc(next)}">
           <div class="field">
             <label>Mot de passe</label>
-            <input type="password" name="password" placeholder="••••••••" autofocus required
+            <input type="password" name="password" placeholder="" autofocus required
               style="text-align:center;font-size:18px;letter-spacing:.1em">
           </div>
           <button class="btn-submit" type="submit">Accéder au journal 🚴</button>
@@ -2687,11 +2687,11 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
           <div class="field-row">
             <div class="field">
               <label>Km du jour</label>
-              <input name="km" type="number" min="0" max="500" step="0.1" placeholder="68">
+              <input name="km" type="number" min="0" max="500" step="0.1" placeholder="">
             </div>
             <div class="field">
               <label>D+ (mètres)</label>
-              <input name="dplus" type="number" min="0" max="10000" placeholder="1200">
+              <input name="dplus" type="number" min="0" max="10000" placeholder="">
             </div>
           </div>
           <div class="field">
