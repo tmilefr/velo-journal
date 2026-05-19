@@ -83,6 +83,43 @@ app.use(session({
     sameSite: 'lax'
   }
 }));
+
+
+// ── Debug CSRF log ────────────────────────────────────────
+const LOG_FILE = path.join(__dirname, 'csrf-debug.log');
+function logDebug(msg) {
+  const line = new Date().toISOString() + ' ' + msg + '\n';
+  fs.appendFileSync(LOG_FILE, line);
+}
+
+// ── Redirection console vers fichier ─────────────────────
+const _origLog   = console.log.bind(console);
+const _origWarn  = console.warn.bind(console);
+const _origError = console.error.bind(console);
+
+console.log   = (...a) => { _origLog(...a);   logDebug('[LOG]   ' + a.join(' ')); };
+console.warn  = (...a) => { _origWarn(...a);  logDebug('[WARN]  ' + a.join(' ')); };
+console.error = (...a) => { _origError(...a); logDebug('[ERROR] ' + a.join(' ')); };
+
+// Erreurs non catchées
+process.on('uncaughtException',  e => logDebug('[UNCAUGHT] ' + e.stack || e.message));
+process.on('unhandledRejection', e => logDebug('[UNHANDLED] ' + (e?.stack || e)));
+
+app.use((req, res, next) => {
+  if (req.method === 'POST') {
+    logDebug('--- CSRF DEBUG ---');
+    logDebug('URL            : ' + req.originalUrl);
+    logDebug('Session ID     : ' + req.sessionID);
+    logDebug('Session CSRF   : ' + req.session.csrf);
+    logDebug('Body CSRF      : ' + req.body._csrf);
+    logDebug('Session auth   : ' + req.session.auth);
+    logDebug('Session family : ' + req.session.family);
+    logDebug('Cookie header  : ' + req.headers.cookie);
+    logDebug('------------------');
+  }
+  next();
+});
+
 // ── Helmet — headers de sécurité HTTP ────────────────────
 app.use(helmet({
   contentSecurityPolicy: {
