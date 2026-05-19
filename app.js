@@ -241,7 +241,12 @@ function filterPostsByRole(posts, req) {
 
 // ── Routes publiques ──────────────────────────────────────
 app.get('/', requireFamily, (req, res) => {
-  const posts = filterPostsByRole(readPosts().sort((a, b) => new Date(b.date) - new Date(a.date)), req);
+  const posts = filterPostsByRole(
+    readPosts()
+      .filter(p => p.type !== 'preparation')
+      .sort((a, b) => new Date(b.date) - new Date(a.date)),
+    req
+  );
   const token = csrfToken(req);
   req.session.save(() => {               // ← AJOUT
     res.send(renderPublic(posts, !!req.session.auth || !!req.session.margot, token));
@@ -256,6 +261,20 @@ app.get('/timeline', requireFamily, (req, res) => {
 app.get('/map', requireFamily, (req, res) => {
   const posts = filterPostsByRole(readPosts().sort((a, b) => new Date(a.date) - new Date(b.date)), req);
   res.send(renderMap(posts, !!req.session.auth || !!req.session.margot));
+});
+
+
+app.get('/preparation', requireFamily, (req, res) => {
+  const posts = filterPostsByRole(
+    readPosts()
+      .filter(p => p.type === 'preparation')
+      .sort((a, b) => new Date(b.date) - new Date(a.date)),
+    req
+  );
+  const token = csrfToken(req);
+  req.session.save(() => {
+    res.send(renderPreparation(posts, !!req.session.auth || !!req.session.margot, token));
+  });
 });
 
 app.get('/rss', requireFamily, (req, res) => {
@@ -300,7 +319,7 @@ app.post('/login', loginLimiter, (req, res) => {
     return res.redirect(next);
   }
   if (pw === FAMILY_PASSWORD) {
-    req.session.family = true;
+    req.session.family = true;nderPostForm
     return res.redirect(next);
   }
   res.send(renderLogin(true, next));
@@ -319,12 +338,12 @@ app.get('/post', requireAuth, (req, res) => {
   const lastLocation = posts.length > 0 ? (posts[0].location || '') : '';
   const token = csrfToken(req);
   req.session.save(() => {               // ← AJOUT
-    res.send(renderPostForm(null, lastLocation, !!req.session.margot, token));
+    res.send(renderPostForm(null, lastLocation, !!req.session.margot, token, req.query.type || ''));
   });
 });
 
 app.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', maxCount:10},{name:'gpx', maxCount:1}]), async (req, res) => {
-  const { title, body, location, lat, lon, km, dplus, author, visibility, postDate } = req.body;
+  const { title, body, location, lat, lon, km, dplus, author, visibility, postDate, type } = req.body;
   if (!title?.trim() || !body?.trim()) {
     return res.send(renderPostForm('Titre et texte obligatoires.', '', !!req.session.margot, csrfToken(req)));
   }
@@ -370,6 +389,7 @@ app.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', maxCo
     dplus:      parseInt(dplus)  || 0,
     author:     AUTHORS.includes(author) ? author : AUTHORS[0],
     visibility: forcedViz,
+    type:       (type === 'preparation') ? 'preparation' : 'etape',
     photos,
     gpx:        gpxFile,
     comments:   []
@@ -523,9 +543,10 @@ function renderHeader({ activePage = '', isAdmin = false, showMap = false } = {}
     { href: '/', label: 'Journal', key: 'journal' },
     { href: '/timeline', label: 'Timeline', key: 'timeline' },
     ...(showMap ? [{ href: '/map', label: '🗺️ Carte', key: 'map' }] : []),
+    { href: '/preparation', label: '🛠️ Préparation', key: 'preparation' },
     { href: '/rss', label: 'RSS', key: 'rss' },
     ...(!isAdmin ? [{ href: '/login', label: '🔧', key: 'login' }] : []),
-    { href: '/logout', label: '🔓 Déco', key: 'logout' },
+    { href: '/logout', label: '🔓 Déconnexion', key: 'logout' },
   ];
 
   function makeLink(l) {
@@ -2157,6 +2178,157 @@ function renderPublic(posts, isAdmin = false, csrf = '') {
 
 
 // ══════════════════════════════════════════════════════════
+//  renderPreparation
+// ══════════════════════════════════════════════════════════
+
+function renderPreparation(posts, isAdmin = false, csrf = '') {
+  const postCards = posts.length === 0
+    ? `<div class="empty">
+        <div class="empty-icon">🛠️</div>
+        <h3>La préparation n'a pas encore commencé...</h3>
+        <p>Les articles de préparation apparaîtront ici !</p>
+      </div>`
+    : posts.map(p => {
+      const d = new Date(p.date);
+      const weekday = d.toLocaleDateString('fr-FR', { timeZone:'Europe/Paris', weekday:'long' });
+      const day     = d.toLocaleDateString('fr-FR', { timeZone:'Europe/Paris', day:'numeric' });
+      const month   = d.toLocaleDateString('fr-FR', { timeZone:'Europe/Paris', month:'long' });
+      const year    = d.getFullYear();
+      const time    = d.toLocaleTimeString('fr-FR', { timeZone:'Europe/Paris', hour:'2-digit', minute:'2-digit' });
+      return `
+    <div class="card" id="post-${p.id}">
+      <div class="card-date-header">
+        <div class="card-date-block">
+          <div class="card-day-num">${day}</div>
+          <div class="card-date-text">
+            <span class="card-weekday">${weekday}</span>
+            <span class="card-month-year">${month} ${year}</span>
+            <span class="card-time">⏱ ${time}</span>
+          </div>
+        </div>
+        <div class="card-date-right">
+          ${p.location ? `<span class="card-loc">📍 ${esc(p.location)}</span>` : ''}
+        </div>
+      </div>
+
+      <div class="card-divider"></div>
+
+      <div class="card-body">
+        <h2 class="card-title">${esc(p.title)}</h2>
+
+        ${p.photos?.length ? `
+        <div class="card-photos${p.photos.length === 1 ? ' single' : ''}" style="margin:0 -18px 16px;border-radius:0">
+          ${p.photos.map(ph=>`<img src="${ph}" alt="photo" loading="lazy" data-postid="${p.id}">`).join('')}
+        </div>
+        ` : ''}
+
+        <p class="card-text">${esc(p.body)}</p>
+
+        ${isAdmin ? `
+        <div class="admin-actions">
+          <a href="/edit/${p.id}" class="btn-edit">✏️ Modifier</a>
+          <form method="POST" action="/delete/${p.id}" style="margin-left:auto" onsubmit="return confirm('Supprimer définitivement cet article ?')">
+            <input type="hidden" name="_csrf" value="${csrf}">
+            <button type="submit" class="btn-del">🗑️ Supprimer</button>
+          </form>
+        </div>` : ''}
+      </div>
+      <div class="comments">
+        ${(p.comments||[]).map(c=>`
+          <div class="comment">
+            <div class="comment-avatar">${esc(initials(c.author))}</div>
+            <div class="comment-bubble">
+              <span class="comment-author">${esc(c.author)}</span>
+              <span class="comment-date">${formatDate(c.date)}</span>
+              <p class="comment-text">${esc(c.text)}</p>
+            </div>
+          </div>
+        `).join('')}
+        <form class="comment-form" action="/comment/${p.id}" method="POST">
+          <input type="hidden" name="_csrf" value="${csrf}">
+          <input name="author" placeholder="Votre prénom" required maxlength="40">
+          <textarea name="text" placeholder="Laisser un commentaire..." required maxlength="300"></textarea>
+          <button type="submit">💬 Commenter</button>
+        </form>
+      </div>
+    </div>
+  `}).join('');
+
+  return `<!DOCTYPE html><html lang="fr"><head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Préparation — ${TRIP_TITLE}</title>
+    <style>${CSS}</style>
+  </head><body>
+    ${renderHeader({ activePage: 'preparation', isAdmin, showMap: false })}
+
+    <div style="background:linear-gradient(135deg, var(--emerald) 0%, var(--ocean-mid) 100%);padding:20px 20px 18px;border-bottom:2px solid var(--sand)">
+      <div style="max-width:620px;margin:0 auto;display:flex;align-items:center;gap:14px">
+        <div style="font-size:36px">🛠️</div>
+        <div>
+          <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:#fff">Préparation du voyage</div>
+          <div style="font-size:13px;color:rgba(255,255,255,0.7);margin-top:2px">Matériel, itinéraire, entraînement, logistique…</div>
+        </div>
+        <div style="margin-left:auto;background:rgba(255,255,255,0.15);border-radius:20px;padding:6px 14px;font-size:13px;font-weight:600;color:#fff">${posts.length} article${posts.length > 1 ? 's' : ''}</div>
+      </div>
+    </div>
+
+    <div class="feed">${postCards}</div>
+
+    ${isAdmin ? '<a class="fab" href="/post?type=preparation" title="Nouvel article de préparation">+</a>' : ''}
+
+    <!-- Lightbox -->
+    <div class="lightbox" id="lb" role="dialog" aria-modal="true">
+      <button class="lb-close" id="lb-close" title="Fermer">&#x2715;</button>
+      <button class="lb-nav lb-prev" id="lb-prev">&#8249;</button>
+      <img id="lb-img" src="" alt="Photo agrandie">
+      <button class="lb-nav lb-next" id="lb-next">&#8250;</button>
+      <div class="lb-counter" id="lb-counter"></div>
+    </div>
+
+    <script>
+      (function(){
+        var lb=document.getElementById('lb'),
+            lbImg=document.getElementById('lb-img'),
+            lbCounter=document.getElementById('lb-counter'),
+            postImgs=[],cur=0;
+        document.querySelectorAll('.card-photos img').forEach(function(img){
+          img.addEventListener('click', function(){
+            var card = img.closest('.card');
+            postImgs = Array.from(card.querySelectorAll('.card-photos img')).map(function(i){return i.src;});
+            cur = postImgs.indexOf(img.src);
+            if(cur<0) cur=0;
+            show();
+          });
+        });
+        function show(){
+          lbImg.src=postImgs[cur];
+          lbCounter.textContent=(cur+1)+' / '+postImgs.length;
+          document.getElementById('lb-prev').style.display=postImgs.length>1?'flex':'none';
+          document.getElementById('lb-next').style.display=postImgs.length>1?'flex':'none';
+          lb.classList.add('open');
+          document.body.style.overflow='hidden';
+        }
+        function close(){
+          lb.classList.remove('open');
+          document.body.style.overflow='';
+          lbImg.src='';
+        }
+        document.getElementById('lb-close').addEventListener('click',close);
+        document.getElementById('lb-prev').addEventListener('click',function(){cur=(cur-1+postImgs.length)%postImgs.length;show();});
+        document.getElementById('lb-next').addEventListener('click',function(){cur=(cur+1)%postImgs.length;show();});
+        lb.addEventListener('click',function(e){if(e.target===lb)close();});
+        document.addEventListener('keydown',function(e){
+          if(!lb.classList.contains('open'))return;
+          if(e.key==='Escape')close();
+          if(e.key==='ArrowLeft'){cur=(cur-1+postImgs.length)%postImgs.length;show();}
+          if(e.key==='ArrowRight'){cur=(cur+1)%postImgs.length;show();}
+        });
+      })();
+    </script>
+  </body></html>`;
+}
+
+// ══════════════════════════════════════════════════════════
 //  renderTimeline
 // ══════════════════════════════════════════════════════════
 
@@ -2444,12 +2616,13 @@ function renderLogin(error, next = '/') {
 //  renderPostForm  — avec date éditable + autocomplete lieu
 // ══════════════════════════════════════════════════════════
 
-function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '') {
+function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', defaultType = '') {
   const authorOptions = AUTHORS.map(a =>
     `<option value="${esc(a)}">${AUTHOR_EMOJI[a]||''} ${esc(a)}</option>`
   ).join('');
 
   const defaultDate = nowDatetimeLocal();
+  // (defaultType est passé depuis la route)
 
   return `<!DOCTYPE html><html lang="fr"><head>
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -2466,6 +2639,14 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '') {
         </div>` : ''}
         <form method="POST" action="/post?_csrf=${csrf}" enctype="multipart/form-data" id="postForm">
           <input type="hidden" name="_csrf" value="${csrf}">
+
+          <div class="field">
+            <label>Type de publication</label>
+            <select name="type">
+              <option value="etape" ${defaultType !== 'preparation' ? 'selected' : ''}>🚴 Étape de voyage</option>
+              <option value="preparation" ${defaultType === 'preparation' ? 'selected' : ''}>🛠️ Préparation</option>
+            </select>
+          </div>
 
           <div class="field">
             <label>Date et heure de l'étape</label>
