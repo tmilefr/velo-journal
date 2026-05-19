@@ -579,26 +579,29 @@ function renderHeader({ activePage = '', isAdmin = false, showMap = false } = {}
           ${sub}
         </div>
         <nav class="header-nav">${desktopLinks}</nav>
-        <button class="hamburger" id="hamburger" aria-label="Menu" onclick="toggleMenu()">
+        <button class="hamburger" id="hamburger" aria-label="Menu">
           <span></span><span></span><span></span>
         </button>
       </div>
       <nav class="mobile-menu" id="mobileMenu">${mobileLinks}</nav>
     </div>
     <script>
-      function toggleMenu(){
-        var h=document.getElementById('hamburger');
-        var m=document.getElementById('mobileMenu');
-        var open=m.classList.toggle('open');
-        h.classList.toggle('open',open);
-      }
-      document.addEventListener('click',function(e){
-        var h=document.getElementById('hamburger');
-        var m=document.getElementById('mobileMenu');
-        if(!h.contains(e.target)&&!m.contains(e.target)){
-          m.classList.remove('open');h.classList.remove('open');
-        }
-      });
+      (function(){
+        var h = document.getElementById('hamburger');
+        var m = document.getElementById('mobileMenu');
+        if (!h || !m) return;
+        h.addEventListener('click', function(e) {
+          e.stopPropagation();
+          var open = m.classList.toggle('open');
+          h.classList.toggle('open', open);
+        });
+        document.addEventListener('click', function(e) {
+          if (!h.contains(e.target) && !m.contains(e.target)) {
+            m.classList.remove('open');
+            h.classList.remove('open');
+          }
+        });
+      })();
     </script>`;
 }
 
@@ -2726,7 +2729,7 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
     <script>
       document.addEventListener('DOMContentLoaded', function() {
         initLocAutocomplete('locationField', 'lat', 'lon', 'locSuggestions');
-        var btn = document.getElementById('gpsBtnEdit');
+        var btn = document.getElementById('gpsBtnPost');
         if (btn) btn.addEventListener('click', function() { getGPS('locationField', 'lat', 'lon'); });
       });
     </script>
