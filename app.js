@@ -87,6 +87,7 @@ app.use(session({
 
 // ── Debug CSRF log ────────────────────────────────────────
 const LOG_FILE = path.join(__dirname, 'csrf-debug.log');
+
 function logDebug(msg) {
   const line = new Date().toISOString() + ' ' + msg + '\n';
   fs.appendFileSync(LOG_FILE, line);
@@ -2409,7 +2410,7 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '') {
             </div>
             <input type="hidden" name="lat" id="lat">
             <input type="hidden" name="lon" id="lon">
-            <button type="button" class="loc-search-btn" onclick="getGPS('locationField','lat','lon')">📍 GPS auto</button>
+            <button type="button" class="loc-search-btn" id="gpsBtnPost">📍 GPS auto</button>
           </div>
 
           <div class="field-row">
@@ -2421,10 +2422,6 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '') {
               <label>D+ (mètres)</label>
               <input name="dplus" type="number" min="0" max="10000" placeholder="1200">
             </div>
-          </div>
-          <div class="field">
-            <label>Auteur</label>
-            <select name="author">${authorOptions}</select>
           </div>
           <div class="field">
             <label>Photos (max 10, 20 Mo chacune)</label>
@@ -2458,6 +2455,8 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '') {
     <script>
       document.addEventListener('DOMContentLoaded', function() {
         initLocAutocomplete('locationField', 'lat', 'lon', 'locSuggestions');
+        var btn = document.getElementById('gpsBtnEdit');
+        if (btn) btn.addEventListener('click', function() { getGPS('locationField', 'lat', 'lon'); });
       });
     </script>
   </body></html>`;
@@ -2507,7 +2506,7 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
             </div>
             <input type="hidden" name="lat" id="lat" value="${post.lat||''}">
             <input type="hidden" name="lon" id="lon" value="${post.lon||''}">
-            <button type="button" class="loc-search-btn" onclick="getGPS('locationField','lat','lon')">📍 GPS auto</button>
+            <button type="button" class="loc-search-btn" id="gpsBtnEdit">📍 GPS auto</button>
           </div>
 
           <div class="field-row">
@@ -2569,10 +2568,12 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
     </div>
     ${FORM_SCRIPTS}
     <script>
-      document.addEventListener('DOMContentLoaded', function() {
-        initLocAutocomplete('locationField', 'lat', 'lon', 'locSuggestions');
-      });
-    </script>
+    document.addEventListener('DOMContentLoaded', function() {
+      initLocAutocomplete('locationField', 'lat', 'lon', 'locSuggestions');
+      var btn = document.getElementById('gpsBtnEdit');
+      if (btn) btn.addEventListener('click', function() { getGPS('locationField', 'lat', 'lon'); });
+    });
+  </script>
   </body></html>`;
 }
 
