@@ -1783,7 +1783,7 @@ function renderPublic(posts, isAdmin = false, csrf = '') {
         <div class="admin-actions">
           <a href="/edit/${p.id}" class="btn-edit">✏️ Modifier</a>
           ${p.visibility && p.visibility !== 'all' ? `<span style="font-size:11px;padding:4px 10px;border-radius:20px;background:#fef9c3;color:#92400e">⏳ À valider</span>` : ''}
-          <form method="POST" action="/delete/${p.id}" style="margin-left:auto" onsubmit="return confirm('Supprimer définitivement cette étape ?')">
+          <form method="POST" action="/delete/${p.id}" style="margin-left:auto" class="form-delete">
             <input type="hidden" name="_csrf" value="${csrf}">
             <button type="submit" class="btn-del">🗑️ Supprimer</button>
           </form>
@@ -2132,6 +2132,13 @@ function renderPublic(posts, isAdmin = false, csrf = '') {
         },{passive:true});
       })();
     </script>
+    <script>
+      document.querySelectorAll('.form-delete').forEach(function(f) {
+        f.addEventListener('submit', function(e) {
+          if (!window.confirm('Supprimer définitivement ?')) e.preventDefault();
+        });
+      });
+    </script>
   </body></html>`;
 }
 
@@ -2186,7 +2193,7 @@ function renderPreparation(posts, isAdmin = false, csrf = '') {
         ${isAdmin ? `
         <div class="admin-actions">
           <a href="/edit/${p.id}" class="btn-edit">✏️ Modifier</a>
-          <form method="POST" action="/delete/${p.id}" style="margin-left:auto" onsubmit="return confirm('Supprimer définitivement cet article ?')">
+          <form method="POST" action="/delete/${p.id}" style="margin-left:auto" class="form-delete">
             <input type="hidden" name="_csrf" value="${csrf}">
             <button type="submit" class="btn-del">🗑️ Supprimer</button>
           </form>
@@ -2283,6 +2290,13 @@ function renderPreparation(posts, isAdmin = false, csrf = '') {
           if(e.key==='ArrowRight'){cur=(cur+1)%postImgs.length;show();}
         });
       })();
+    </script>
+    <script>
+      document.querySelectorAll('.form-delete').forEach(function(f) {
+        f.addEventListener('submit', function(e) {
+          if (!window.confirm('Supprimer définitivement ?')) e.preventDefault();
+        });
+      });
     </script>
   </body></html>`;
 }
@@ -2854,8 +2868,7 @@ function renderSettings(csrf = '', restored = false) {
           Importe un fichier de sauvegarde JSON. <strong style="color:#dc2626">Les étapes actuelles
           seront remplacées</strong> par celles du fichier.
         </p>
-        <form method="POST" action="/restore" enctype="multipart/form-data"
-              onsubmit="return confirm('Restaurer depuis ce fichier ?\\nLes étapes actuelles seront définitivement remplacées.')">
+        <form method="POST" action="/restore" enctype="multipart/form-data" class="form-restore">
           <input type="hidden" name="_csrf" value="${csrf}">
           <div class="field">
             <label>Fichier de sauvegarde (.json)</label>
@@ -2870,5 +2883,12 @@ function renderSettings(csrf = '', restored = false) {
       </div>
 
     </div>
+    <script>
+      document.querySelectorAll('.form-restore').forEach(function(f) {
+        f.addEventListener('submit', function(e) {
+          if (!window.confirm('Restaurer ces données ? Les étapes actuelles seront remplacées.')) e.preventDefault();
+        });
+      });
+    </script>
   </body></html>`;
 }
