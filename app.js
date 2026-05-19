@@ -1,5 +1,7 @@
-const express = require('express');
-const multer  = require('multer');
+const express   = require('express');
+const helmet    = require('helmet');
+const rateLimit = require('express-rate-limit');
+const multer    = require('multer');
 const fs      = require('fs');
 const path    = require('path');
 const crypto  = require('crypto');
@@ -35,12 +37,22 @@ const TRIP_TITLE      = process.env.TRIP_TITLE      || 'Nijumatim, carnet de voy
 const TRIP_START      = process.env.TRIP_START      || '';
 const TRIP_END        = process.env.TRIP_END        || '';
 
+// Avertissement si mots de passe par défaut encore actifs
+if (ADMIN_PASSWORD === 'velo2024')     console.warn('⚠️  ADMIN_PASSWORD est la valeur par défaut — changez-la dans .env !');
+if (FAMILY_PASSWORD === 'famille2024') console.warn('⚠️  FAMILY_PASSWORD est la valeur par défaut — changez-la dans .env !');
+if (!process.env.SESSION_SECRET)       console.warn('⚠️  SESSION_SECRET non défini — les sessions seront invalidées à chaque redémarrage !');
+
 const AUTHORS = ['Julie', 'Margot', 'Nicolas', 'Timothé', 'La famille'];
 
 // ── Helpers ───────────────────────────────────────────────
 function readPosts() {
   if (!fs.existsSync(DATA)) return [];
-  return JSON.parse(fs.readFileSync(DATA, 'utf8'));
+  try {
+    return JSON.parse(fs.readFileSync(DATA, 'utf8'));
+  } catch (e) {
+    console.error('[readPosts] posts.json corrompu, retour tableau vide :', e.message);
+    return [];
+  }
 }
 function writePosts(posts) {
   fs.writeFileSync(DATA, JSON.stringify(posts, null, 2));
@@ -59,8 +71,37 @@ app.use(session({
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
-  cookie: { maxAge: 30 * 24 * 60 * 60 * 1000 }
+  cookie: {
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax'
+  }
 }));
+// ── Helmet — headers de sécurité HTTP ────────────────────
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc:  ["'self'", "'unsafe-inline'", "unpkg.com"],
+      styleSrc:   ["'self'", "'unsafe-inline'", "fonts.googleapis.com", "unpkg.com"],
+      fontSrc:    ["'self'", "fonts.gstatic.com"],
+      imgSrc:     ["'self'", "data:", "*.tile.openstreetmap.org", "nominatim.openstreetmap.org"],
+      connectSrc: ["'self'", "nominatim.openstreetmap.org"],
+    }
+  },
+  crossOriginEmbedderPolicy: false,
+}));
+
+// ── Rate limiting ─────────────────────────────────────────
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: 'Trop de tentatives de connexion. Réessayez dans 15 minutes.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 app.use('/uploads', requireFamily, express.static(path.join(__dirname, 'public', 'uploads')));
 app.use('/public', express.static(path.join(__dirname, 'public')));
 
@@ -121,6 +162,22 @@ function deletePostFiles(post) {
   }
 }
 
+// ── CSRF ──────────────────────────────────────────────────
+function csrfToken(req) {
+  if (!req.session.csrf) {
+    req.session.csrf = crypto.randomBytes(24).toString('hex');
+  }
+  return req.session.csrf;
+}
+
+function requireCsrf(req, res, next) {
+  const token = req.body._csrf || req.headers['x-csrf-token'];
+  if (!token || token !== req.session.csrf) {
+    return res.status(403).send('Token CSRF invalide ou manquant.');
+  }
+  next();
+}
+
 // ── Auth middleware ───────────────────────────────────────
 function requireAuth(req, res, next) {
   if (req.session.auth || req.session.margot) return next();
@@ -140,7 +197,7 @@ function filterPostsByRole(posts, req) {
 // ── Routes publiques ──────────────────────────────────────
 app.get('/', requireFamily, (req, res) => {
   const posts = filterPostsByRole(readPosts().sort((a, b) => new Date(b.date) - new Date(a.date)), req);
-  res.send(renderPublic(posts, !!req.session.auth || !!req.session.margot));
+  res.send(renderPublic(posts, !!req.session.auth || !!req.session.margot, csrfToken(req)));
 });
 
 app.get('/timeline', requireFamily, (req, res) => {
@@ -160,7 +217,7 @@ app.get('/rss', requireFamily, (req, res) => {
 });
 
 // ── Commentaires ──────────────────────────────────────────
-app.post('/comment/:id', requireFamily, (req, res) => {
+app.post('/comment/:id', requireFamily, requireCsrf, (req, res) => {
   const posts = readPosts();
   const post  = posts.find(p => p.id === req.params.id);
   if (!post) return res.status(404).send('Étape introuvable');
@@ -183,7 +240,7 @@ app.get('/login', (req, res) => {
   res.send(renderLogin(false, req.query.next || '/'));
 });
 
-app.post('/login', (req, res) => {
+app.post('/login', loginLimiter, (req, res) => {
   const next = req.body.next || '/';
   const pw   = req.body.password;
   if (pw === ADMIN_PASSWORD) {
@@ -212,13 +269,13 @@ app.get('/logout', (req, res) => {
 app.get('/post', requireAuth, (req, res) => {
   const posts = readPosts().sort((a, b) => new Date(b.date) - new Date(a.date));
   const lastLocation = posts.length > 0 ? (posts[0].location || '') : '';
-  res.send(renderPostForm(null, lastLocation, !!req.session.margot));
+  res.send(renderPostForm(null, lastLocation, !!req.session.margot, csrfToken(req)));
 });
 
-app.post('/post', requireAuth, upload.fields([{name:'photos', maxCount:10},{name:'gpx', maxCount:1}]), async (req, res) => {
+app.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', maxCount:10},{name:'gpx', maxCount:1}]), async (req, res) => {
   const { title, body, location, lat, lon, km, dplus, author, visibility, postDate } = req.body;
   if (!title?.trim() || !body?.trim()) {
-    return res.send(renderPostForm('Titre et texte obligatoires.', '', !!req.session.margot));
+    return res.send(renderPostForm('Titre et texte obligatoires.', '', !!req.session.margot, csrfToken(req)));
   }
   await resizeUploadedImages(req.files?.photos || []);
   const photos  = (req.files?.photos || []).map(f => '/uploads/' + f.filename);
@@ -271,7 +328,7 @@ app.post('/post', requireAuth, upload.fields([{name:'photos', maxCount:10},{name
 });
 
 // ── Admin : supprimer ─────────────────────────────────────
-app.post('/delete/:id', requireAuth, (req, res) => {
+app.post('/delete/:id', requireAuth, requireCsrf, (req, res) => {
   const posts    = readPosts();
   const post     = posts.find(p => p.id === req.params.id);
   if (post) deletePostFiles(post);
@@ -285,16 +342,16 @@ app.get('/edit/:id', requireAuth, (req, res) => {
   const posts = readPosts();
   const post  = posts.find(p => p.id === req.params.id);
   if (!post) return res.status(404).send('Étape introuvable');
-  res.send(renderEditForm(post, null, !!req.session.margot));
+  res.send(renderEditForm(post, null, !!req.session.margot, csrfToken(req)));
 });
 
-app.post('/edit/:id', requireAuth, upload.fields([{name:'photos', maxCount:10},{name:'gpx', maxCount:1}]), async (req, res) => {
+app.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos', maxCount:10},{name:'gpx', maxCount:1}]), async (req, res) => {
   const posts = readPosts();
   const idx   = posts.findIndex(p => p.id === req.params.id);
   if (idx === -1) return res.status(404).send('Étape introuvable');
   const { title, body, location, lat, lon, km, dplus, visibility, postDate } = req.body;
   if (!title?.trim() || !body?.trim()) {
-    return res.send(renderEditForm(posts[idx], 'Titre et texte obligatoires.', !!req.session.margot));
+    return res.send(renderEditForm(posts[idx], 'Titre et texte obligatoires.', !!req.session.margot, csrfToken(req)));
   }
   const existing = posts[idx];
 
@@ -1361,6 +1418,16 @@ function nowDatetimeLocal() {
   return isoToDatetimeLocal(new Date().toISOString());
 }
 
+// ── Échappement HTML — protection XSS ─────────────────────
+function esc(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const AUTHOR_EMOJI = {
   'Julie': '👩',
   'Margot': '👧',
@@ -1534,7 +1601,7 @@ function previewPhotos(input) {
 //  renderPublic
 // ══════════════════════════════════════════════════════════
 
-function renderPublic(posts, isAdmin = false) {
+function renderPublic(posts, isAdmin = false, csrf = '') {
   const km    = Math.round(totalKm(posts));
   const dp    = Math.round(totalDPlus(posts)).toLocaleString('fr-FR');
   const days  = posts.length;
@@ -1565,19 +1632,19 @@ function renderPublic(posts, isAdmin = false) {
           </div>
         </div>
         <div class="card-date-right">
-          ${p.location ? `<span class="card-loc">📍 ${p.location}</span>` : ''}
+          ${p.location ? `<span class="card-loc">📍 ${esc(p.location)}</span>` : ''}
         </div>
       </div>
 
       <div class="card-divider"></div>
 
       <div class="card-body">
-        <h2 class="card-title">${p.title}</h2>
+        <h2 class="card-title">${esc(p.title)}</h2>
 
         ${(p.km || p.dplus) ? `
         <div class="card-badges" style="margin-bottom:14px">
-          ${p.km   ? `<span class="km-badge">🚴 +${p.km} km</span>` : ''}
-          ${p.dplus ? `<span class="dplus-badge">⛰️ ${p.dplus} m D+</span>` : ''}
+          ${p.km   ? `<span class="km-badge">🚴 +${esc(String(p.km))} km</span>` : ''}
+          ${p.dplus ? `<span class="dplus-badge">⛰️ ${esc(String(p.dplus))} m D+</span>` : ''}
         </div>` : ''}
 
         ${p.photos?.length ? `
@@ -1586,7 +1653,7 @@ function renderPublic(posts, isAdmin = false) {
         </div>
         ` : ''}
 
-        <p class="card-text">${p.body}</p>
+        <p class="card-text">${esc(p.body)}</p>
 
         ${p.gpx ? `
         <div class="gpx-canvas-wrap">
@@ -1602,6 +1669,7 @@ function renderPublic(posts, isAdmin = false) {
           <a href="/edit/${p.id}" class="btn-edit">✏️ Modifier</a>
           ${p.visibility && p.visibility !== 'all' ? `<span style="font-size:11px;padding:4px 10px;border-radius:20px;background:#fef9c3;color:#92400e">⏳ À valider</span>` : ''}
           <form method="POST" action="/delete/${p.id}" style="margin-left:auto" onsubmit="return confirm('Supprimer définitivement cette étape ?')">
+            <input type="hidden" name="_csrf" value="${csrf}">
             <button type="submit" class="btn-del">🗑️ Supprimer</button>
           </form>
         </div>` : ''}
@@ -1609,15 +1677,16 @@ function renderPublic(posts, isAdmin = false) {
       <div class="comments">
         ${(p.comments||[]).map(c=>`
           <div class="comment">
-            <div class="comment-avatar">${initials(c.author)}</div>
+            <div class="comment-avatar">${esc(initials(c.author))}</div>
             <div class="comment-bubble">
-              <span class="comment-author">${c.author}</span>
+              <span class="comment-author">${esc(c.author)}</span>
               <span class="comment-date">${formatDate(c.date)}</span>
-              <p class="comment-text">${c.text}</p>
+              <p class="comment-text">${esc(c.text)}</p>
             </div>
           </div>
         `).join('')}
         <form class="comment-form" action="/comment/${p.id}" method="POST">
+          <input type="hidden" name="_csrf" value="${csrf}">
           <input name="author" placeholder="Votre prénom" required maxlength="40">
           <textarea name="text" placeholder="Laisser un commentaire..." required maxlength="300"></textarea>
           <button type="submit">💬 Commenter</button>
@@ -1967,13 +2036,13 @@ function renderTimeline(posts, isAdmin = false) {
             <div class="timeline-card-inner-row">
               <div style="flex:1">
                 <div class="timeline-date">📅 ${formatDateShort(p.date)}</div>
-                <div class="timeline-loc">${p.location || p.title}</div>
-                ${p.location ? `<div class="timeline-snippet" style="font-size:13px;color:#555;font-style:italic">${p.title}</div>` : ''}
-                <p class="timeline-snippet">${p.body}</p>
+                <div class="timeline-loc">${esc(p.location || p.title)}</div>
+                ${p.location ? `<div class="timeline-snippet" style="font-size:13px;color:#555;font-style:italic">${esc(p.title)}</div>` : ''}
+                <p class="timeline-snippet">${esc(p.body)}</p>
                 <div class="timeline-meta">
-                  ${p.km ? `<span class="timeline-badge tl-km">🚴 ${p.km} km</span>` : ''}
-                  ${p.dplus ? `<span class="timeline-badge tl-km">⛰️ ${p.dplus} m D+</span>` : ''}
-                  ${p.author ? `<span class="timeline-badge tl-author">${AUTHOR_EMOJI[p.author]||'👤'} ${p.author}</span>` : ''}
+                  ${p.km ? `<span class="timeline-badge tl-km">🚴 ${esc(String(p.km))} km</span>` : ''}
+                  ${p.dplus ? `<span class="timeline-badge tl-km">⛰️ ${esc(String(p.dplus))} m D+</span>` : ''}
+                  ${p.author ? `<span class="timeline-badge tl-author">${AUTHOR_EMOJI[p.author]||'👤'} ${esc(p.author)}</span>` : ''}
                 </div>
               </div>
               ${p.photos?.length ? `<img src="${p.photos[0]}" class="timeline-thumb" alt="photo" loading="lazy">` : ''}
@@ -2214,7 +2283,7 @@ function renderLogin(error, next = '/') {
       <div style="display:flex;justify-content:center;margin-bottom:8px">
         <img src="/public/logo_nijumatim.png" alt="Nijumatim" style="height:70px;width:auto;background:#fff;border-radius:12px;padding:6px 14px;">
       </div>
-      <p>${TRIP_START && TRIP_END ? TRIP_START + ' → ' + TRIP_END : 'Journal de voyage privé'}</p>
+      <p>${TRIP_START && TRIP_END ? esc(TRIP_START) + ' → ' + esc(TRIP_END) : 'Journal de voyage privé'}</p>
     </div>
     <div class="form-wrap" style="max-width:420px;padding-top:28px">
       <div class="form-card">
@@ -2224,7 +2293,7 @@ function renderLogin(error, next = '/') {
           Entrez votre mot de passe pour accéder au journal.
         </p>
         <form method="POST" action="/login">
-          <input type="hidden" name="next" value="${next}">
+          <input type="hidden" name="next" value="${esc(next)}">
           <div class="field">
             <label>Mot de passe</label>
             <input type="password" name="password" placeholder="••••••••" autofocus required
@@ -2241,9 +2310,9 @@ function renderLogin(error, next = '/') {
 //  renderPostForm  — avec date éditable + autocomplete lieu
 // ══════════════════════════════════════════════════════════
 
-function renderPostForm(err, lastLocation = '', isMargot = false) {
+function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '') {
   const authorOptions = AUTHORS.map(a =>
-    `<option value="${a}">${AUTHOR_EMOJI[a]||''} ${a}</option>`
+    `<option value="${esc(a)}">${AUTHOR_EMOJI[a]||''} ${esc(a)}</option>`
   ).join('');
 
   const defaultDate = nowDatetimeLocal();
@@ -2256,12 +2325,13 @@ function renderPostForm(err, lastLocation = '', isMargot = false) {
     <div class="form-wrap">
       <div class="form-card">
         <h2>Poster une étape</h2>
-        ${err ? `<div class="error-msg">${err}</div>` : ''}
+        ${err ? `<div class="error-msg">${esc(err || '')}</div>` : ''}
         ${lastLocation ? `
         <div class="prev-location-hint">
-          📍 Dernière position connue : <strong>${lastLocation}</strong>
+          📍 Dernière position connue : <strong>${esc(lastLocation)}</strong>
         </div>` : ''}
         <form method="POST" action="/post" enctype="multipart/form-data" id="postForm">
+          <input type="hidden" name="_csrf" value="${csrf}">
 
           <div class="field">
             <label>Date et heure de l'étape</label>
@@ -2345,7 +2415,7 @@ function renderPostForm(err, lastLocation = '', isMargot = false) {
 //  renderEditForm  — avec date éditable, sans auteur, autocomplete lieu
 // ══════════════════════════════════════════════════════════
 
-function renderEditForm(post, err, isMargot = false) {
+function renderEditForm(post, err, isMargot = false, csrf = '') {
   const postDateLocal = isoToDatetimeLocal(post.date);
 
   return `<!DOCTYPE html><html lang="fr"><head>
@@ -2356,8 +2426,9 @@ function renderEditForm(post, err, isMargot = false) {
     <div class="form-wrap">
       <div class="form-card">
         <h2>Modifier l'étape</h2>
-        ${err ? `<div class="error-msg">${err}</div>` : ''}
+        ${err ? `<div class="error-msg">${esc(err || '')}</div>` : ''}
         <form method="POST" action="/edit/${post.id}" enctype="multipart/form-data">
+          <input type="hidden" name="_csrf" value="${csrf}">
 
           <div class="field">
             <label>Date et heure de l'étape</label>
@@ -2366,18 +2437,18 @@ function renderEditForm(post, err, isMargot = false) {
 
           <div class="field">
             <label>Titre de l'étape *</label>
-            <input name="title" type="text" value="${post.title.replace(/"/g,'&quot;')}" required maxlength="100">
+            <input name="title" type="text" value="${esc(post.title)}" required maxlength="100">
           </div>
           <div class="field">
             <label>Raconte ta journée *</label>
-            <textarea name="body" required maxlength="2000">${post.body}</textarea>
+            <textarea name="body" required maxlength="2000">${esc(post.body)}</textarea>
           </div>
 
           <div class="field">
             <label>Lieu</label>
             <div class="loc-wrap">
               <input name="location" id="locationField" type="text"
-                value="${(post.location||'').replace(/"/g,'&quot;')}"
+                value="${esc(post.location||'')}"
                 placeholder="Tapez un lieu pour chercher, ou utilisez le GPS..."
                 autocomplete="off">
               <div class="loc-suggestions" id="locSuggestions"></div>
