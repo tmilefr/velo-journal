@@ -213,7 +213,9 @@ function csrfToken(req) {
 }
 
 function requireCsrf(req, res, next) {
-  const token = req.body._csrf || req.headers['x-csrf-token'];
+  const token = req.body._csrf
+    || req.query._csrf                    // ← AJOUT : fallback query string
+    || req.headers['x-csrf-token'];
   if (!token || token !== req.session.csrf) {
     return res.status(403).send('Token CSRF invalide ou manquant.');
   }
@@ -2380,7 +2382,7 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '') {
         <div class="prev-location-hint">
           📍 Dernière position connue : <strong>${esc(lastLocation)}</strong>
         </div>` : ''}
-        <form method="POST" action="/post" enctype="multipart/form-data" id="postForm">
+        <form method="POST" action="/post?_csrf=${csrf}" enctype="multipart/form-data" id="postForm">
           <input type="hidden" name="_csrf" value="${csrf}">
 
           <div class="field">
@@ -2477,7 +2479,7 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
       <div class="form-card">
         <h2>Modifier l'étape</h2>
         ${err ? `<div class="error-msg">${esc(err || '')}</div>` : ''}
-        <form method="POST" action="/edit/${post.id}" enctype="multipart/form-data">
+        <form method="POST" action="/edit/${post.id}?_csrf=${csrf}" enctype="multipart/form-data">
           <input type="hidden" name="_csrf" value="${csrf}">
 
           <div class="field">
