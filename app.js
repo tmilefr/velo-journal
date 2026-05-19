@@ -85,8 +85,8 @@ app.use(session({
 }));
 
 
-// ── Debug CSRF log ────────────────────────────────────────
-const LOG_FILE = path.join(__dirname, 'csrf-debug.log');
+// ── Debug log ────────────────────────────────────────
+const LOG_FILE = path.join(__dirname, 'application.log');
 
 function logDebug(msg) {
   const line = new Date().toISOString() + ' ' + msg + '\n';
@@ -537,8 +537,6 @@ function renderHeader({ activePage = '', isAdmin = false, showMap = false } = {}
     { href: '/timeline', label: 'Timeline', key: 'timeline' },
     ...(showMap ? [{ href: '/map', label: '🗺️ Carte', key: 'map' }] : []),
     { href: '/preparation', label: '🛠️ Préparation', key: 'preparation' },
-    { href: '/rss', label: 'RSS', key: 'rss' },
-    ...(!isAdmin ? [{ href: '/login', label: '🔧', key: 'login' }] : []),
     ...(isAdmin ? [{ href: '/settings', label: '⚙️ Paramètres', key: 'settings' }] : []),
     { href: '/logout', label: '🔓 Déconnexion', key: 'logout' },
   ];
@@ -2210,7 +2208,7 @@ function renderPreparation(posts, isAdmin = false, csrf = '') {
     <title>Préparation — ${TRIP_TITLE}</title>
     <style>${CSS}</style>
   </head><body>
-    ${renderHeader({ activePage: 'preparation', isAdmin, showMap: false })}
+    ${renderHeader({ activePage: 'preparation', isAdmin, showMap: true })}
 
     <div style="background:linear-gradient(135deg, var(--emerald) 0%, var(--ocean-mid) 100%);padding:20px 20px 18px;border-bottom:2px solid var(--sand)">
       <div style="max-width:620px;margin:0 auto;display:flex;align-items:center;gap:14px">
