@@ -103,7 +103,7 @@ app.use(helmet({
       styleSrc:   ["'self'", "'unsafe-inline'", "fonts.googleapis.com", "unpkg.com"],
       fontSrc:    ["'self'", "fonts.gstatic.com"],
       imgSrc:     ["'self'", "data:", "*.tile.openstreetmap.org", "nominatim.openstreetmap.org"],
-      connectSrc: ["'self'", "nominatim.openstreetmap.org"],
+      connectSrc: ["'self'", "nominatim.openstreetmap.org", "unpkg.com"],
     }
   },
   crossOriginEmbedderPolicy: false,
@@ -1289,7 +1289,17 @@ function renderMap(posts, isAdmin = false) {
           const marker = L.marker([p.lat, p.lon], { icon: ic }).addTo(map);
           const e = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
           const dateStr = new Date(p.date).toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' });
-          marker.bindPopup('<div style="min-width:180px;max-width:240px">'+(p.photo?'<img src="'+e(p.photo)+'" class="map-popup-photo" alt="">':'')+'<div class="map-popup-title">'+e(p.location||p.title)+'</div><div class="map-popup-meta"><span>'+dateStr+'</span>'+(p.km?'<span class="map-popup-badge">'+p.km+' km</span>':'')+(p.dplus?'<span class="map-popup-badge">'+p.dplus+' m D+</span>':'')+'</div>'+(p.location?'<div style="font-size:12px;color:#555;font-style:italic">'+e(p.title)+'</div>':'')+'<a href="/#post-'+e(p.id)+'" class="map-popup-link">Lire l\'étape →</a></div>', { maxWidth: 260, className: 'map-custom-popup' });
+          const popupHtml = '<div style="min-width:180px;max-width:240px">'
+            +(p.photo?'<img src="'+e(p.photo)+'" class="map-popup-photo" alt="">':'')
+            +'<div class="map-popup-title">'+e(p.location||p.title)+'</div>'
+            +'<div class="map-popup-meta"><span>'+dateStr+'</span>'
+            +(p.km?'<span class="map-popup-badge">'+p.km+' km</span>':'')
+            +(p.dplus?'<span class="map-popup-badge">'+p.dplus+' m D+</span>':'')
+            +'</div>'
+            +(p.location?'<div style="font-size:12px;color:#555;font-style:italic">'+e(p.title)+'</div>':'')
+            +'<a href="/#post-'+e(p.id)+'" class="map-popup-link">Lire l&#39;&eacute;tape &rarr;</a>'
+            +'</div>';
+          marker.bindPopup(popupHtml, { maxWidth: 260, className: 'map-custom-popup' });
         });
         map.fitBounds(L.latLngBounds(pts).pad(.18));
         setTimeout(() => map.invalidateSize(), 50);
