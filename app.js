@@ -74,7 +74,7 @@ app.use(express.json());
 app.use(session({
   secret: SESSION_SECRET,
   resave: false,
-  saveUninitialized: false,
+  saveUninitialized: true,
   cookie: {
     maxAge: 30 * 24 * 60 * 60 * 1000,
     httpOnly: true,
@@ -202,7 +202,10 @@ function filterPostsByRole(posts, req) {
 // ── Routes publiques ──────────────────────────────────────
 app.get('/', requireFamily, (req, res) => {
   const posts = filterPostsByRole(readPosts().sort((a, b) => new Date(b.date) - new Date(a.date)), req);
-  res.send(renderPublic(posts, !!req.session.auth || !!req.session.margot, csrfToken(req)));
+  const token = csrfToken(req);
+  req.session.save(() => {               // ← AJOUT
+    res.send(renderPublic(posts, !!req.session.auth || !!req.session.margot, token));
+  });
 });
 
 app.get('/timeline', requireFamily, (req, res) => {
@@ -274,7 +277,10 @@ app.get('/logout', (req, res) => {
 app.get('/post', requireAuth, (req, res) => {
   const posts = readPosts().sort((a, b) => new Date(b.date) - new Date(a.date));
   const lastLocation = posts.length > 0 ? (posts[0].location || '') : '';
-  res.send(renderPostForm(null, lastLocation, !!req.session.margot, csrfToken(req)));
+  const token = csrfToken(req);
+  req.session.save(() => {               // ← AJOUT
+    res.send(renderPostForm(null, lastLocation, !!req.session.margot, token));
+  });
 });
 
 app.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', maxCount:10},{name:'gpx', maxCount:1}]), async (req, res) => {
@@ -347,7 +353,10 @@ app.get('/edit/:id', requireAuth, (req, res) => {
   const posts = readPosts();
   const post  = posts.find(p => p.id === req.params.id);
   if (!post) return res.status(404).send('Étape introuvable');
-  res.send(renderEditForm(post, null, !!req.session.margot, csrfToken(req)));
+  const token = csrfToken(req);
+  req.session.save(() => {               // ← AJOUT
+    res.send(renderEditForm(post, null, !!req.session.margot, token));
+  });
 });
 
 app.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos', maxCount:10},{name:'gpx', maxCount:1}]), async (req, res) => {
@@ -2064,7 +2073,6 @@ function renderTimeline(posts, isAdmin = false) {
   </head><body>
     ${renderHeader({ activePage: 'timeline', isAdmin, showMap: true })}
     <div class="timeline-wrap">
-      <h2 class="timeline-title">📍 Itinéraire chronologique</h2>
       <div class="timeline">${timelineItems}</div>
     </div>
   </body></html>`;
