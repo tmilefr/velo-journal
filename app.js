@@ -106,21 +106,6 @@ console.error = (...a) => { _origError(...a); logDebug('[ERROR] ' + a.join(' '))
 process.on('uncaughtException',  e => logDebug('[UNCAUGHT] ' + e.stack || e.message));
 process.on('unhandledRejection', e => logDebug('[UNHANDLED] ' + (e?.stack || e)));
 
-app.use((req, res, next) => {
-  if (req.method === 'POST') {
-    logDebug('--- CSRF DEBUG ---');
-    logDebug('URL            : ' + req.originalUrl);
-    logDebug('Session ID     : ' + req.sessionID);
-    logDebug('Session CSRF   : ' + req.session.csrf);
-    logDebug('Body CSRF      : ' + req.body._csrf);
-    logDebug('Session auth   : ' + req.session.auth);
-    logDebug('Session family : ' + req.session.family);
-    logDebug('Cookie header  : ' + req.headers.cookie);
-    logDebug('------------------');
-  }
-  next();
-});
-
 // ── Helmet — headers de sécurité HTTP ────────────────────
 app.use(helmet({
   contentSecurityPolicy: {
@@ -319,7 +304,7 @@ app.post('/login', loginLimiter, (req, res) => {
     return res.redirect(next);
   }
   if (pw === FAMILY_PASSWORD) {
-    req.session.family = true;nderPostForm
+    req.session.family = true;
     return res.redirect(next);
   }
   res.send(renderLogin(true, next));
