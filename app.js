@@ -25,7 +25,6 @@ try {
 } catch(e) { /* silencieux */ }
 
 const app  = express();
-app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 const DATA = path.join(__dirname, 'data', 'posts.json');
 
@@ -66,6 +65,10 @@ function totalDPlus(posts) {
 }
 
 // ── Middleware ────────────────────────────────────────────
+// Plesk et la plupart des hébergeurs proxifient les requêtes — requis pour
+// que les cookies secure et les sessions fonctionnent correctement derrière un reverse proxy
+app.set('trust proxy', 1);
+
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(session({
@@ -75,7 +78,8 @@ app.use(session({
   cookie: {
     maxAge: 30 * 24 * 60 * 60 * 1000,
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    // 'auto' : secure uniquement si la requête arrive en HTTPS (détecté via X-Forwarded-Proto)
+    secure: 'auto',
     sameSite: 'lax'
   }
 }));
