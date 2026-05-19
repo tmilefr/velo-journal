@@ -42,7 +42,7 @@ if (ADMIN_PASSWORD === 'velo2024')     console.warn('⚠️  ADMIN_PASSWORD est 
 if (FAMILY_PASSWORD === 'famille2024') console.warn('⚠️  FAMILY_PASSWORD est la valeur par défaut — changez-la dans .env !');
 if (!process.env.SESSION_SECRET)       console.warn('⚠️  SESSION_SECRET non défini — les sessions seront invalidées à chaque redémarrage !');
 
-const AUTHORS = ['Julie', 'Margot', 'Nicolas', 'Timothé', 'La famille'];
+const AUTHORS = ['NiJuMaTim'];
 
 // ── Helpers ───────────────────────────────────────────────
 function readPosts() {
@@ -469,6 +469,34 @@ app.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos', m
   writePosts(posts);
   res.redirect('/#post-' + req.params.id);
 });
+
+// ── Admin : télécharger une sauvegarde ────────────────────
+app.get('/backup', requireAuth, (req, res) => {
+  if (!fs.existsSync(DATA)) return res.status(404).send('Aucune donnée à sauvegarder.');
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  res.setHeader('Content-Disposition', `attachment; filename="velo-backup-${stamp}.json"`);
+  res.setHeader('Content-Type', 'application/json');
+  res.send(fs.readFileSync(DATA, 'utf8'));
+});
+
+// ── Admin : restaurer une sauvegarde ─────────────────────
+app.post('/restore', requireAuth, requireCsrf, upload.single('backup'), (req, res) => {
+  if (!req.file) return res.status(400).send('Aucun fichier reçu.');
+  const tmpPath = req.file.path;
+  try {
+    const raw = fs.readFileSync(tmpPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) throw new Error('Format invalide — tableau attendu.');
+    // Écriture atomique : on ne touche à rien si le JSON est invalide
+    writePosts(parsed);
+    res.redirect('/?restored=1');
+  } catch(e) {
+    res.status(400).send('Fichier invalide : ' + e.message);
+  } finally {
+    if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+  }
+});
+
 
 // ── Lancement ─────────────────────────────────────────────
 fs.mkdirSync(path.dirname(DATA), { recursive: true });
@@ -1429,6 +1457,42 @@ const CSS = `
     align-items:center;
     gap:6px;
   }
+
+  /* ── BACKUP BAR ──────────────────────────────────── */
+  .backup-bar {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+    z-index: 100;
+  }
+
+  .backup-btn {
+    background: rgba(255,255,255,0.95);
+    color: var(--ocean-mid);
+    border: 1.5px solid var(--teal-light);
+    border-radius: 24px;
+    padding: 9px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    box-shadow: 0 4px 16px rgba(10,61,98,0.18);
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background .15s, transform .15s;
+    backdrop-filter: blur(6px);
+    white-space: nowrap;
+  }
+
+  .backup-btn:hover { background: var(--sage); transform: translateY(-1px); }
+  .restore-btn { color: var(--emerald); border-color: var(--emerald-light); }
+  .restore-btn:hover { background: #f0fdf4; }
+
 `;
 
 
@@ -1773,7 +1837,24 @@ function renderPublic(posts, isAdmin = false, csrf = '') {
 
     <div class="feed">${postCards}</div>
 
-    ${isAdmin ? '<a class="fab" href="/post" title="Nouvelle étape">+</a>' : ''}
+    ${isAdmin ? `
+    <a class="fab" href="/post" title="Nouvelle étape">+</a>
+    <div class="backup-bar">
+      <a href="/backup" class="backup-btn" title="Télécharger une sauvegarde JSON">
+        ⬇️ Sauvegarder
+      </a>
+      <form method="POST" action="/restore" enctype="multipart/form-data"
+            style="display:inline"
+            onsubmit="return confirm('Restaurer ces données ? Les étapes actuelles seront remplacées.')">
+        <input type="hidden" name="_csrf" value="${csrf}">
+        <label class="backup-btn restore-btn" title="Restaurer depuis une sauvegarde JSON">
+          ⬆️ Restaurer
+          <input type="file" name="backup" accept=".json,application/json"
+                 style="display:none"
+                 onchange="this.closest('form').requestSubmit()">
+        </label>
+      </form>
+    </div>` : ''}
 
     <!-- Lightbox -->
     <div class="lightbox" id="lb" role="dialog" aria-modal="true">
