@@ -56,6 +56,89 @@ function readPosts() {
 function writePosts(posts) {
   fs.writeFileSync(DATA, JSON.stringify(posts, null, 2));
 }
+
+// ── Générateur ZIP sans dépendance (méthode "stored", non compressée) ──
+// Suffisant pour une sauvegarde : les JPEG/MP4 sont déjà compressés.
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(buf) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+// Construit un Buffer ZIP à partir d'une liste {name, data:Buffer}
+function buildZip(entries) {
+  const chunks = [];
+  const central = [];
+  let offset = 0;
+
+  for (const e of entries) {
+    const nameBuf = Buffer.from(e.name, 'utf8');
+    const data    = e.data;
+    const crc     = crc32(data);
+    const size    = data.length;
+
+    // En-tête local (30 octets + nom)
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);   // signature
+    local.writeUInt16LE(20, 4);           // version needed
+    local.writeUInt16LE(0x0800, 6);       // flag : nom en UTF-8
+    local.writeUInt16LE(0, 8);            // méthode 0 = stored
+    local.writeUInt16LE(0, 10);           // heure
+    local.writeUInt16LE(0, 12);           // date
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(size, 18);        // taille compressée
+    local.writeUInt32LE(size, 22);        // taille non compressée
+    local.writeUInt16LE(nameBuf.length, 26);
+    local.writeUInt16LE(0, 28);           // extra field length
+
+    chunks.push(local, nameBuf, data);
+
+    // Entrée du central directory (46 octets + nom)
+    const cd = Buffer.alloc(46);
+    cd.writeUInt32LE(0x02014b50, 0);
+    cd.writeUInt16LE(20, 4);              // version made by
+    cd.writeUInt16LE(20, 6);             // version needed
+    cd.writeUInt16LE(0x0800, 8);         // flag UTF-8
+    cd.writeUInt16LE(0, 10);            // méthode
+    cd.writeUInt16LE(0, 12);           // heure
+    cd.writeUInt16LE(0, 14);          // date
+    cd.writeUInt32LE(crc, 16);
+    cd.writeUInt32LE(size, 20);
+    cd.writeUInt32LE(size, 24);
+    cd.writeUInt16LE(nameBuf.length, 28);
+    cd.writeUInt16LE(0, 30);          // extra
+    cd.writeUInt16LE(0, 32);         // comment
+    cd.writeUInt16LE(0, 34);        // disk number
+    cd.writeUInt16LE(0, 36);       // internal attrs
+    cd.writeUInt32LE(0, 38);      // external attrs
+    cd.writeUInt32LE(offset, 42); // offset de l'en-tête local
+    central.push(Buffer.concat([cd, nameBuf]));
+
+    offset += local.length + nameBuf.length + data.length;
+  }
+
+  const centralBuf = Buffer.concat(central);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(0, 4);                       // disk
+  eocd.writeUInt16LE(0, 6);                      // disk with CD
+  eocd.writeUInt16LE(entries.length, 8);         // entries on disk
+  eocd.writeUInt16LE(entries.length, 10);        // total entries
+  eocd.writeUInt32LE(centralBuf.length, 12);     // taille du central dir
+  eocd.writeUInt32LE(offset, 16);                // offset du central dir
+  eocd.writeUInt16LE(0, 20);                     // comment length
+
+  return Buffer.concat([...chunks, centralBuf, eocd]);
+}
+
 function totalKm(posts) {
   return posts.reduce((s, p) => s + (parseFloat(p.km) || 0), 0);
 }
@@ -543,12 +626,36 @@ app.post('/comment/:id', requireFamily, requireCsrf, (req, res) => {
   res.redirect('/#post-' + req.params.id);
 });
 
+// ── Répondre à un commentaire ─────────────────────────────
+app.post('/comment/:postId/reply/:commentId', requireFamily, requireCsrf, (req, res) => {
+  const posts = readPosts();
+  const post  = posts.find(p => p.id === req.params.postId);
+  if (!post) return res.status(404).send('Étape introuvable');
+  const parent = (post.comments || []).find(c => c.id === req.params.commentId);
+  if (!parent) return res.status(404).send('Commentaire introuvable');
+  const { author, text } = req.body;
+  if (!author?.trim() || !text?.trim()) return res.redirect('/#post-' + req.params.postId);
+  if (!parent.replies) parent.replies = [];
+  parent.replies.push({
+    id:     crypto.randomBytes(6).toString('hex'),
+    author: author.trim().substring(0, 40),
+    text:   text.trim().substring(0, 300),
+    date:   new Date().toISOString()
+  });
+  writePosts(posts);
+  res.redirect('/#post-' + req.params.postId);
+});
+
 // ── Admin : supprimer un commentaire ──────────────────────
 app.post('/comment/:postId/delete/:commentId', requireAuth, requireCsrf, (req, res) => {
   const posts = readPosts();
   const post  = posts.find(p => p.id === req.params.postId);
   if (!post) return res.status(404).send('\u00c9tape introuvable');
+  // Supprime soit un commentaire racine, soit une réponse imbriquée
   post.comments = (post.comments || []).filter(c => c.id !== req.params.commentId);
+  post.comments.forEach(c => {
+    if (c.replies) c.replies = c.replies.filter(r => r.id !== req.params.commentId);
+  });
   writePosts(posts);
   res.redirect('/#post-' + req.params.postId);
 });
@@ -766,6 +873,36 @@ app.get('/backup', requireAuth, (req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename="velo-backup-${stamp}.json"`);
   res.setHeader('Content-Type', 'application/json');
   res.send(fs.readFileSync(DATA, 'utf8'));
+});
+
+// ── Sauvegarde complète : ZIP avec posts.json + tous les médias ──
+app.get('/backup-full', requireAuth, (req, res) => {
+  if (!fs.existsSync(DATA)) return res.status(404).send('Aucune donnée à sauvegarder.');
+  try {
+    const entries = [];
+    // 1. Les données
+    entries.push({ name: 'posts.json', data: fs.readFileSync(DATA) });
+    // 2. Tous les médias présents dans public/uploads
+    const upDir = path.join(__dirname, 'public', 'uploads');
+    if (fs.existsSync(upDir)) {
+      for (const file of fs.readdirSync(upDir)) {
+        const abs = path.join(upDir, file);
+        try {
+          const st = fs.statSync(abs);
+          if (st.isFile()) entries.push({ name: 'uploads/' + file, data: fs.readFileSync(abs) });
+        } catch(e) { /* ignore fichier illisible */ }
+      }
+    }
+    const zip = buildZip(entries);
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    res.setHeader('Content-Disposition', `attachment; filename="velo-backup-complet-${stamp}.zip"`);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Length', zip.length);
+    res.send(zip);
+  } catch(e) {
+    console.error('[backup-full] erreur :', e.message);
+    res.status(500).send('Erreur lors de la création de l\'archive : ' + e.message);
+  }
 });
 
 app.get('/settings', requireAuth, (req, res) => {
@@ -1108,6 +1245,12 @@ const CSS = `
   .comment-form textarea{height:64px;resize:none}
   .comment-form button{background:linear-gradient(135deg, var(--ocean-mid), var(--teal));color:#fff;border:none;border-radius:10px;padding:9px;font-size:13px;font-weight:500;cursor:pointer;transition:opacity .15s;}
   .comment-form button:hover{opacity:.9}
+  .comment-main{flex:1;display:flex;flex-direction:column}
+  .comment-reply-btn{align-self:flex-start;margin-top:4px;background:none;border:none;color:var(--ocean-mid);font-size:11px;font-weight:600;cursor:pointer;padding:2px 4px;font-family:inherit;transition:color .15s}
+  .comment-reply-btn:hover{color:var(--emerald);text-decoration:underline}
+  .comment-nested{margin-top:8px;margin-left:6px;padding-left:12px;border-left:2px solid var(--sand);gap:8px}
+  .comment-avatar-sm{width:24px;height:24px;font-size:10px}
+  .comment-reply-form{margin-top:8px;margin-bottom:4px;padding:10px;background:var(--mist);border-radius:10px}
 
   /* ── ADMIN ───────────────────────────────────────── */
   .admin-actions{margin-top:12px;padding-top:10px;border-top:1px solid var(--sand);display:flex;gap:8px;}
@@ -2004,6 +2147,27 @@ const DELETE_CONFIRM_JS = `
   })();
 </script>`;
 
+const COMMENTS_JS = `
+<script>
+  (function(){
+    function bindComments(root){
+      (root||document).querySelectorAll('.comment-reply-btn').forEach(function(btn){
+        if(btn.dataset.replyBound)return; btn.dataset.replyBound='1';
+        btn.addEventListener('click', function(){
+          var id=btn.dataset.replyTarget;
+          var form=document.getElementById(id);
+          if(!form)return;
+          var open=form.style.display!=='none';
+          form.style.display=open?'none':'flex';
+          if(!open){ var inp=form.querySelector('input[name=author]'); if(inp)inp.focus(); }
+        });
+      });
+    }
+    window.bindComments=bindComments;
+    bindComments(document);
+  })();
+</script>`;
+
 
 // ══════════════════════════════════════════════════════════
 //  renderCard — carte de post partagée
@@ -2108,14 +2272,38 @@ function renderCard(p, isAdmin, csrf, isStrictAdmin = false) {
       ${(p.comments||[]).map(c => `
         <div class="comment">
           <div class="comment-avatar">${esc(initials(c.author))}</div>
-          <div class="comment-bubble">
-            <span class="comment-author">${esc(c.author)}</span>
-            <span class="comment-date">${formatDate(c.date)}</span>
-            ${isStrictAdmin ? `<form method="POST" action="/comment/${p.id}/delete/${c.id}?_csrf=${csrf}" class="form-comment-del" style="display:inline">
+          <div class="comment-main">
+            <div class="comment-bubble">
+              <span class="comment-author">${esc(c.author)}</span>
+              <span class="comment-date">${formatDate(c.date)}</span>
+              ${isStrictAdmin ? `<form method="POST" action="/comment/${p.id}/delete/${c.id}?_csrf=${csrf}" class="form-comment-del" style="display:inline">
+                <input type="hidden" name="_csrf" value="${csrf}">
+                <button type="submit" class="comment-del" title="Supprimer ce commentaire">🗑️</button>
+              </form>` : ''}
+              <p class="comment-text">${esc(c.text)}</p>
+            </div>
+            <button type="button" class="comment-reply-btn" data-reply-target="reply-${c.id}">↩️ Répondre</button>
+
+            ${(c.replies||[]).map(r => `
+              <div class="comment comment-nested">
+                <div class="comment-avatar comment-avatar-sm">${esc(initials(r.author))}</div>
+                <div class="comment-bubble">
+                  <span class="comment-author">${esc(r.author)}</span>
+                  <span class="comment-date">${formatDate(r.date)}</span>
+                  ${isStrictAdmin ? `<form method="POST" action="/comment/${p.id}/delete/${r.id}?_csrf=${csrf}" class="form-comment-del" style="display:inline">
+                    <input type="hidden" name="_csrf" value="${csrf}">
+                    <button type="submit" class="comment-del" title="Supprimer cette réponse">🗑️</button>
+                  </form>` : ''}
+                  <p class="comment-text">${esc(r.text)}</p>
+                </div>
+              </div>`).join('')}
+
+            <form class="comment-form comment-reply-form" id="reply-${c.id}" action="/comment/${p.id}/reply/${c.id}" method="POST" style="display:none">
               <input type="hidden" name="_csrf" value="${csrf}">
-              <button type="submit" class="comment-del" title="Supprimer ce commentaire">🗑️ Supprimer</button>
-            </form>` : ''}
-            <p class="comment-text">${esc(c.text)}</p>
+              <input name="author" placeholder="Votre prénom" required maxlength="40">
+              <textarea name="text" placeholder="Votre réponse..." required maxlength="300"></textarea>
+              <button type="submit">↩️ Répondre</button>
+            </form>
           </div>
         </div>`).join('')}
       <form class="comment-form" action="/comment/${p.id}" method="POST">
@@ -2239,11 +2427,11 @@ function renderPublic(posts, isAdmin = false, csrf = '', isStrictAdmin = false) 
       var loading=false, done=false;
 
       function loadMore(){
-        if(loading||done)return;
+        if(loading||done)return Promise.resolve(false);
         loading=true;
         if(spinner)spinner.style.display='block';
         var offset=parseInt(sentinel.dataset.offset,10)||0;
-        fetch('/api/posts?offset='+offset,{headers:{'Accept':'application/json'}})
+        return fetch('/api/posts?offset='+offset,{headers:{'Accept':'application/json'}})
           .then(function(r){return r.json();})
           .then(function(data){
             if(data.html){
@@ -2256,6 +2444,7 @@ function renderPublic(posts, isAdmin = false, csrf = '', isStrictAdmin = false) 
               if(window.bindLightbox)window.bindLightbox(feed);
               if(window.bindElev)window.bindElev(feed);
               if(window.bindDelete)window.bindDelete(feed);
+              if(window.bindComments)window.bindComments(feed);
             }
             sentinel.dataset.offset=String(offset+(data.count||0));
             if(!data.hasMore){
@@ -2265,10 +2454,12 @@ function renderPublic(posts, isAdmin = false, csrf = '', isStrictAdmin = false) 
             }
             loading=false;
             if(spinner)spinner.style.display='none';
+            return data.hasMore;
           })
           .catch(function(){
             loading=false;
             if(spinner)spinner.textContent='Erreur de chargement — retentez en faisant défiler.';
+            return false;
           });
       }
 
@@ -2283,11 +2474,41 @@ function renderPublic(posts, isAdmin = false, csrf = '', isStrictAdmin = false) 
         sentinel.style.cursor='pointer';
         sentinel.addEventListener('click',loadMore);
       }
+
+      // ── Ancre #post-xxx : charge les pages jusqu'à trouver le post ──
+      function scrollToHashPost(){
+        var hash=window.location.hash;
+        if(!hash||hash.indexOf('#post-')!==0)return;
+        var id=hash.slice(1); // post-xxxx
+        var target=document.getElementById(id);
+        if(target){
+          // Attendre le rendu des images au-dessus avant de scroller précisément
+          target.scrollIntoView({behavior:'auto',block:'start'});
+          target.style.transition='background .3s';
+          var card=target;
+          card.style.boxShadow='0 0 0 3px var(--teal-light)';
+          setTimeout(function(){card.style.boxShadow='';},1600);
+          // Re-scroll après chargement des images (corrige le décalage lazyload)
+          setTimeout(function(){var t=document.getElementById(id);if(t)t.scrollIntoView({behavior:'auto',block:'start'});},350);
+          return;
+        }
+        // Pas encore chargé : charger la page suivante puis réessayer
+        if(done){return;} // tout est chargé, post introuvable
+        if(loading){ setTimeout(scrollToHashPost, 120); return; } // chargement en cours, on patiente
+        loadMore().then(function(){ setTimeout(scrollToHashPost, 60); });
+      }
+
+      if(window.location.hash && window.location.hash.indexOf('#post-')===0){
+        // Laisser le premier rendu se faire, puis lancer la recherche d'ancre
+        setTimeout(scrollToHashPost, 80);
+      }
+      window.addEventListener('hashchange', scrollToHashPost);
     })();
     </script>
     ${LIGHTBOX_JS}
     ${ELEV_MODAL_JS}
     ${DELETE_CONFIRM_JS}
+    ${COMMENTS_JS}
   </body></html>`;
 }
 
@@ -2323,6 +2544,7 @@ function renderPreparation(posts, isAdmin = false, csrf = '', isStrictAdmin = fa
     ${LIGHTBOX_JS}
     ${ELEV_MODAL_JS}
     ${DELETE_CONFIRM_JS}
+    ${COMMENTS_JS}
   </body></html>`;
 }
 
@@ -3096,8 +3318,10 @@ function renderSettings(csrf = '', restored = false) {
       ${restored ? `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:14px;color:#166534;font-weight:500">✅ Données restaurées avec succès.</div>` : ''}
       <div class="form-card" style="margin-bottom:16px">
         <h2>⬇️ Sauvegarder</h2>
-        <p style="font-size:14px;color:var(--ink-light);margin-bottom:18px;line-height:1.6">Télécharge un fichier <code>velo-backup-….json</code> contenant toutes les étapes. Conserve-le précieusement — il suffit à tout restaurer.</p>
-        <a href="/backup" class="btn-submit" style="display:block;text-align:center;text-decoration:none">⬇️ Télécharger la sauvegarde</a>
+        <p style="font-size:14px;color:var(--ink-light);margin-bottom:18px;line-height:1.6"><strong>Sauvegarde complète (recommandée)</strong> : une archive ZIP contenant les étapes <em>et</em> toutes les photos/vidéos. C'est la sauvegarde à conserver.</p>
+        <a href="/backup-full" class="btn-submit" style="display:block;text-align:center;text-decoration:none">📦 Télécharger la sauvegarde complète (ZIP)</a>
+        <p style="font-size:13px;color:var(--ink-light);margin:16px 0 10px;line-height:1.6">Sauvegarde légère : uniquement les textes des étapes au format <code>.json</code>, sans les médias.</p>
+        <a href="/backup" class="loc-search-btn" style="display:block;text-align:center;text-decoration:none;margin:0">⬇️ Télécharger les données seules (JSON)</a>
       </div>
       <div class="form-card">
         <h2>⬆️ Restaurer</h2>
