@@ -32,6 +32,7 @@ const DATA = path.join(__dirname, 'data', 'posts.json');
 const ADMIN_PASSWORD  = process.env.ADMIN_PASSWORD  || 'velo2024';
 const FAMILY_PASSWORD = process.env.FAMILY_PASSWORD || 'famille2024';
 const MARGOT_PASSWORD = process.env.MARGOT_PASSWORD || '';
+const MYMEMORY_EMAIL = process.env.MYMEMORY_EMAIL || ''; // optionnel : fait passer le quota gratuit de 5 000 à 50 000 caractères/jour
 const SESSION_SECRET  = process.env.SESSION_SECRET  || crypto.randomBytes(32).toString('hex');
 const TRIP_TITLE      = process.env.TRIP_TITLE      || 'Nijumatim, carnet de voyage à vélo';
 const TRIP_START      = process.env.TRIP_START      || '';
@@ -40,6 +41,7 @@ const TRIP_END        = process.env.TRIP_END        || '';
 if (ADMIN_PASSWORD === 'velo2024')     console.warn('⚠️  ADMIN_PASSWORD est la valeur par défaut — changez-la dans .env !');
 if (FAMILY_PASSWORD === 'famille2024') console.warn('⚠️  FAMILY_PASSWORD est la valeur par défaut — changez-la dans .env !');
 if (!process.env.SESSION_SECRET)       console.warn('⚠️  SESSION_SECRET non défini — les sessions seront invalidées à chaque redémarrage !');
+if (!MYMEMORY_EMAIL)                   console.warn('ℹ️  MYMEMORY_EMAIL non défini — quota de traduction limité à 5 000 caractères/jour (50 000 avec un email renseigné dans .env).');
 
 const AUTHORS = ['NiJuMaTim'];
 
@@ -147,16 +149,20 @@ function totalDPlus(posts) {
 }
 
 // Catégories et payeurs autorisés pour les dépenses
-const EXPENSE_CATEGORIES = ['restaurant', 'hebergement', 'camping', 'nourriture', 'divers'];
+const EXPENSE_CATEGORIES = ['restaurant', 'hebergement', 'nourriture', 'divers'];
 const EXPENSE_PAYERS     = ['julie', 'nico', 'commun'];
-const EXPENSE_CAT_LABELS = { restaurant: '\ud83c\udf7d\ufe0f Restaurant', hebergement: '\ud83c\udfe8 H\u00e9bergement', camping: '\u26fa Camping', nourriture: '\ud83d\uded2 Nourriture', divers: '\ud83e\uddf3 Divers' };
+const EXPENSE_CAT_LABELS = { restaurant: '\ud83c\udf7d\ufe0f Restaurant', hebergement: '\ud83c\udfe8 H\u00e9bergement', nourriture: '\ud83d\uded2 Nourriture', divers: '\ud83e\uddf3 Divers' };
 const EXPENSE_PAYER_LABELS = { julie: '\ud83d\udc69 Julie', nico: '\ud83e\uddd4 Nico', commun: '\ud83d\udc6b Commun' };
+// Sous-catégories disponibles pour certaines catégories (clé = catégorie parente)
+const EXPENSE_SUBCATEGORIES = { hebergement: ['hotel', 'camping'] };
+const EXPENSE_SUBCAT_LABELS = { hotel: '\ud83c\udfe8 H\u00f4tel', camping: '\u26fa Camping' };
 
 // Reconstruit le tableau de dépenses depuis le corps de formulaire
-// Champs attendus : exp_cat[], exp_payer[], exp_amount[], exp_label[]
+// Champs attendus : exp_cat[], exp_subcat[], exp_payer[], exp_amount[], exp_label[]
 function parseExpenses(body) {
   const toArr = v => v === undefined ? [] : (Array.isArray(v) ? v : [v]);
   const cats    = toArr(body.exp_cat);
+  const subcats = toArr(body.exp_subcat);
   const payers  = toArr(body.exp_payer);
   const amounts = toArr(body.exp_amount);
   const labels  = toArr(body.exp_label);
@@ -164,8 +170,12 @@ function parseExpenses(body) {
   for (let i = 0; i < amounts.length; i++) {
     const amt = parseFloat(String(amounts[i]).replace(',', '.'));
     if (!amt || amt <= 0) continue;
+    const category = EXPENSE_CATEGORIES.includes(cats[i]) ? cats[i] : 'divers';
+    const allowedSubs = EXPENSE_SUBCATEGORIES[category] || [];
+    const subcategory = allowedSubs.includes(subcats[i]) ? subcats[i] : null;
     out.push({
-      category: EXPENSE_CATEGORIES.includes(cats[i]) ? cats[i] : 'divers',
+      category,
+      subcategory,
       payer:    EXPENSE_PAYERS.includes(payers[i]) ? payers[i] : 'commun',
       amount:   Math.round(amt * 100) / 100,
       label:    (labels[i] || '').toString().trim().substring(0, 80)
@@ -194,10 +204,11 @@ function expensesByMonth(posts) {
       map[key].byPayer[e.payer]    = (map[key].byPayer[e.payer]    || 0) + amt;
       if (!map[key].itemsByCat[e.category]) map[key].itemsByCat[e.category] = [];
       map[key].itemsByCat[e.category].push({
-        amount:   amt,
-        payer:    e.payer,
-        label:    e.label || '',
-        date:     p.date,
+        amount:    amt,
+        payer:     e.payer,
+        label:     e.label || '',
+        subcategory: e.subcategory || null,
+        date:      p.date,
         postId:   p.id,
         postTitle: p.title || p.location || ''
       });
@@ -672,6 +683,124 @@ app.post('/comment/:postId/delete/:commentId', requireAuth, requireCsrf, (req, r
   res.redirect('/#post-' + req.params.postId);
 });
 
+// ── Traduction automatique (MyMemory — gratuit, sans clé API) ────
+const TRANSLATE_LANGS = { en: 'English', es: 'Español', de: 'Deutsch', it: 'Italiano' };
+const MYMEMORY_MAX_BYTES = 450; // limite officielle : 500 octets par requête — marge de sécurité
+
+// Convertit le corps HTML (sanitizé) en texte brut avec retours à la ligne,
+// car l'API MyMemory ne traduit que du texte simple (pas de mode "html")
+function htmlToPlainText(html) {
+  return String(html || '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|li|h3|blockquote)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+// Reconstruit un HTML simple (sûr) depuis du texte brut traduit
+function plainTextToHtml(text) {
+  return String(text || '')
+    .split(/\n+/)
+    .map(line => esc(line))
+    .join('<br>');
+}
+
+// Découpe un texte en morceaux ≤ MYMEMORY_MAX_BYTES, en coupant sur les phrases puis les mots
+function splitIntoChunks(text, maxBytes = MYMEMORY_MAX_BYTES) {
+  const sentences = text.split(/(?<=[.!?:])\s+/);
+  const chunks = [];
+  let cur = '';
+  const pushWords = (s) => {
+    let wcur = '';
+    s.split(' ').forEach(w => {
+      const cand = wcur ? wcur + ' ' + w : w;
+      if (Buffer.byteLength(cand, 'utf8') > maxBytes) {
+        if (wcur) chunks.push(wcur);
+        wcur = w;
+      } else wcur = cand;
+    });
+    if (wcur) chunks.push(wcur);
+  };
+  for (const s of sentences) {
+    const candidate = cur ? cur + ' ' + s : s;
+    if (Buffer.byteLength(candidate, 'utf8') > maxBytes) {
+      if (cur) chunks.push(cur);
+      if (Buffer.byteLength(s, 'utf8') > maxBytes) { pushWords(s); cur = ''; }
+      else cur = s;
+    } else cur = candidate;
+  }
+  if (cur) chunks.push(cur);
+  return chunks.filter(c => c.trim());
+}
+
+// Traduit un seul morceau (≤500 octets) via l'API MyMemory
+async function mymemoryTranslateChunk(text, targetLang) {
+  const url = 'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text)
+    + '&langpair=' + encodeURIComponent('fr|' + targetLang)
+    + (MYMEMORY_EMAIL ? '&de=' + encodeURIComponent(MYMEMORY_EMAIL) : '');
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error('MyMemory HTTP ' + resp.status);
+  const data = await resp.json();
+  if (data.responseStatus && Number(data.responseStatus) >= 400) {
+    throw new Error('MyMemory : ' + (data.responseDetails || data.responseStatus));
+  }
+  return (data.responseData && data.responseData.translatedText) || text;
+}
+
+// Traduit un texte (potentiellement long) en le découpant en morceaux
+async function translateLongText(text, targetLang) {
+  const clean = String(text || '').trim();
+  if (!clean) return '';
+  const chunks = splitIntoChunks(clean);
+  const out = [];
+  for (const chunk of chunks) {
+    out.push(await mymemoryTranslateChunk(chunk, targetLang));
+  }
+  return out.join(' ');
+}
+
+app.post('/translate/:id', requireFamily, requireCsrf, async (req, res) => {
+  try {
+    const lang = req.body?.lang;
+    if (!TRANSLATE_LANGS[lang]) return res.status(400).json({ error: 'Langue non supportée.' });
+
+    const posts = readPosts();
+    const idx   = posts.findIndex(p => p.id === req.params.id);
+    if (idx === -1) return res.status(404).json({ error: 'Étape introuvable.' });
+    const post = posts[idx];
+
+    if (!post.translations) post.translations = {};
+    const cached = post.translations[lang];
+    if (cached) return res.json({ title: cached.title, body: cached.body, cached: true });
+
+    const plainBody = htmlToPlainText(post.body || '');
+    const [trTitle, trBody] = await Promise.all([
+      translateLongText(post.title || '', lang),
+      translateLongText(plainBody, lang)
+    ]);
+
+    const cleanTitle = esc(trTitle.trim());
+    const cleanBody  = plainTextToHtml(trBody);
+
+    post.translations[lang] = { title: cleanTitle, body: cleanBody };
+    posts[idx] = post;
+    writePosts(posts);
+
+    res.json({ title: cleanTitle, body: cleanBody, cached: false });
+  } catch (e) {
+    console.error('[translate]', e.message);
+    res.status(502).json({ error: 'Service de traduction indisponible pour le moment. Réessayez plus tard.' });
+  }
+});
+
 app.get('/login', (req, res) => {
   if (req.session.auth || req.session.family || req.session.margot) return res.redirect('/');
   res.send(renderLogin(false, req.query.next || '/'));
@@ -1116,6 +1245,7 @@ const CSS = `
   .exp-row select,.exp-row input{width:100%;border:1.5px solid var(--sand);border-radius:8px;padding:8px 10px;font-size:14px;font-family:inherit;background:#fff;color:var(--ink);}
   .exp-row .exp-label-field{grid-column:1/-1;}
   .exp-row .exp-amount-field{grid-column:1/-1;}
+  .exp-subcat-field[style*="display:none"]{display:none;}
   .exp-row-del{position:absolute;top:-8px;right:-8px;width:24px;height:24px;border-radius:50%;border:none;background:#dc2626;color:#fff;font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.2);}
   .exp-add-btn{margin-top:10px;background:var(--mist);color:var(--ocean-mid);border:1.5px dashed var(--teal-light);border-radius:10px;padding:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;width:100%;transition:background .15s;}
   .exp-add-btn:hover{background:var(--sage);}
@@ -1163,6 +1293,7 @@ const CSS = `
   .exp-detail-item{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-mid);}
   .exp-detail-date{flex-shrink:0;color:var(--ink-light);width:78px;}
   .exp-detail-lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .exp-detail-subcat{display:inline-block;font-size:10px;background:var(--sand);color:var(--ink-mid);padding:1px 6px;border-radius:10px;font-weight:600;}
   .exp-detail-payer{flex-shrink:0;font-size:11px;color:var(--ink-light);}
   .exp-detail-amt{flex-shrink:0;font-weight:600;width:60px;text-align:right;}
   .exp-break-lbl{width:130px;flex-shrink:0;color:var(--ink-mid);}
@@ -1236,6 +1367,9 @@ const CSS = `
   .elev-stat-lbl{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--ink-light);margin-top:4px;}
   .elev-loading{text-align:center;padding:40px 0;color:var(--ink-light);font-size:14px;}
   .card-title{font-family:'Playfair Display',serif;font-size:20px;font-weight:700;margin-bottom:10px;line-height:1.3;color:var(--ink);}
+  .translate-widget{display:flex;align-items:center;gap:8px;margin:-2px 0 12px;}
+  .translate-select{font-size:12px;font-weight:500;color:var(--ocean-mid);background:var(--mist);border:1.5px solid var(--teal-light);border-radius:20px;padding:4px 10px;font-family:inherit;cursor:pointer;}
+  .translate-status{font-size:11px;color:var(--ink-light);}
   .card-text{font-size:14.5px;color:var(--ink-mid);line-height:1.75;}
   .card-text p{margin:0 0 10px}
   .card-text p:last-child{margin-bottom:0}
@@ -1719,16 +1853,22 @@ function initUploadProgress(formId) {
 }
 
 // ── Dépenses dynamiques ────────────────────────────────────
-var EXP_CATS  = [['restaurant','\\ud83c\\udf7d\\ufe0f Restaurant'],['hebergement','\\ud83c\\udfe8 H\\u00e9bergement'],['camping','\\u26fa Camping'],['nourriture','\\ud83d\\uded2 Nourriture'],['divers','\\ud83e\\uddf3 Divers']];
+var EXP_CATS  = [['restaurant','\\ud83c\\udf7d\\ufe0f Restaurant'],['hebergement','\\ud83c\\udfe8 H\\u00e9bergement'],['nourriture','\\ud83d\\uded2 Nourriture'],['divers','\\ud83e\\uddf3 Divers']];
 var EXP_PAYERS= [['julie','\\ud83d\\udc69 Julie'],['nico','\\ud83e\\uddd4 Nico'],['commun','\\ud83d\\udc6b Commun']];
+var EXP_SUBCATS = { hebergement: [['hotel','\\ud83c\\udfe8 H\\u00f4tel'],['camping','\\u26fa Camping']] };
 
-function expRowHtml(cat, payer, amount, label) {
+function expRowHtml(cat, payer, amount, label, subcat) {
   function opts(list, sel) {
     return list.map(function(o){ return '<option value="'+o[0]+'"'+(o[0]===sel?' selected':'')+'>'+o[1]+'</option>'; }).join('');
   }
-  return '<div class="exp-row">'
+  var subOptions = EXP_SUBCATS[cat||'restaurant'];
+  var subHtml = '<select name="exp_subcat" class="exp-subcat-field"'+(subOptions?'':' style="display:none"')+'>'
+    + (subOptions ? '<option value="">— Pr\\u00e9ciser —</option>'+opts(subOptions, subcat) : '')
+    + '</select>';
+  return '<div class="exp-row" data-cat="'+(cat||'restaurant')+'">'
     + '<button type="button" class="exp-row-del" title="Supprimer cette d\\u00e9pense">\\u00d7</button>'
-    + '<select name="exp_cat">'+opts(EXP_CATS, cat||'restaurant')+'</select>'
+    + '<select name="exp_cat" class="exp-cat-field">'+opts(EXP_CATS, cat||'restaurant')+'</select>'
+    + subHtml
     + '<select name="exp_payer">'+opts(EXP_PAYERS, payer||'commun')+'</select>'
     + '<input class="exp-amount-field" name="exp_amount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Montant en \\u20ac" value="'+(amount!=null?amount:'')+'">'
     + '<input class="exp-label-field" name="exp_label" type="text" maxlength="80" placeholder="D\\u00e9tail (optionnel) : ex. Pizzeria du port" value="'+(label?String(label).replace(/"/g,'&quot;'):'')+'">'
@@ -1750,20 +1890,34 @@ function initExpenses(listId, addBtnId, totalId, initial) {
     totalEl.textContent = t > 0 ? ('Total des d\\u00e9penses : ' + t.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' \\u20ac') : '';
   }
 
-  function addRow(cat, payer, amount, label) {
+  function refreshSubcat(row, keepValue) {
+    var catSel = row.querySelector('.exp-cat-field');
+    var oldSub = row.querySelector('.exp-subcat-field');
+    var subOptions = EXP_SUBCATS[catSel.value];
+    var newHtml = '<select name="exp_subcat" class="exp-subcat-field"'+(subOptions?'':' style="display:none"')+'>'
+      + (subOptions ? '<option value="">\\u2014 Pr\\u00e9ciser \\u2014</option>'+subOptions.map(function(o){
+          return '<option value="'+o[0]+'"'+(o[0]===keepValue?' selected':'')+'>'+o[1]+'</option>';
+        }).join('') : '');
     var tmp = document.createElement('div');
-    tmp.innerHTML = expRowHtml(cat, payer, amount, label);
+    tmp.innerHTML = newHtml;
+    oldSub.replaceWith(tmp.firstChild);
+  }
+
+  function addRow(cat, payer, amount, label, subcat) {
+    var tmp = document.createElement('div');
+    tmp.innerHTML = expRowHtml(cat, payer, amount, label, subcat);
     var row = tmp.firstChild;
     list.appendChild(row);
     row.querySelector('.exp-row-del').addEventListener('click', function(){ row.remove(); recalcTotal(); });
     row.querySelector('input[name=exp_amount]').addEventListener('input', recalcTotal);
+    row.querySelector('.exp-cat-field').addEventListener('change', function(){ refreshSubcat(row); });
     recalcTotal();
   }
 
   addBtn.addEventListener('click', function(){ addRow(); });
 
   if (initial && initial.length) {
-    initial.forEach(function(e){ addRow(e.category, e.payer, e.amount, e.label); });
+    initial.forEach(function(e){ addRow(e.category, e.payer, e.amount, e.label, e.subcategory); });
   }
   recalcTotal();
 }
@@ -1972,6 +2126,49 @@ const LIGHTBOX_JS = `
       if(Math.abs(dx)>50){cur=dx<0?(cur+1)%postImgs.length:(cur-1+postImgs.length)%postImgs.length;show();}
     },{passive:true});
   })();
+</script>`;
+
+const TRANSLATE_JS = `
+<script>
+(function(){
+  function bindTranslate(root){
+    (root||document).querySelectorAll('.translate-widget').forEach(function(widget){
+      if(widget.dataset.trBound)return; widget.dataset.trBound='1';
+      var postId=widget.dataset.postid, csrf=widget.dataset.csrf;
+      var select=widget.querySelector('.translate-select');
+      var status=widget.querySelector('.translate-status');
+      var card=document.getElementById('post-'+postId);
+      if(!card)return;
+      var titleEl=card.querySelector('.card-title');
+      var textEl=card.querySelector('.card-text');
+      var origTitle=titleEl.innerHTML, origBody=textEl?textEl.innerHTML:'';
+      select.addEventListener('change', function(){
+        var lang=select.value;
+        if(!lang)return;
+        if(lang==='fr'){
+          titleEl.innerHTML=origTitle; if(textEl)textEl.innerHTML=origBody;
+          status.textContent=''; select.value=''; return;
+        }
+        status.textContent='⏳ Traduction…';
+        fetch('/translate/'+postId,{
+          method:'POST',
+          headers:{'Content-Type':'application/json','x-csrf-token':csrf},
+          credentials:'same-origin',
+          body:JSON.stringify({lang:lang})
+        }).then(function(r){ return r.json().then(function(data){return {ok:r.ok,data:data};}); })
+          .then(function(res){
+            if(!res.ok){ status.textContent='⚠️ '+(res.data.error||'Erreur'); select.value=''; return; }
+            titleEl.innerHTML=res.data.title;
+            if(textEl)textEl.innerHTML=res.data.body;
+            status.textContent='✅ Traduit';
+          })
+          .catch(function(){ status.textContent='⚠️ Erreur réseau'; select.value=''; });
+      });
+    });
+  }
+  window.bindTranslate=bindTranslate;
+  bindTranslate(document);
+})();
 </script>`;
 
 const LIGHTBOX_HTML = `
@@ -2227,6 +2424,17 @@ function renderCard(p, isAdmin, csrf, isStrictAdmin = false) {
     <div class="card-divider"></div>
     <div class="card-body">
       <h2 class="card-title">${esc(p.title)}</h2>
+      <div class="translate-widget" data-postid="${p.id}" data-csrf="${csrf}">
+        <select class="translate-select">
+          <option value="">🌐 Traduire…</option>
+          <option value="en">🇬🇧 English</option>
+          <option value="es">🇪🇸 Español</option>
+          <option value="de">🇩🇪 Deutsch</option>
+          <option value="it">🇮🇹 Italiano</option>
+          <option value="fr">🇫🇷 Texte original</option>
+        </select>
+        <span class="translate-status"></span>
+      </div>
       ${(p.km || p.dplus) ? `
       <div class="card-badges" style="margin-bottom:14px">
         ${p.km    ? `<span class="km-badge">🚴 +${esc(String(p.km))} km</span>` : ''}
@@ -2268,7 +2476,7 @@ function renderCard(p, isAdmin, csrf, isStrictAdmin = false) {
         ${p.expenses.map(e => `
         <div class="card-exp-item">
           <span class="card-exp-tags">
-            <span class="card-exp-cat">${EXPENSE_CAT_LABELS[e.category] || e.category}</span>
+            <span class="card-exp-cat">${EXPENSE_CAT_LABELS[e.category] || e.category}${e.subcategory ? ' · ' + (EXPENSE_SUBCAT_LABELS[e.subcategory] || e.subcategory) : ''}</span>
             <span class="card-exp-payer">${EXPENSE_PAYER_LABELS[e.payer] || e.payer}</span>
             ${e.label ? `<span style="color:var(--ink-light)">${esc(e.label)}</span>` : ''}
           </span>
@@ -2467,6 +2675,7 @@ function renderPublic(posts, isAdmin = false, csrf = '', isStrictAdmin = false) 
               if(window.bindElev)window.bindElev(feed);
               if(window.bindDelete)window.bindDelete(feed);
               if(window.bindComments)window.bindComments(feed);
+              if(window.bindTranslate)window.bindTranslate(feed);
             }
             sentinel.dataset.offset=String(offset+(data.count||0));
             if(!data.hasMore){
@@ -2528,6 +2737,7 @@ function renderPublic(posts, isAdmin = false, csrf = '', isStrictAdmin = false) 
     })();
     </script>
     ${LIGHTBOX_JS}
+    ${TRANSLATE_JS}
     ${ELEV_MODAL_JS}
     ${DELETE_CONFIRM_JS}
     ${COMMENTS_JS}
@@ -2564,6 +2774,7 @@ function renderPreparation(posts, isAdmin = false, csrf = '', isStrictAdmin = fa
     ${LIGHTBOX_HTML}
     ${ELEV_MODAL_HTML}
     ${LIGHTBOX_JS}
+    ${TRANSLATE_JS}
     ${ELEV_MODAL_JS}
     ${DELETE_CONFIRM_JS}
     ${COMMENTS_JS}
@@ -2652,7 +2863,7 @@ function renderStats(posts, isAdmin = false, allPosts = null) {
           const itemsHtml = items.map(it => `
             <div class="exp-detail-item">
               <span class="exp-detail-date">${formatDateShort(it.date)}</span>
-              <span class="exp-detail-lbl">${esc(it.label || it.postTitle || '—')}</span>
+              <span class="exp-detail-lbl">${it.subcategory ? `<span class="exp-detail-subcat">${EXPENSE_SUBCAT_LABELS[it.subcategory]}</span> ` : ''}${esc(it.label || it.postTitle || '—')}</span>
               <span class="exp-detail-payer">${EXPENSE_PAYER_LABELS[it.payer] || ''}</span>
               <span class="exp-detail-amt">${formatEuro(it.amount)}</span>
             </div>`).join('');
