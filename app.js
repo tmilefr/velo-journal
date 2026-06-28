@@ -147,9 +147,9 @@ function totalDPlus(posts) {
 }
 
 // Catégories et payeurs autorisés pour les dépenses
-const EXPENSE_CATEGORIES = ['restaurant', 'hebergement', 'nourriture', 'divers'];
+const EXPENSE_CATEGORIES = ['restaurant', 'hebergement', 'camping', 'nourriture', 'divers'];
 const EXPENSE_PAYERS     = ['julie', 'nico', 'commun'];
-const EXPENSE_CAT_LABELS = { restaurant: '\ud83c\udf7d\ufe0f Restaurant', hebergement: '\ud83c\udfe8 H\u00e9bergement', nourriture: '\ud83d\uded2 Nourriture', divers: '\ud83e\uddf3 Divers' };
+const EXPENSE_CAT_LABELS = { restaurant: '\ud83c\udf7d\ufe0f Restaurant', hebergement: '\ud83c\udfe8 H\u00e9bergement', camping: '\u26fa Camping', nourriture: '\ud83d\uded2 Nourriture', divers: '\ud83e\uddf3 Divers' };
 const EXPENSE_PAYER_LABELS = { julie: '\ud83d\udc69 Julie', nico: '\ud83e\uddd4 Nico', commun: '\ud83d\udc6b Commun' };
 
 // Reconstruit le tableau de dépenses depuis le corps de formulaire
@@ -186,13 +186,25 @@ function expensesByMonth(posts) {
     if (!p.expenses || !p.expenses.length) return;
     const d = new Date(p.date);
     const key = new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit' }).format(d); // YYYY-MM
-    if (!map[key]) map[key] = { total: 0, byCat: {}, byPayer: {} };
+    if (!map[key]) map[key] = { total: 0, byCat: {}, byPayer: {}, itemsByCat: {} };
     p.expenses.forEach(e => {
       const amt = parseFloat(e.amount) || 0;
       map[key].total += amt;
       map[key].byCat[e.category]   = (map[key].byCat[e.category]   || 0) + amt;
       map[key].byPayer[e.payer]    = (map[key].byPayer[e.payer]    || 0) + amt;
+      if (!map[key].itemsByCat[e.category]) map[key].itemsByCat[e.category] = [];
+      map[key].itemsByCat[e.category].push({
+        amount:   amt,
+        payer:    e.payer,
+        label:    e.label || '',
+        date:     p.date,
+        postId:   p.id,
+        postTitle: p.title || p.location || ''
+      });
     });
+  });
+  Object.values(map).forEach(m => {
+    Object.values(m.itemsByCat).forEach(arr => arr.sort((a, b) => new Date(a.date) - new Date(b.date)));
   });
   return map;
 }
@@ -1143,6 +1155,16 @@ const CSS = `
   .exp-month-total{font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--accent);}
   .exp-break-title{font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-light);font-weight:600;margin:10px 0 6px;}
   .exp-break-row{display:flex;align-items:center;gap:10px;font-size:13px;margin-bottom:6px;}
+  .exp-break-row-toggle{cursor:pointer;user-select:none;}
+  .exp-break-caret{display:inline-block;font-size:10px;color:var(--ink-light);transition:transform .15s;margin-left:2px;}
+  .exp-break-row-toggle.open .exp-break-caret{transform:rotate(180deg);}
+  .exp-detail{display:none;flex-direction:column;gap:4px;margin:-2px 0 10px 0;padding:8px 10px;background:var(--mist);border-radius:8px;border:1px solid var(--sand);}
+  .exp-detail.open{display:flex;}
+  .exp-detail-item{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-mid);}
+  .exp-detail-date{flex-shrink:0;color:var(--ink-light);width:78px;}
+  .exp-detail-lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .exp-detail-payer{flex-shrink:0;font-size:11px;color:var(--ink-light);}
+  .exp-detail-amt{flex-shrink:0;font-weight:600;width:60px;text-align:right;}
   .exp-break-lbl{width:130px;flex-shrink:0;color:var(--ink-mid);}
   .exp-break-track{flex:1;background:var(--mist);border-radius:6px;height:16px;overflow:hidden;border:1px solid var(--sand);}
   .exp-break-fill{height:100%;border-radius:6px;}
@@ -1697,7 +1719,7 @@ function initUploadProgress(formId) {
 }
 
 // ── Dépenses dynamiques ────────────────────────────────────
-var EXP_CATS  = [['restaurant','\\ud83c\\udf7d\\ufe0f Restaurant'],['hebergement','\\ud83c\\udfe8 H\\u00e9bergement'],['nourriture','\\ud83d\\uded2 Nourriture'],['divers','\\ud83e\\uddf3 Divers']];
+var EXP_CATS  = [['restaurant','\\ud83c\\udf7d\\ufe0f Restaurant'],['hebergement','\\ud83c\\udfe8 H\\u00e9bergement'],['camping','\\u26fa Camping'],['nourriture','\\ud83d\\uded2 Nourriture'],['divers','\\ud83e\\uddf3 Divers']];
 var EXP_PAYERS= [['julie','\\ud83d\\udc69 Julie'],['nico','\\ud83e\\uddd4 Nico'],['commun','\\ud83d\\udc6b Commun']];
 
 function expRowHtml(cat, payer, amount, label) {
@@ -2611,7 +2633,7 @@ function renderStats(posts, isAdmin = false, allPosts = null) {
   const monthKeys = Object.keys(byMonth).sort(); // ordre chronologique
   const grandTotal = monthKeys.reduce((sum, k) => sum + byMonth[k].total, 0);
 
-  const catColors = { restaurant: '#3a9e72', hebergement: '#2a7a7a', nourriture: '#e07a3a', divers: '#7ecece' };
+  const catColors = { restaurant: '#3a9e72', hebergement: '#2a7a7a', camping: '#8a6d3b', nourriture: '#e07a3a', divers: '#7ecece' };
   const payerColors = { julie: '#e07a3a', nico: '#2a7a7a', commun: '#3a9e72' };
 
   const expensesHtml = monthKeys.length === 0 ? '' : `
@@ -2625,11 +2647,21 @@ function renderStats(posts, isAdmin = false, allPosts = null) {
         const catRows = EXPENSE_CATEGORIES.filter(c => m.byCat[c]).map(c => {
           const v = m.byCat[c];
           const pct = m.total > 0 ? Math.max(2, Math.round(v / m.total * 100)) : 0;
-          return `<div class="exp-break-row">
-            <div class="exp-break-lbl">${EXPENSE_CAT_LABELS[c]}</div>
+          const items = (m.itemsByCat[c] || []);
+          const detailId = `expdetail-${key}-${c}`;
+          const itemsHtml = items.map(it => `
+            <div class="exp-detail-item">
+              <span class="exp-detail-date">${formatDateShort(it.date)}</span>
+              <span class="exp-detail-lbl">${esc(it.label || it.postTitle || '—')}</span>
+              <span class="exp-detail-payer">${EXPENSE_PAYER_LABELS[it.payer] || ''}</span>
+              <span class="exp-detail-amt">${formatEuro(it.amount)}</span>
+            </div>`).join('');
+          return `<div class="exp-break-row exp-break-row-toggle" data-target="${detailId}">
+            <div class="exp-break-lbl">${EXPENSE_CAT_LABELS[c]} <span class="exp-break-caret">▾</span></div>
             <div class="exp-break-track"><div class="exp-break-fill" style="width:${pct}%;background:${catColors[c]}"></div></div>
             <div class="exp-break-val">${formatEuro(v)}</div>
-          </div>`;
+          </div>
+          <div class="exp-detail" id="${detailId}">${itemsHtml}</div>`;
         }).join('');
         const payerRows = EXPENSE_PAYERS.filter(pr => m.byPayer[pr]).map(pr => {
           const v = m.byPayer[pr];
@@ -2646,12 +2678,22 @@ function renderStats(posts, isAdmin = false, allPosts = null) {
           <span class="exp-month-name">${formatMonthLabel(key)}</span>
           <span class="exp-month-total">${formatEuro(m.total)}</span>
         </div>
-        <div class="exp-break-title">Par catégorie</div>
+        <div class="exp-break-title">Par catégorie <span style="text-transform:none;font-weight:400">(cliquer pour le détail)</span></div>
         ${catRows}
         <div class="exp-break-title">Par personne</div>
         ${payerRows}
       </div>`;
-      }).join('')}`;
+      }).join('')}
+      <script>
+        document.querySelectorAll('.exp-break-row-toggle').forEach(function(row) {
+          row.addEventListener('click', function() {
+            var detail = document.getElementById(row.dataset.target);
+            if (!detail) return;
+            var open = detail.classList.toggle('open');
+            row.classList.toggle('open', open);
+          });
+        });
+      </script>`;
 
   if (s.nDays === 0) {
     return `<!DOCTYPE html><html lang="fr"><head>
