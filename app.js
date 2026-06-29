@@ -2980,23 +2980,6 @@ function renderStats(posts, isAdmin = false, allPosts = null) {
       </div>`;
     }).join('')}`;
 
-  // Graphique des km par jour roulé
-  const ridingDays = posts
-    .filter(p => p.type !== 'preparation' && (parseFloat(p.km) || 0) > 0)
-    .sort((a, b) => new Date(a.date) - new Date(b.date));
-  const maxKm = s.maxKm || 1;
-  const bars = ridingDays.map(p => {
-    const km = parseFloat(p.km) || 0;
-    const dp = parseInt(p.dplus) || 0;
-    const pct = Math.max(2, Math.round(km / maxKm * 100));
-    return `<div class="sbar-row">
-      <div class="sbar-date">${formatDateShort(p.date)}</div>
-      <div class="sbar-track"><div class="sbar-fill" style="width:${pct}%"></div></div>
-      <div class="sbar-val">${fr1(km)} km</div>
-      <div class="sbar-dplus">${dp > 0 ? `⛰️ ${fr0(dp)} m` : ''}</div>
-    </div>`;
-  }).join('');
-
   return `<!DOCTYPE html><html lang="fr"><head>
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Statistiques — ${TRIP_TITLE}</title><style>${CSS}</style>
@@ -3064,8 +3047,7 @@ function renderStats(posts, isAdmin = false, allPosts = null) {
       </div>
 
       ${kmMonthHtml}
-      <div class="stats-section-title">Distance par jour roulé</div>
-      <div class="stats-bars">${bars}</div>
+
       ${expensesHtml}
     </div>
   </body></html>`;
