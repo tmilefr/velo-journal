@@ -982,12 +982,14 @@ app.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos', m
     }
   }
 
+  const newTitle = title.trim();
+  const newBody  = sanitizeHtml(body);
   const validViz = ['all', 'margot', 'admin'];
   posts[idx] = {
     ...existing,
     date:       finalDate,
-    title:      title.trim(),
-    body:       sanitizeHtml(body),
+    title:      newTitle,
+    body:       newBody,
     location:   location?.trim() || '',
     lat:        finalLat,
     lon:        finalLon,
@@ -999,6 +1001,9 @@ app.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos', m
     gpx:        gpxFile,
     expenses:    parseExpenses(req.body),
     privateNote: (privateNote || '').toString().trim().substring(0, 2000),
+    translations: (newTitle === existing.title && newBody === existing.body)
+      ? (existing.translations || {})
+      : {},
   };
   writePosts(posts);
   res.redirect('/#post-' + req.params.id);
@@ -1953,11 +1958,11 @@ function renderNewCaptions(input, containerId) {
     wrap.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:6px';
     var thumb = document.createElement('img');
     thumb.src = URL.createObjectURL(f);
-    thumb.style.cssText = 'width:42px;height:42px;object-fit:cover;border-radius:6px;flex-shrink:0;border:1px solid var(--sand)';
+    thumb.style.cssText = 'width:56px;height:56px;object-fit:cover;border-radius:8px;flex-shrink:0;border:1px solid var(--sand)';
     var inp = document.createElement('input');
     inp.type = 'text'; inp.className = 'caption-input'; inp.name = 'caption_new_' + i;
     inp.maxLength = 200; inp.placeholder = 'L\\u00e9gende de la photo ' + (i+1) + ' (optionnel)';
-    inp.style.marginTop = '0';
+    inp.style.cssText = 'margin-top:0;flex:1;width:auto';
     wrap.appendChild(thumb); wrap.appendChild(inp);
     c.appendChild(wrap);
   });
@@ -3406,21 +3411,31 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
             <label>Médias actuels — glissez pour réordonner, décochez pour supprimer</label>
             <div id="mediaSortable" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:6px">
               ${post.photos.map((ph, i) => `
-                <div class="media-item" draggable="true" data-url="${ph}" style="position:relative;cursor:grab;border-radius:8px;display:flex;flex-direction:column;gap:4px;width:90px">
-                  <div style="position:relative">
-                    <span class="media-order-badge">${i+1}</span>
-                    <input type="checkbox" name="keepPhotos" value="${ph}" checked
-                      style="position:absolute;top:4px;right:4px;z-index:2;accent-color:var(--teal);width:18px;height:18px">
-                    ${isVideoUrl(ph)
-                      ? `<video src="${ph}" muted playsinline style="width:90px;height:90px;object-fit:cover;border-radius:8px;border:2px solid var(--teal-light);pointer-events:none"></video>`
-                      : `<img src="${ph}" style="width:90px;height:90px;object-fit:cover;border-radius:8px;border:2px solid var(--teal-light);pointer-events:none">`}
-                  </div>
-                  ${isVideoUrl(ph) ? '' : `<input type="text" class="caption-input" name="caption_keep_${ph}" maxlength="200" placeholder="Légende…" value="${esc((post.captions && post.captions[i]) || '')}" style="width:90px;font-size:11px;padding:4px 6px;margin-top:0">`}
+                <div class="media-item" draggable="true" data-url="${ph}" style="position:relative;cursor:grab;border-radius:8px;width:90px">
+                  <span class="media-order-badge">${i+1}</span>
+                  <input type="checkbox" name="keepPhotos" value="${ph}" checked
+                    style="position:absolute;top:4px;right:4px;z-index:2;accent-color:var(--teal);width:18px;height:18px">
+                  ${isVideoUrl(ph)
+                    ? `<video src="${ph}" muted playsinline style="width:90px;height:90px;object-fit:cover;border-radius:8px;border:2px solid var(--teal-light);pointer-events:none"></video>`
+                    : `<img src="${ph}" style="width:90px;height:90px;object-fit:cover;border-radius:8px;border:2px solid var(--teal-light);pointer-events:none">`}
                 </div>`).join('')}
             </div>
             <div id="photoOrderInputs"></div>
             <p style="font-size:11px;color:var(--ink-light);margin-top:6px">↕️ Maintenez et glissez une vignette pour changer l'ordre.</p>
-          </div>` : ''}
+          </div>
+          ${post.photos.some(ph => !isVideoUrl(ph)) ? `
+          <div class="field">
+            <label>Légendes des photos</label>
+            <div id="captionsRows" style="display:flex;flex-direction:column;gap:8px;margin-top:6px">
+              ${post.photos.map((ph, i) => isVideoUrl(ph) ? '' : `
+              <div class="caption-row" data-url="${ph}" style="display:flex;align-items:center;gap:10px">
+                <img src="${ph}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;flex-shrink:0;border:1px solid var(--sand)">
+                <input type="text" class="caption-input" name="caption_keep_${ph}" maxlength="200"
+                  placeholder="Légende de la photo ${i+1} (optionnel)"
+                  value="${esc((post.captions && post.captions[i]) || '')}">
+              </div>`).join('')}
+            </div>
+          </div>` : ''}` : ''}
           <div class="field">
             <label>Ajouter des photos ou vidéos</label>
             <input type="file" name="photos" multiple accept="image/*,video/*" onchange="previewPhotos(this);renderNewCaptions(this,'newCaptionsEdit')">
@@ -3537,6 +3552,7 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
 
           function refreshOrder() {
             var items = Array.from(sortable.querySelectorAll('.media-item'));
+            var captionsRows = document.getElementById('captionsRows');
             orderInputs.innerHTML = '';
             items.forEach(function(it, i) {
               var badge = it.querySelector('.media-order-badge');
@@ -3546,6 +3562,10 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
               inp.name = 'photoOrder';
               inp.value = it.dataset.url;
               orderInputs.appendChild(inp);
+              if (captionsRows) {
+                var row = captionsRows.querySelector('.caption-row[data-url="' + it.dataset.url.replace(/"/g, '\\"') + '"]');
+                if (row) captionsRows.appendChild(row);
+              }
             });
           }
 
