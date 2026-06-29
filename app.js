@@ -190,6 +190,23 @@ function postExpenseTotal(p) {
 }
 
 // Synthèse des dépenses regroupées par mois (YYYY-MM en Europe/Paris)
+function distanceByMonth(posts) {
+  const map = {};
+  posts.forEach(p => {
+    if (p.type === 'preparation') return;
+    const km = parseFloat(p.km) || 0;
+    if (km <= 0) return;
+    const d = new Date(p.date);
+    const key = new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit' }).format(d);
+    if (!map[key]) map[key] = { totalKm: 0, totalDplus: 0, days: [] };
+    map[key].totalKm += km;
+    map[key].totalDplus += (parseInt(p.dplus) || 0);
+    map[key].days.push({ date: p.date, km, dplus: parseInt(p.dplus) || 0, title: p.title || p.location || '' });
+  });
+  Object.values(map).forEach(m => m.days.sort((a, b) => new Date(a.date) - new Date(b.date)));
+  return map;
+}
+
 function expensesByMonth(posts) {
   const map = {};
   posts.forEach(p => {
@@ -1238,6 +1255,9 @@ const CSS = `
   .sbar-fill{height:100%;background:linear-gradient(90deg,var(--teal),var(--emerald-mid));border-radius:6px;}
   .sbar-val{width:58px;flex-shrink:0;text-align:right;font-weight:600;color:var(--ink-mid);font-size:12px;}
   .sbar-dplus{width:72px;flex-shrink:0;text-align:right;color:var(--ink-light);font-size:11px;}
+  .sbar-detail-item{display:flex;align-items:center;gap:8px;}
+  .sbar-detail-track{flex:1;height:6px;background:var(--sand);border-radius:4px;overflow:hidden;}
+  .sbar-detail-fill{display:block;height:100%;background:linear-gradient(90deg,var(--teal),var(--emerald-mid));border-radius:4px;}
 
   /* ── DÉPENSES (formulaire) ───────────────────────── */
   .exp-list{display:flex;flex-direction:column;gap:10px;margin-top:8px;}
@@ -2920,6 +2940,41 @@ function renderStats(posts, isAdmin = false, allPosts = null) {
     </body></html>`;
   }
 
+  // Synthèse km par mois
+  const kmByMonth = distanceByMonth(posts);
+  const kmMonthKeys = Object.keys(kmByMonth).sort();
+  const maxMonthKm = kmMonthKeys.reduce((m, k) => Math.max(m, kmByMonth[k].totalKm), 1);
+
+  const kmMonthHtml = kmMonthKeys.length === 0 ? '' : `
+    <div class="stats-section-title">🗓️ Distance par mois</div>
+    ${kmMonthKeys.map(key => {
+      const m = kmByMonth[key];
+      const pctMonth = Math.max(2, Math.round(m.totalKm / maxMonthKm * 100));
+      const maxDayKm = m.days.reduce((mx, d) => Math.max(mx, d.km), 1);
+      const detailId = `kmdetail-${key}`;
+      const daysHtml = m.days.map(d => {
+        const pct = Math.max(2, Math.round(d.km / maxDayKm * 100));
+        return `<div class="exp-detail-item sbar-detail-item">
+          <span class="exp-detail-date">${formatDateShort(d.date)}</span>
+          <span class="sbar-detail-track"><span class="sbar-detail-fill" style="width:${pct}%"></span></span>
+          <span class="exp-detail-amt">${fr1(d.km)} km</span>
+          <span class="sbar-dplus">${d.dplus > 0 ? `⛰️ ${fr0(d.dplus)} m` : ''}</span>
+        </div>`;
+      }).join('');
+      return `<div class="exp-month-card">
+        <div class="exp-month-head exp-break-row-toggle" data-target="${detailId}">
+          <span class="exp-month-name">${formatMonthLabel(key)} <span class="exp-break-caret">▾</span></span>
+          <span class="exp-month-total">${fr0(m.totalKm)} km</span>
+        </div>
+        <div class="exp-break-row" style="cursor:default">
+          <div class="exp-break-lbl">${m.days.length} jour${m.days.length > 1 ? 's' : ''} roulé${m.days.length > 1 ? 's' : ''}</div>
+          <div class="exp-break-track"><div class="exp-break-fill" style="width:${pctMonth}%;background:var(--ocean)"></div></div>
+          <div class="exp-break-val">${m.totalDplus > 0 ? `⛰️ ${fr0(m.totalDplus)} m` : ''}</div>
+        </div>
+        <div class="exp-detail" id="${detailId}">${daysHtml}</div>
+      </div>`;
+    }).join('')}`;
+
   // Graphique des km par jour roulé
   const ridingDays = posts
     .filter(p => p.type !== 'preparation' && (parseFloat(p.km) || 0) > 0)
@@ -3003,6 +3058,7 @@ function renderStats(posts, isAdmin = false, allPosts = null) {
         🚩 Le jour de départ et les jours sans kilométrage (repos, transferts) sont exclus du calcul des moyennes.${s.nExcluded > 0 ? ` ${s.nExcluded} étape${s.nExcluded > 1 ? 's' : ''} non comptée${s.nExcluded > 1 ? 's' : ''}.` : ''}
       </div>
 
+      ${kmMonthHtml}
       <div class="stats-section-title">Distance par jour roulé</div>
       <div class="stats-bars">${bars}</div>
       ${expensesHtml}
