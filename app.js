@@ -1463,6 +1463,13 @@ const CSS = `
   .gps-btn:hover{background:#d0eaf5}
   .photo-preview{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
   .photo-preview img,.photo-preview video{width:72px;height:72px;object-fit:cover;border-radius:8px;border:2px solid var(--sand)}
+  .photo-grid-new{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-top:10px}
+  .photo-grid-card{display:flex;flex-direction:column;gap:5px}
+  .photo-grid-media{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:8px;border:2px solid var(--sand);display:block}
+  .photo-grid-caption{font-size:12px;padding:5px 8px;border-radius:6px;border:1.5px solid var(--sand);font-family:inherit;background:#fff;width:100%;box-sizing:border-box;color:var(--ink)}
+  .photo-grid-caption:focus{outline:none;border-color:var(--teal-light);box-shadow:0 0 0 2px rgba(56,178,172,.15)}
+  .caption-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-top:8px}
+  .caption-grid-card{display:flex;flex-direction:column;gap:5px}
   .media-order-badge{position:absolute;top:4px;left:4px;z-index:2;background:var(--ocean);color:#fff;font-size:11px;font-weight:700;min-width:18px;height:18px;border-radius:9px;display:flex;align-items:center;justify-content:center;padding:0 5px;box-shadow:0 1px 4px rgba(0,0,0,.3)}
   .media-item{touch-action:none}
   .error-msg{background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;}
@@ -1826,8 +1833,44 @@ function previewPhotos(input) {
   });
 }
 
+function renderPhotoGrid(input, containerId) {
+  var c = document.getElementById(containerId);
+  if (!c) return;
+  c.innerHTML = '';
+  var files = Array.from(input.files);
+  if (!files.length) return;
+  var grid = document.createElement('div');
+  grid.className = 'photo-grid-new';
+  files.forEach(function(f, i) {
+    var url = URL.createObjectURL(f);
+    var card = document.createElement('div');
+    card.className = 'photo-grid-card';
+    var media;
+    if (f.type.indexOf('video/') === 0) {
+      media = document.createElement('video');
+      media.src = url; media.muted = true; media.playsInline = true; media.controls = true;
+    } else {
+      media = document.createElement('img');
+      media.src = url; media.alt = 'Photo ' + (i + 1);
+    }
+    media.className = 'photo-grid-media';
+    card.appendChild(media);
+    if (f.type.indexOf('image/') === 0) {
+      var inp = document.createElement('input');
+      inp.type = 'text';
+      inp.className = 'photo-grid-caption caption-input';
+      inp.name = 'caption_new_' + i;
+      inp.maxLength = 200;
+      inp.placeholder = 'Légende…';
+      card.appendChild(inp);
+    }
+    grid.appendChild(card);
+  });
+  c.appendChild(grid);
+}
+
 // ── Barre de progression d'envoi (post + édition) ──────────
-function initUploadProgress(formId) {
+function initUploadProgress(formId, draftKey, bodyHiddenId) {
   var form    = document.getElementById(formId);
   var overlay = document.getElementById('uploadOverlay');
   var fill    = document.getElementById('upBarFill');
@@ -1837,6 +1880,8 @@ function initUploadProgress(formId) {
 
   form.addEventListener('submit', function(e) {
     e.preventDefault();
+    // Sauvegarde brouillon avant envoi (restauré si le serveur renvoie une erreur)
+    if (draftKey) saveDraft(draftKey, formId, bodyHiddenId);
     var fd  = new FormData(form);
     var xhr = new XMLHttpRequest();
     // L'action contient déjà ?_csrf=… donc requireCsrf passe via req.query
@@ -1858,6 +1903,7 @@ function initUploadProgress(formId) {
     xhr.addEventListener('load', function() {
       if (xhr.status >= 200 && xhr.status < 400) {
         // Le serveur redirige (302 suivie auto) → on suit l'URL finale
+        if (draftKey) clearDraft(draftKey);
         window.location.href = xhr.responseURL || '/';
       } else {
         // Erreur de validation : on réaffiche la page renvoyée
@@ -1870,7 +1916,7 @@ function initUploadProgress(formId) {
 
     xhr.addEventListener('error', function() {
       overlay.classList.remove('open');
-      alert('Erreur reseau pendant l\\'envoi. Reessayez.');
+      alert('Erreur réseau pendant l\\'envoi. Vos textes ont été conservés, réessayez.');
     });
 
     xhr.send(fd);
@@ -1947,25 +1993,50 @@ function initExpenses(listId, addBtnId, totalId, initial) {
   recalcTotal();
 }
 
-// ── Légendes pour nouvelles photos ─────────────────────────
+// ── Légendes pour nouvelles photos (legacy, remplacée par renderPhotoGrid) ──
 function renderNewCaptions(input, containerId) {
-  var c = document.getElementById(containerId);
-  if (!c) return;
-  c.innerHTML = '';
-  Array.from(input.files).forEach(function(f, i){
-    if (f.type.indexOf('image/') !== 0) return; // légendes pour images seulement
-    var wrap = document.createElement('div');
-    wrap.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:6px';
-    var thumb = document.createElement('img');
-    thumb.src = URL.createObjectURL(f);
-    thumb.style.cssText = 'width:56px;height:56px;object-fit:cover;border-radius:8px;flex-shrink:0;border:1px solid var(--sand)';
-    var inp = document.createElement('input');
-    inp.type = 'text'; inp.className = 'caption-input'; inp.name = 'caption_new_' + i;
-    inp.maxLength = 200; inp.placeholder = 'L\\u00e9gende de la photo ' + (i+1) + ' (optionnel)';
-    inp.style.cssText = 'margin-top:0;flex:1;width:auto';
-    wrap.appendChild(thumb); wrap.appendChild(inp);
-    c.appendChild(wrap);
-  });
+  renderPhotoGrid(input, containerId);
+}
+
+// ── Sauvegarde/restauration de brouillon (sessionStorage) ──
+function saveDraft(key, formId, bodyHiddenId) {
+  try {
+    var form = document.getElementById(formId);
+    if (!form) return;
+    var draft = {};
+    ['title','location','km','dplus','privateNote','postDate'].forEach(function(n) {
+      var el = form.querySelector('[name=' + n + ']');
+      if (el) draft[n] = el.value;
+    });
+    if (bodyHiddenId) {
+      var h = document.getElementById(bodyHiddenId);
+      if (h) draft.body = h.value;
+    }
+    sessionStorage.setItem(key, JSON.stringify(draft));
+  } catch(e) {}
+}
+function clearDraft(key) {
+  try { sessionStorage.removeItem(key); } catch(e) {}
+}
+function restoreDraft(key, formId, bodyEditorId, bodyHiddenId) {
+  try {
+    var hasError = document.querySelector('.error-msg');
+    if (!hasError) { clearDraft(key); return; }
+    var draft = JSON.parse(sessionStorage.getItem(key) || 'null');
+    if (!draft) return;
+    var form = document.getElementById(formId);
+    if (!form) return;
+    ['title','location','km','dplus','privateNote','postDate'].forEach(function(n) {
+      var el = form.querySelector('[name=' + n + ']');
+      if (el && draft[n] != null) el.value = draft[n];
+    });
+    if (bodyHiddenId && draft.body != null) {
+      var h = document.getElementById(bodyHiddenId);
+      if (h) h.value = draft.body;
+      var ed = document.getElementById(bodyEditorId);
+      if (ed) ed.innerHTML = draft.body;
+    }
+  } catch(e) {}
 }
 
 // ── Éditeur de texte riche (contenteditable, 0 dépendance) ──
@@ -3260,8 +3331,7 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
           </div>
           <div class="field">
             <label>Photos / vidéos (max 10)</label>
-            <input type="file" name="photos" multiple accept="image/*,video/*" id="photoInputPost" onchange="previewPhotos(this);renderNewCaptions(this,'newCaptionsPost')">
-            <div class="photo-preview" id="photoPreview"></div>
+            <input type="file" name="photos" multiple accept="image/*,video/*" id="photoInputPost" onchange="renderPhotoGrid(this,'newCaptionsPost')">
             <div id="newCaptionsPost"></div>
           </div>
           <div class="field">
@@ -3349,7 +3419,8 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
         var btn = document.getElementById('gpsBtnPost');
         if (btn) btn.addEventListener('click', function() { getGPS('locationField', 'lat', 'lon'); });
         initExpenses('expList', 'expAddBtn', 'expTotal', []);
-        initUploadProgress('postForm');
+        initUploadProgress('postForm', 'draft_post', 'bodyHidden');
+        restoreDraft('draft_post', 'postForm', 'bodyEditor', 'bodyHidden');
       });
     </script>
   </body></html>`;
@@ -3408,20 +3479,19 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
           ${post.photos.some(ph => !isVideoUrl(ph)) ? `
           <div class="field">
             <label>Légendes des photos</label>
-            <div id="captionsRows" style="display:flex;flex-direction:column;gap:8px;margin-top:6px">
+            <div id="captionsRows" class="caption-grid" style="margin-top:6px">
               ${post.photos.map((ph, i) => isVideoUrl(ph) ? '' : `
-              <div class="caption-row" data-url="${ph}" style="display:flex;align-items:center;gap:10px">
-                <img src="${ph}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;flex-shrink:0;border:1px solid var(--sand)">
-                <input type="text" class="caption-input" name="caption_keep_${ph}" maxlength="200"
-                  placeholder="Légende de la photo ${i+1} (optionnel)"
+              <div class="caption-grid-card caption-row" data-url="${ph}">
+                <img src="${ph}" class="photo-grid-media" style="border:2px solid var(--sand)">
+                <input type="text" class="photo-grid-caption caption-input" name="caption_keep_${ph}" maxlength="200"
+                  placeholder="Légende…"
                   value="${esc((post.captions && post.captions[i]) || '')}">
               </div>`).join('')}
             </div>
           </div>` : ''}` : ''}
           <div class="field">
             <label>Ajouter des photos ou vidéos</label>
-            <input type="file" name="photos" multiple accept="image/*,video/*" onchange="previewPhotos(this);renderNewCaptions(this,'newCaptionsEdit')">
-            <div class="photo-preview" id="photoPreview"></div>
+            <input type="file" name="photos" multiple accept="image/*,video/*" onchange="renderPhotoGrid(this,'newCaptionsEdit')">
             <div id="newCaptionsEdit"></div>
           </div>
           <div class="field">
@@ -3585,7 +3655,8 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
           refreshOrder();
         }
 
-        initUploadProgress('editForm');
+        initUploadProgress('editForm', 'draft_edit', 'bodyHidden');
+        restoreDraft('draft_edit', 'editForm', 'bodyEditor', 'bodyHidden');
       });
     </script>
   </body></html>`;
