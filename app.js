@@ -3237,13 +3237,35 @@ function renderMap(posts, isAdmin = false, isStrictAdmin = false) {
           L.polyline(seg, { color: '#2a7a7a', weight: 4, opacity: .9 }).addTo(map);
           L.polyline(seg, { color: '#fff', weight: 1.5, opacity: .5, dashArray: '8,10' }).addTo(map);
         });
-        gpsData.filter(p => p.gpx).forEach(function(p) {
+        // Distance approx. en mètres entre deux points [lat,lon] (Haversine).
+        function ptDist(a, b) {
+          const R = 6371000, dLat = (b[0]-a[0])*Math.PI/180, dLon = (b[1]-a[1])*Math.PI/180;
+          const la1 = a[0]*Math.PI/180, la2 = b[0]*Math.PI/180;
+          const x = Math.sin(dLat/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;
+          return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
+        }
+        const GAP_THRESHOLD_M = 150;
+        gpsData.forEach(function(p, i) {
+          if (!p.gpx) return;
           fetch(p.gpx).then(r => r.text()).then(txt => {
             const xml = new DOMParser().parseFromString(txt, 'text/xml');
             const trkpts = Array.from(xml.querySelectorAll('trkpt')).map(tp => [parseFloat(tp.getAttribute('lat')), parseFloat(tp.getAttribute('lon'))]);
             if (trkpts.length < 2) return;
             L.polyline(trkpts, { color: 'rgba(0,0,0,0.12)', weight: 6 }).addTo(map);
             L.polyline(trkpts, { color: '#3a9090', weight: 3, opacity: 0.85 }).addTo(map);
+            // Raccords si le point GPS de l'étape (marqueur, éventuellement fixé
+            // manuellement) ne coïncide pas avec les extrémités de la trace, pour
+            // que le rendu reste continu d'une étape à l'autre.
+            const bridges = [];
+            if (i > 0) {
+              const prevMarker = [gpsData[i-1].lat, gpsData[i-1].lon];
+              if (ptDist(prevMarker, trkpts[0]) > GAP_THRESHOLD_M) bridges.push([prevMarker, trkpts[0]]);
+            }
+            const marker = [p.lat, p.lon], last = trkpts[trkpts.length - 1];
+            if (ptDist(last, marker) > GAP_THRESHOLD_M) bridges.push([last, marker]);
+            bridges.forEach(function(seg) {
+              L.polyline(seg, { color: '#2a7a7a', weight: 3, opacity: .7, dashArray: '6,8' }).addTo(map);
+            });
           }).catch(() => {});
         });
         gpsData.forEach((p, i) => {
