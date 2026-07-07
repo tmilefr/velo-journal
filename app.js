@@ -862,8 +862,8 @@ app.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', maxCo
   if (gpxFile) {
     const stats = await parseGpxStats(path.join(__dirname, 'public', gpxFile), true);
     if (stats) {
-      finalLat = stats.lat;
-      finalLon = stats.lon;
+      // On ne dérive lat/lon du GPX que si aucun point n'a été fixé manuellement côté client.
+      if (finalLat === null || finalLon === null) { finalLat = stats.lat; finalLon = stats.lon; }
       if (!finalKm) finalKm = stats.km;
       if (!finalDp) finalDp = stats.dplus;
     }
@@ -975,8 +975,8 @@ app.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos', m
   if (req.files?.gpx?.[0] && gpxFile) {
     const stats = await parseGpxStats(path.join(__dirname, 'public', gpxFile), true);
     if (stats) {
-      finalLat = stats.lat;
-      finalLon = stats.lon;
+      // On ne dérive lat/lon du GPX que si aucun point n'a été fixé manuellement côté client.
+      if (finalLat === null || finalLon === null) { finalLat = stats.lat; finalLon = stats.lon; }
       finalKm  = stats.km;
       finalDp  = stats.dplus;
     }
@@ -1744,8 +1744,10 @@ function initLocAutocomplete(fieldId, latId, lonId, suggestId) {
   function pick(i) {
     var item = items[i];
     field.value = item.display;
-    document.getElementById(latId).value = parseFloat(item.lat).toFixed(6);
-    document.getElementById(lonId).value = parseFloat(item.lon).toFixed(6);
+    var latEl = document.getElementById(latId), lonEl = document.getElementById(lonId);
+    latEl.value = parseFloat(item.lat).toFixed(6);
+    lonEl.value = parseFloat(item.lon).toFixed(6);
+    latEl.dataset.manual = lonEl.dataset.manual = '1';
     list.classList.remove('open'); sel = -1;
   }
   function doSearch(q) {
@@ -1779,8 +1781,10 @@ function getGPS(fieldId, latId, lonId) {
   if (location.protocol !== 'https:' && location.hostname !== 'localhost') return alert('La géolocalisation nécessite HTTPS.');
   navigator.geolocation.getCurrentPosition(
     function(pos) {
-      document.getElementById(latId).value = pos.coords.latitude.toFixed(6);
-      document.getElementById(lonId).value = pos.coords.longitude.toFixed(6);
+      var latEl = document.getElementById(latId), lonEl = document.getElementById(lonId);
+      latEl.value = pos.coords.latitude.toFixed(6);
+      lonEl.value = pos.coords.longitude.toFixed(6);
+      latEl.dataset.manual = lonEl.dataset.manual = '1';
       var field = document.getElementById(fieldId);
       if (!field.value) {
         fetch('https://nominatim.openstreetmap.org/reverse?lat=' + pos.coords.latitude + '&lon=' + pos.coords.longitude + '&format=json')
@@ -1819,13 +1823,17 @@ function parseGPX(input, fieldId, latId, lonId) {
       var kmVal=(dist/1000).toFixed(1), dpVal=Math.round(dplus);
       document.querySelector('[name=km]').value=kmVal;
       document.querySelector('[name=dplus]').value=dpVal;
-      document.getElementById(latId).value=lat.toFixed(6);
-      document.getElementById(lonId).value=lon.toFixed(6);
-      fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json')
-        .then(function(r){return r.json();}).then(function(d){
-          var a=d.address, field=document.getElementById(fieldId);
-          if(!field.value) field.value=[a.town||a.city||a.village,a.state].filter(Boolean).join(', ');
-        }).catch(function(){});
+      var latEl=document.getElementById(latId), lonEl=document.getElementById(lonId);
+      var hasManualPoint = latEl.dataset.manual === '1';
+      if (!hasManualPoint) {
+        latEl.value=lat.toFixed(6);
+        lonEl.value=lon.toFixed(6);
+        fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json')
+          .then(function(r){return r.json();}).then(function(d){
+            var a=d.address, field=document.getElementById(fieldId);
+            if(!field.value) field.value=[a.town||a.city||a.village,a.state].filter(Boolean).join(', ');
+          }).catch(function(){});
+      }
       var info = document.getElementById('gpxInfo');
       if (info) { info.style.display='block'; info.innerHTML='✅ Trace importée — <strong>'+kmVal+' km</strong> · <strong>'+dpVal.toLocaleString()+' m D+</strong> · '+trkpts.length+' points'; }
     } catch(err) { alert('Erreur lors de la lecture du GPX : '+err.message); }
