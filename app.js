@@ -1468,10 +1468,25 @@ const CSS = `
   .photo-grid-media{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:8px;border:2px solid var(--sand);display:block}
   .photo-grid-caption{font-size:12px;padding:5px 8px;border-radius:6px;border:1.5px solid var(--sand);font-family:inherit;background:#fff;width:100%;box-sizing:border-box;color:var(--ink)}
   .photo-grid-caption:focus{outline:none;border-color:var(--teal-light);box-shadow:0 0 0 2px rgba(56,178,172,.15)}
-  .caption-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-top:8px}
-  .caption-grid-card{display:flex;flex-direction:column;gap:5px}
   .media-order-badge{position:absolute;top:4px;left:4px;z-index:2;background:var(--ocean);color:#fff;font-size:11px;font-weight:700;min-width:18px;height:18px;border-radius:9px;display:flex;align-items:center;justify-content:center;padding:0 5px;box-shadow:0 1px 4px rgba(0,0,0,.3)}
   .media-item{touch-action:none}
+  .media-caption-btn{position:absolute;bottom:4px;right:4px;z-index:2;background:rgba(10,61,98,0.75);color:#fff;border:none;border-radius:50%;width:22px;height:22px;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;transition:background .15s;}
+  .media-caption-btn:hover{background:rgba(10,61,98,0.95);}
+  .media-caption-btn.has-caption{background:var(--teal);}
+  .caption-popup{display:none;position:fixed;inset:0;background:rgba(5,15,30,0.85);z-index:1200;align-items:center;justify-content:center;backdrop-filter:blur(6px);padding:16px;}
+  .caption-popup.open{display:flex;}
+  .caption-popup-box{background:#fff;border-radius:16px;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.4);overflow:hidden;}
+  .caption-popup-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--sand);background:linear-gradient(135deg,var(--ocean-mid),var(--teal));}
+  .caption-popup-head h3{font-family:'Playfair Display',serif;font-size:15px;font-weight:700;color:#fff;margin:0;}
+  .caption-popup-close{background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.3);color:#fff;font-size:18px;width:28px;height:28px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s;}
+  .caption-popup-close:hover{background:rgba(255,255,255,0.32);}
+  .caption-popup-body{padding:16px;}
+  .caption-popup-body img{width:100%;max-height:160px;object-fit:cover;border-radius:8px;margin-bottom:10px;display:block;}
+  .caption-popup-body textarea{width:100%;box-sizing:border-box;min-height:70px;font-size:13px;padding:8px 10px;border-radius:8px;border:1.5px solid var(--sand);font-family:inherit;resize:vertical;color:var(--ink);}
+  .caption-popup-body textarea:focus{outline:none;border-color:var(--teal-light);box-shadow:0 0 0 2px rgba(56,178,172,.15);}
+  .caption-popup-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;}
+  .caption-popup-save{background:var(--teal);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;}
+  .caption-popup-save:hover{opacity:.9;}
   .error-msg{background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;}
 
   /* ── ÉDITEUR RICHE ───────────────────────────────── */
@@ -3471,24 +3486,15 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
                   ${isVideoUrl(ph)
                     ? `<video src="${ph}" muted playsinline style="width:90px;height:90px;object-fit:cover;border-radius:8px;border:2px solid var(--teal-light);pointer-events:none"></video>`
                     : `<img src="${ph}" style="width:90px;height:90px;object-fit:cover;border-radius:8px;border:2px solid var(--teal-light);pointer-events:none">`}
+                  ${!isVideoUrl(ph) ? `
+                  <button type="button" class="media-caption-btn${(post.captions && post.captions[i]) ? ' has-caption' : ''}" title="${(post.captions && post.captions[i]) ? 'Modifier la légende' : 'Ajouter une légende'}">💬</button>
+                  <input type="hidden" name="caption_keep_${ph}" class="media-caption-input" value="${esc((post.captions && post.captions[i]) || '')}">
+                  ` : ''}
                 </div>`).join('')}
             </div>
             <div id="photoOrderInputs"></div>
-            <p style="font-size:11px;color:var(--ink-light);margin-top:6px">↕️ Maintenez et glissez une vignette pour changer l'ordre.</p>
-          </div>
-          ${post.photos.some(ph => !isVideoUrl(ph)) ? `
-          <div class="field">
-            <label>Légendes des photos</label>
-            <div id="captionsRows" class="caption-grid" style="margin-top:6px">
-              ${post.photos.map((ph, i) => isVideoUrl(ph) ? '' : `
-              <div class="caption-grid-card caption-row" data-url="${ph}">
-                <img src="${ph}" class="photo-grid-media" style="border:2px solid var(--sand)">
-                <input type="text" class="photo-grid-caption caption-input" name="caption_keep_${ph}" maxlength="200"
-                  placeholder="Légende…"
-                  value="${esc((post.captions && post.captions[i]) || '')}">
-              </div>`).join('')}
-            </div>
-          </div>` : ''}` : ''}
+            <p style="font-size:11px;color:var(--ink-light);margin-top:6px">↕️ Maintenez et glissez une vignette pour changer l'ordre. 💬 pour ajouter une légende.</p>
+          </div>` : ''}
           <div class="field">
             <label>Ajouter des photos ou vidéos</label>
             <input type="file" name="photos" multiple accept="image/*,video/*" onchange="renderPhotoGrid(this,'newCaptionsEdit')">
@@ -3586,6 +3592,21 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
         <div class="up-pct" id="upPct">0 %</div>
       </div>
     </div>
+    <div class="caption-popup" id="captionPopup" role="dialog" aria-modal="true">
+      <div class="caption-popup-box">
+        <div class="caption-popup-head">
+          <h3>💬 Légende de la photo</h3>
+          <button type="button" class="caption-popup-close" id="captionPopupClose">×</button>
+        </div>
+        <div class="caption-popup-body">
+          <img id="captionPopupImg" src="" alt="">
+          <textarea id="captionPopupText" maxlength="200" placeholder="Écrivez une légende…"></textarea>
+          <div class="caption-popup-actions">
+            <button type="button" class="caption-popup-save" id="captionPopupSave">Enregistrer</button>
+          </div>
+        </div>
+      </div>
+    </div>
     ${FORM_SCRIPTS}
     <script>
       document.addEventListener('DOMContentLoaded', function() {
@@ -3604,7 +3625,6 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
 
           function refreshOrder() {
             var items = Array.from(sortable.querySelectorAll('.media-item'));
-            var captionsRows = document.getElementById('captionsRows');
             orderInputs.innerHTML = '';
             items.forEach(function(it, i) {
               var badge = it.querySelector('.media-order-badge');
@@ -3614,10 +3634,6 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
               inp.name = 'photoOrder';
               inp.value = it.dataset.url;
               orderInputs.appendChild(inp);
-              if (captionsRows) {
-                var row = captionsRows.querySelector('.caption-row[data-url="' + it.dataset.url.replace(/"/g, '\\"') + '"]');
-                if (row) captionsRows.appendChild(row);
-              }
             });
           }
 
@@ -3653,6 +3669,58 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
           });
 
           refreshOrder();
+        }
+
+        // ── Popup de saisie des légendes depuis les vignettes ──
+        var capPopup   = document.getElementById('captionPopup');
+        var capImg     = document.getElementById('captionPopupImg');
+        var capText    = document.getElementById('captionPopupText');
+        var capSaveBtn = document.getElementById('captionPopupSave');
+        var capCloseBtn= document.getElementById('captionPopupClose');
+        var capTarget  = null; // input hidden de la vignette en cours d'édition
+        var capBtn     = null; // bouton 💬 de la vignette en cours d'édition
+
+        function openCaptionPopup(btn) {
+          var item = btn.closest('.media-item');
+          if (!item) return;
+          capTarget = item.querySelector('.media-caption-input');
+          capBtn = btn;
+          if (!capTarget) return;
+          capImg.src = item.dataset.url;
+          capText.value = capTarget.value || '';
+          capPopup.classList.add('open');
+          document.body.style.overflow = 'hidden';
+          setTimeout(function() { capText.focus(); }, 50);
+        }
+
+        function closeCaptionPopup() {
+          capPopup.classList.remove('open');
+          document.body.style.overflow = '';
+          capTarget = null;
+          capBtn = null;
+        }
+
+        function saveCaptionPopup() {
+          if (capTarget) {
+            capTarget.value = capText.value.trim().substring(0, 200);
+            if (capBtn) capBtn.classList.toggle('has-caption', !!capTarget.value);
+          }
+          closeCaptionPopup();
+        }
+
+        if (capPopup) {
+          document.querySelectorAll('.media-caption-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() { openCaptionPopup(btn); });
+          });
+          capSaveBtn.addEventListener('click', saveCaptionPopup);
+          capCloseBtn.addEventListener('click', closeCaptionPopup);
+          capPopup.addEventListener('click', function(e) { if (e.target === capPopup) closeCaptionPopup(); });
+          document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && capPopup.classList.contains('open')) closeCaptionPopup();
+          });
+          capText.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveCaptionPopup(); }
+          });
         }
 
         initUploadProgress('editForm', 'draft_edit', 'bodyHidden');
