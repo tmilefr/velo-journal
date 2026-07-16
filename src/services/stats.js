@@ -1,4 +1,5 @@
 // ── Statistiques de roulage ───────────────────────────────
+const { parisDayNumber, postEndISO } = require('../lib/dates');
 
 function totalKm(posts) {
   return posts.reduce((s, p) => s + (parseFloat(p.km) || 0), 0);
@@ -48,16 +49,16 @@ function computeStats(posts) {
   const maxDplus    = dplusValues.length ? Math.max(...dplusValues) : 0;
   const maxDplusDay = ridingDays.find(p => (parseInt(p.dplus) || 0) === maxDplus) || null;
 
-  // durée calendaire (du 1er au dernier jour roulé, bornes incluses)
+  // durée calendaire (du 1er jour roulé au dernier jour couvert, bornes incluses).
+  // Une étape peut s'étaler sur plusieurs jours (date de fin) : ses jours
+  // supplémentaires ne sont pas roulés et gonflent donc la période et les jours
+  // de repos, mais pas le nombre de jours roulés (nDays).
   let spanDays = nDays;
   let restDays = 0;
-  if (nDays >= 2) {
-    const first = new Date(ridingDays[0].date);
-    const last  = new Date(ridingDays[nDays - 1].date);
-    const dayMs = 24 * 60 * 60 * 1000;
-    const d0 = Date.UTC(first.getFullYear(), first.getMonth(), first.getDate());
-    const d1 = Date.UTC(last.getFullYear(),  last.getMonth(),  last.getDate());
-    spanDays = Math.round((d1 - d0) / dayMs) + 1;
+  if (nDays >= 1) {
+    const firstDay = Math.min(...ridingDays.map(p => parisDayNumber(p.date)));
+    const lastDay  = Math.max(...ridingDays.map(p => parisDayNumber(postEndISO(p))));
+    spanDays = lastDay - firstDay + 1;
     restDays = Math.max(0, spanDays - nDays);
   }
 

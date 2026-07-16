@@ -4,7 +4,7 @@ const fs      = require('fs');
 const path    = require('path');
 const crypto  = require('crypto');
 const { AUTHORS, PUBLIC_DIR } = require('../config');
-const { parisLocalToISO, isoToDatetimeLocal } = require('../lib/dates');
+const { parisLocalToISO, isoToDatetimeLocal, parseEndDate } = require('../lib/dates');
 const { sanitizeHtml } = require('../lib/html');
 const { readPosts, writePosts } = require('../services/posts');
 const { parseExpenses } = require('../services/expenses');
@@ -26,7 +26,7 @@ router.get('/post', requireAuth, (req, res) => {
 });
 
 router.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', maxCount:10},{name:'gpx', maxCount:1}]), async (req, res) => {
-  const { title, body, location, lat, lon, km, dplus, author, visibility, postDate, type, privateNote } = req.body;
+  const { title, body, location, lat, lon, km, dplus, author, visibility, postDate, endDate, type, privateNote } = req.body;
   if (!title?.trim() || !body?.trim()) {
     return res.send(renderPostForm('Titre et texte obligatoires.', '', !!req.session.margot, csrfToken(req)));
   }
@@ -36,6 +36,10 @@ router.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', ma
 
   let finalDate = new Date().toISOString();
   if (postDate) { const parsed = parisLocalToISO(postDate); if (parsed) finalDate = parsed; }
+
+  // Étape sur plusieurs jours : on ne retient la date de fin que si elle est
+  // postérieure au jour de début (sinon c'est une étape d'un seul jour).
+  const finalEndDate = parseEndDate(endDate, finalDate);
 
   let finalLat = parseFloat(lat) || null;
   let finalLon = parseFloat(lon) || null;
@@ -60,6 +64,7 @@ router.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', ma
   posts.push({
     id:         crypto.randomBytes(8).toString('hex'),
     date:       finalDate,
+    endDate:    finalEndDate,
     title:      title.trim(),
     body:       sanitizeHtml(body),
     location:   location?.trim() || '',
@@ -101,7 +106,7 @@ router.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos'
   const posts = readPosts();
   const idx   = posts.findIndex(p => p.id === req.params.id);
   if (idx === -1) return res.status(404).send('Étape introuvable');
-  const { title, body, location, lat, lon, km, dplus, visibility, postDate, privateNote } = req.body;
+  const { title, body, location, lat, lon, km, dplus, visibility, postDate, endDate, privateNote } = req.body;
   if (!title?.trim() || !body?.trim()) {
     return res.send(renderEditForm(posts[idx], 'Titre et texte obligatoires.', !!req.session.margot, csrfToken(req)));
   }
@@ -115,6 +120,9 @@ router.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos'
     const parsed = parisLocalToISO(postDate);
     if (parsed) finalDate = parsed;
   }
+
+  // Étape sur plusieurs jours : recalcule la date de fin par rapport à la date de début.
+  const finalEndDate = parseEndDate(endDate, finalDate);
 
   await resizeUploadedImages(req.files?.photos || []);
   const newPhotos  = (req.files?.photos || []).map(f => '/uploads/' + f.filename);
@@ -170,6 +178,7 @@ router.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos'
   posts[idx] = {
     ...existing,
     date:       finalDate,
+    endDate:    finalEndDate,
     title:      newTitle,
     body:       newBody,
     location:   location?.trim() || '',

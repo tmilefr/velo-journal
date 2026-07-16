@@ -60,6 +60,11 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
             <input type="datetime-local" name="postDate" value="${nowDatetimeLocal()}" required>
           </div>
           <div class="field">
+            <label>Date de fin <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— étape sur plusieurs jours (optionnel)</span></label>
+            <input type="date" name="endDate">
+            <div style="font-size:12px;color:var(--ink-light);margin-top:6px;line-height:1.5">📅 Laissez vide pour une étape d'un seul jour. Si vous ajoutez une trace GPX, les jours en plus sont comptés comme <strong>repos</strong> (non roulés).</div>
+          </div>
+          <div class="field">
             <label>Lieu d'arrivée</label>
             <div class="loc-wrap">
               <input name="location" id="locationField" type="text" placeholder="Tapez un lieu ou utilisez le GPS..." autocomplete="off">

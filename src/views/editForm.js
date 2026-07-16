@@ -1,4 +1,4 @@
-const { isoToDatetimeLocal } = require('../lib/dates');
+const { isoToDatetimeLocal, isoToDateInput } = require('../lib/dates');
 const { esc } = require('../lib/html');
 const { isVideoUrl } = require('../services/media');
 const { CSS, renderHeader } = require('./layout');
@@ -79,6 +79,11 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
           <div class="field">
             <label>Date et heure de l'étape</label>
             <input type="datetime-local" name="postDate" value="${isoToDatetimeLocal(post.date)}" required>
+          </div>
+          <div class="field">
+            <label>Date de fin <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— étape sur plusieurs jours (optionnel)</span></label>
+            <input type="date" name="endDate" value="${isoToDateInput(post.endDate)}">
+            <div style="font-size:12px;color:var(--ink-light);margin-top:6px;line-height:1.5">📅 Laissez vide pour une étape d'un seul jour. Les jours en plus (au-delà de la trace GPX / du kilométrage) sont comptés comme <strong>repos</strong>.</div>
           </div>
           <div class="field">
             <label>Lieu</label>

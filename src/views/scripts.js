@@ -312,7 +312,7 @@ function saveDraft(key, formId, bodyHiddenId) {
     var form = document.getElementById(formId);
     if (!form) return;
     var draft = {};
-    ['title','location','km','dplus','privateNote','postDate'].forEach(function(n) {
+    ['title','location','km','dplus','privateNote','postDate','endDate'].forEach(function(n) {
       var el = form.querySelector('[name=' + n + ']');
       if (el) draft[n] = el.value;
     });
@@ -334,7 +334,7 @@ function restoreDraft(key, formId, bodyEditorId, bodyHiddenId) {
     if (!draft) return;
     var form = document.getElementById(formId);
     if (!form) return;
-    ['title','location','km','dplus','privateNote','postDate'].forEach(function(n) {
+    ['title','location','km','dplus','privateNote','postDate','endDate'].forEach(function(n) {
       var el = form.querySelector('[name=' + n + ']');
       if (el && draft[n] != null) el.value = draft[n];
     });

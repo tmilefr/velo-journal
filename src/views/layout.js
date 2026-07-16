@@ -267,6 +267,8 @@ const CSS = `
   .card-divider{height:1px;background:linear-gradient(to right, var(--teal-light), transparent);margin:0 18px 14px;opacity:0.35;}
   .card-badges{display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap;}
   .card-loc{font-size:12px;background:var(--sage);color:var(--emerald);padding:4px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:4px;font-weight:600;letter-spacing:0.01em;}
+  .card-multiday{font-size:12px;background:var(--mist);color:var(--ocean-mid);padding:4px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:4px;font-weight:600;letter-spacing:0.01em;}
+  .card-restnote{font-size:12px;color:var(--ink-light);display:flex;align-items:center;gap:5px;font-weight:500;}
   .km-badge{font-size:12px;background:var(--accent-light);color:var(--accent);padding:4px 10px;border-radius:20px;font-weight:700;display:inline-flex;align-items:center;gap:3px;}
   .dplus-badge{font-size:12px;background:var(--mist);color:var(--ocean-mid);padding:4px 10px;border-radius:20px;font-weight:600;display:inline-flex;align-items:center;gap:3px;}
   .dplus-clickable{cursor:pointer;border:1.5px solid var(--teal-light);font-family:inherit;transition:background .15s,transform .15s;}

@@ -4,11 +4,13 @@ const fs      = require('fs');
 const path    = require('path');
 const { DATA, UPLOADS_DIR } = require('../config');
 const { buildZip } = require('../lib/zip');
-const { writePosts } = require('../services/posts');
+const { readPosts, writePosts } = require('../services/posts');
+const { isVideoUrl } = require('../services/media');
 const { upload } = require('../middleware/upload');
 const { csrfToken, requireCsrf } = require('../middleware/csrf');
 const { requireAuth } = require('../middleware/auth');
 const { renderSettings } = require('../views/settings');
+const { renderPanorama } = require('../views/panorama');
 
 const router = express.Router();
 
@@ -60,6 +62,24 @@ router.get('/settings', requireAuth, (req, res) => {
       }
     : null;
   req.session.save(() => res.send(renderSettings(token, req.query.restored === '1', recalc)));
+});
+
+// ── Panorama : profils de dénivelé de toutes les étapes mis bout à bout ──
+// Génère (côté client, sur canvas) une grande image blanche avec la coupe
+// altimétrique continue du voyage, un trait en biais vers chaque point
+// d'arrivée de GPX, et la photo de chaque étape reliée à sa trace.
+router.get('/panorama', requireAuth, (req, res) => {
+  const stages = readPosts()
+    .filter(p => p.gpx && p.type !== 'preparation')
+    .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
+    .map(p => ({
+      gpx:   p.gpx,
+      title: p.title || p.location || '',
+      date:  p.date || '',
+      km:    parseInt(p.km) || 0,
+      photo: (p.photos || []).find(ph => !isVideoUrl(ph)) || null,
+    }));
+  res.send(renderPanorama(stages));
 });
 
 router.post('/restore', requireAuth, requireCsrf, upload.single('backup'), (req, res) => {

@@ -1,4 +1,4 @@
-const { formatDate } = require('../lib/dates');
+const { formatDate, postEndISO, postDaySpan } = require('../lib/dates');
 const { formatEuro, initials } = require('../lib/format');
 const { esc, renderBody } = require('../lib/html');
 const { isVideoUrl } = require('../services/media');
@@ -18,6 +18,9 @@ function renderCard(p, isAdmin, csrf, isStrictAdmin = false) {
     return (p.captions && p.captions[idx]) ? p.captions[idx] : '';
   };
   const expTotal = postExpenseTotal(p);
+  const span     = postDaySpan(p);
+  const endShort = span > 1 ? new Date(postEndISO(p)).toLocaleDateString('fr-FR', { timeZone:'Europe/Paris', day:'numeric', month:'long' }) : '';
+  const nonRode  = span > 1 ? span - 1 : 0; // jours de l'étape non roulés (repos)
   const d       = new Date(p.date);
   const weekday = d.toLocaleDateString('fr-FR', { timeZone:'Europe/Paris', weekday:'long' });
   const day     = d.toLocaleDateString('fr-FR', { timeZone:'Europe/Paris', day:'numeric' });
@@ -37,6 +40,7 @@ function renderCard(p, isAdmin, csrf, isStrictAdmin = false) {
         </div>
       </div>
       <div class="card-date-right">
+        ${span > 1 ? `<span class="card-multiday">📅 ${span} jours · jusqu'au ${endShort}</span>` : ''}
         ${p.location ? `<span class="card-loc">📍 ${esc(p.location)}</span>` : ''}
       </div>
     </div>
@@ -55,10 +59,12 @@ function renderCard(p, isAdmin, csrf, isStrictAdmin = false) {
         <span class="translate-status"></span>
       </div>
       ${(p.km || p.dplus) ? `
-      <div class="card-badges" style="margin-bottom:14px">
+      <div class="card-badges" style="margin-bottom:${nonRode > 0 ? '8px' : '14px'}">
         ${p.km    ? `<span class="km-badge">🚴 +${esc(String(p.km))} km</span>` : ''}
         ${p.dplus ? (p.gpx ? `<button type="button" class="dplus-badge dplus-clickable" data-elev-gpx="${p.gpx}" data-elev-title="${esc(p.title)}" title="Voir le profil de dénivelé">⛰️ ${esc(String(p.dplus))} m D+ 📈</button>` : `<span class="dplus-badge">⛰️ ${esc(String(p.dplus))} m D+</span>`) : ''}
       </div>` : ''}
+      ${(nonRode > 0 && (p.km || p.dplus)) ? `
+      <div class="card-restnote" style="margin-bottom:14px">🛌 ${nonRode} jour${nonRode > 1 ? 's' : ''} non roulé${nonRode > 1 ? 's' : ''} (repos) sur cette étape</div>` : ''}
       ${(() => {
         const imgs = (p.photos || []).filter(ph => !isVideoUrl(ph));
         const vids = (p.photos || []).filter(ph => isVideoUrl(ph));
