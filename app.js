@@ -278,6 +278,53 @@ function parisOffsetMinutes(date) {
   return Math.round((asUTC - date.getTime()) / 60000);
 }
 
+// Numéro de jour calendaire (heure de Paris) d'un ISO — entier stable qu'on peut
+// soustraire pour compter des jours (indépendant de l'heure et du fuseau).
+function parisDayNumber(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(d);
+  const p = {};
+  parts.forEach(x => { p[x.type] = x.value; });
+  return Math.floor(Date.UTC(+p.year, +p.month - 1, +p.day) / 86400000);
+}
+
+// Date de fin (ISO) d'une étape multi-jours : renvoie endDate seulement si elle
+// est postérieure au jour de début, sinon la date de début (étape d'un seul jour).
+function postEndISO(p) {
+  if (!p || !p.endDate) return p ? p.date : null;
+  const start = parisDayNumber(p.date);
+  const end   = parisDayNumber(p.endDate);
+  return (start != null && end != null && end > start) ? p.endDate : p.date;
+}
+
+// Nombre de jours calendaires couverts par une étape (toujours >= 1).
+function postDaySpan(p) {
+  const start = parisDayNumber(p.date);
+  const end   = parisDayNumber(postEndISO(p));
+  if (start == null || end == null) return 1;
+  return Math.max(1, end - start + 1);
+}
+
+// Valide la date de fin saisie (input date, YYYY-MM-DD, heure de Paris) par rapport
+// à la date de début (ISO). Renvoie un ISO (fin de journée) si elle est postérieure
+// au jour de début, sinon null (étape d'un seul jour).
+function parseEndDate(endDateInput, startISO) {
+  if (!endDateInput) return null;
+  const raw = String(endDateInput).trim();
+  if (!raw) return null;
+  // On ancre à 12:00 heure de Paris pour éviter tout effet de bord de fuseau.
+  const parsed = parisLocalToISO(raw.length <= 10 ? raw + 'T12:00' : raw);
+  if (!parsed) return null;
+  const startDay = parisDayNumber(startISO);
+  const endDay   = parisDayNumber(parsed);
+  if (startDay == null || endDay == null || endDay <= startDay) return null;
+  return parsed;
+}
+
 // Calcule les statistiques de roulage.
 // On exclut le départ et les jours sans kilométrage :
 // seuls les jours avec km > 0 comptent comme "jours roulés".
@@ -301,16 +348,16 @@ function computeStats(posts) {
   const maxDplus    = dplusValues.length ? Math.max(...dplusValues) : 0;
   const maxDplusDay = ridingDays.find(p => (parseInt(p.dplus) || 0) === maxDplus) || null;
 
-  // durée calendaire (du 1er au dernier jour roulé, bornes incluses)
+  // durée calendaire (du 1er jour roulé au dernier jour couvert, bornes incluses).
+  // Une étape peut s'étaler sur plusieurs jours (date de fin) : ses jours
+  // supplémentaires ne sont pas roulés et gonflent donc la période et les jours
+  // de repos, mais pas le nombre de jours roulés (nDays).
   let spanDays = nDays;
   let restDays = 0;
-  if (nDays >= 2) {
-    const first = new Date(ridingDays[0].date);
-    const last  = new Date(ridingDays[nDays - 1].date);
-    const dayMs = 24 * 60 * 60 * 1000;
-    const d0 = Date.UTC(first.getFullYear(), first.getMonth(), first.getDate());
-    const d1 = Date.UTC(last.getFullYear(),  last.getMonth(),  last.getDate());
-    spanDays = Math.round((d1 - d0) / dayMs) + 1;
+  if (nDays >= 1) {
+    const firstDay = Math.min(...ridingDays.map(p => parisDayNumber(p.date)));
+    const lastDay  = Math.max(...ridingDays.map(p => parisDayNumber(postEndISO(p))));
+    spanDays = lastDay - firstDay + 1;
     restDays = Math.max(0, spanDays - nDays);
   }
 
@@ -844,7 +891,7 @@ app.get('/post', requireAuth, (req, res) => {
 });
 
 app.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', maxCount:10},{name:'gpx', maxCount:1}]), async (req, res) => {
-  const { title, body, location, lat, lon, km, dplus, author, visibility, postDate, type, privateNote } = req.body;
+  const { title, body, location, lat, lon, km, dplus, author, visibility, postDate, endDate, type, privateNote } = req.body;
   if (!title?.trim() || !body?.trim()) {
     return res.send(renderPostForm('Titre et texte obligatoires.', '', !!req.session.margot, csrfToken(req)));
   }
@@ -854,6 +901,10 @@ app.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', maxCo
 
   let finalDate = new Date().toISOString();
   if (postDate) { const parsed = parisLocalToISO(postDate); if (parsed) finalDate = parsed; }
+
+  // Étape sur plusieurs jours : on ne retient la date de fin que si elle est
+  // postérieure au jour de début (sinon c'est une étape d'un seul jour).
+  const finalEndDate = parseEndDate(endDate, finalDate);
 
   let finalLat = parseFloat(lat) || null;
   let finalLon = parseFloat(lon) || null;
@@ -878,6 +929,7 @@ app.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', maxCo
   posts.push({
     id:         crypto.randomBytes(8).toString('hex'),
     date:       finalDate,
+    endDate:    finalEndDate,
     title:      title.trim(),
     body:       sanitizeHtml(body),
     location:   location?.trim() || '',
@@ -919,7 +971,7 @@ app.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos', m
   const posts = readPosts();
   const idx   = posts.findIndex(p => p.id === req.params.id);
   if (idx === -1) return res.status(404).send('Étape introuvable');
-  const { title, body, location, lat, lon, km, dplus, visibility, postDate, privateNote } = req.body;
+  const { title, body, location, lat, lon, km, dplus, visibility, postDate, endDate, privateNote } = req.body;
   if (!title?.trim() || !body?.trim()) {
     return res.send(renderEditForm(posts[idx], 'Titre et texte obligatoires.', !!req.session.margot, csrfToken(req)));
   }
@@ -933,6 +985,9 @@ app.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos', m
     const parsed = parisLocalToISO(postDate);
     if (parsed) finalDate = parsed;
   }
+
+  // Étape sur plusieurs jours : recalcule la date de fin par rapport à la date de début.
+  const finalEndDate = parseEndDate(endDate, finalDate);
 
   await resizeUploadedImages(req.files?.photos || []);
   const newPhotos  = (req.files?.photos || []).map(f => '/uploads/' + f.filename);
@@ -988,6 +1043,7 @@ app.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos', m
   posts[idx] = {
     ...existing,
     date:       finalDate,
+    endDate:    finalEndDate,
     title:      newTitle,
     body:       newBody,
     location:   location?.trim() || '',
@@ -1401,6 +1457,8 @@ const CSS = `
   .card-divider{height:1px;background:linear-gradient(to right, var(--teal-light), transparent);margin:0 18px 14px;opacity:0.35;}
   .card-badges{display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap;}
   .card-loc{font-size:12px;background:var(--sage);color:var(--emerald);padding:4px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:4px;font-weight:600;letter-spacing:0.01em;}
+  .card-multiday{font-size:12px;background:var(--mist);color:var(--ocean-mid);padding:4px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:4px;font-weight:600;letter-spacing:0.01em;}
+  .card-restnote{font-size:12px;color:var(--ink-light);display:flex;align-items:center;gap:5px;font-weight:500;}
   .km-badge{font-size:12px;background:var(--accent-light);color:var(--accent);padding:4px 10px;border-radius:20px;font-weight:700;display:inline-flex;align-items:center;gap:3px;}
   .dplus-badge{font-size:12px;background:var(--mist);color:var(--ocean-mid);padding:4px 10px;border-radius:20px;font-weight:600;display:inline-flex;align-items:center;gap:3px;}
   .dplus-clickable{cursor:pointer;border:1.5px solid var(--teal-light);font-family:inherit;transition:background .15s,transform .15s;}
@@ -1676,6 +1734,11 @@ function isoToDatetimeLocal(iso) {
 }
 function nowDatetimeLocal() {
   return isoToDatetimeLocal(new Date().toISOString());
+}
+// Valeur pour un <input type="date"> (YYYY-MM-DD, en heure de Paris) à partir d'un ISO.
+function isoToDateInput(iso) {
+  if (!iso) return '';
+  return isoToDatetimeLocal(iso).slice(0, 10);
 }
 function esc(s) {
   return String(s ?? '')
@@ -2059,7 +2122,7 @@ function saveDraft(key, formId, bodyHiddenId) {
     var form = document.getElementById(formId);
     if (!form) return;
     var draft = {};
-    ['title','location','km','dplus','privateNote','postDate'].forEach(function(n) {
+    ['title','location','km','dplus','privateNote','postDate','endDate'].forEach(function(n) {
       var el = form.querySelector('[name=' + n + ']');
       if (el) draft[n] = el.value;
     });
@@ -2081,7 +2144,7 @@ function restoreDraft(key, formId, bodyEditorId, bodyHiddenId) {
     if (!draft) return;
     var form = document.getElementById(formId);
     if (!form) return;
-    ['title','location','km','dplus','privateNote','postDate'].forEach(function(n) {
+    ['title','location','km','dplus','privateNote','postDate','endDate'].forEach(function(n) {
       var el = form.querySelector('[name=' + n + ']');
       if (el && draft[n] != null) el.value = draft[n];
     });
@@ -2550,6 +2613,9 @@ function renderCard(p, isAdmin, csrf, isStrictAdmin = false) {
     return (p.captions && p.captions[idx]) ? p.captions[idx] : '';
   };
   const expTotal = postExpenseTotal(p);
+  const span     = postDaySpan(p);
+  const endShort = span > 1 ? new Date(postEndISO(p)).toLocaleDateString('fr-FR', { timeZone:'Europe/Paris', day:'numeric', month:'long' }) : '';
+  const nonRode  = span > 1 ? span - 1 : 0; // jours de l'étape non roulés (repos)
   const d       = new Date(p.date);
   const weekday = d.toLocaleDateString('fr-FR', { timeZone:'Europe/Paris', weekday:'long' });
   const day     = d.toLocaleDateString('fr-FR', { timeZone:'Europe/Paris', day:'numeric' });
@@ -2569,6 +2635,7 @@ function renderCard(p, isAdmin, csrf, isStrictAdmin = false) {
         </div>
       </div>
       <div class="card-date-right">
+        ${span > 1 ? `<span class="card-multiday">📅 ${span} jours · jusqu'au ${endShort}</span>` : ''}
         ${p.location ? `<span class="card-loc">📍 ${esc(p.location)}</span>` : ''}
       </div>
     </div>
@@ -2587,10 +2654,12 @@ function renderCard(p, isAdmin, csrf, isStrictAdmin = false) {
         <span class="translate-status"></span>
       </div>
       ${(p.km || p.dplus) ? `
-      <div class="card-badges" style="margin-bottom:14px">
+      <div class="card-badges" style="margin-bottom:${nonRode > 0 ? '8px' : '14px'}">
         ${p.km    ? `<span class="km-badge">🚴 +${esc(String(p.km))} km</span>` : ''}
         ${p.dplus ? (p.gpx ? `<button type="button" class="dplus-badge dplus-clickable" data-elev-gpx="${p.gpx}" data-elev-title="${esc(p.title)}" title="Voir le profil de dénivelé">⛰️ ${esc(String(p.dplus))} m D+ 📈</button>` : `<span class="dplus-badge">⛰️ ${esc(String(p.dplus))} m D+</span>`) : ''}
       </div>` : ''}
+      ${(nonRode > 0 && (p.km || p.dplus)) ? `
+      <div class="card-restnote" style="margin-bottom:14px">🛌 ${nonRode} jour${nonRode > 1 ? 's' : ''} non roulé${nonRode > 1 ? 's' : ''} (repos) sur cette étape</div>` : ''}
       ${(() => {
         const imgs = (p.photos || []).filter(ph => !isVideoUrl(ph));
         const vids = (p.photos || []).filter(ph => isVideoUrl(ph));
@@ -3430,6 +3499,11 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
             <input type="datetime-local" name="postDate" value="${nowDatetimeLocal()}" required>
           </div>
           <div class="field">
+            <label>Date de fin <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— étape sur plusieurs jours (optionnel)</span></label>
+            <input type="date" name="endDate">
+            <div style="font-size:12px;color:var(--ink-light);margin-top:6px;line-height:1.5">📅 Laissez vide pour une étape d'un seul jour. Si vous ajoutez une trace GPX, les jours en plus sont comptés comme <strong>repos</strong> (non roulés).</div>
+          </div>
+          <div class="field">
             <label>Lieu d'arrivée</label>
             <div class="loc-wrap">
               <input name="location" id="locationField" type="text" placeholder="Tapez un lieu ou utilisez le GPS..." autocomplete="off">
@@ -3579,6 +3653,11 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
           <div class="field">
             <label>Date et heure de l'étape</label>
             <input type="datetime-local" name="postDate" value="${isoToDatetimeLocal(post.date)}" required>
+          </div>
+          <div class="field">
+            <label>Date de fin <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— étape sur plusieurs jours (optionnel)</span></label>
+            <input type="date" name="endDate" value="${isoToDateInput(post.endDate)}">
+            <div style="font-size:12px;color:var(--ink-light);margin-top:6px;line-height:1.5">📅 Laissez vide pour une étape d'un seul jour. Les jours en plus (au-delà de la trace GPX / du kilométrage) sont comptés comme <strong>repos</strong>.</div>
           </div>
           <div class="field">
             <label>Lieu</label>
