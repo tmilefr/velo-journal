@@ -29,8 +29,8 @@ sudo apt-get install -y nodejs
 # Créer le dossier
 mkdir -p ~/velo-journal && cd ~/velo-journal
 
-# Copier app.js et package.json ici
-# (via sftp, scp, ou coller le contenu)
+# Copier server.js, le dossier src/ et package.json ici
+# (via sftp, scp, git clone, …)
 
 # Installer les dépendances
 npm install
@@ -70,10 +70,10 @@ NODE_ENV=production
 
 ```bash
 # Démarrage simple avec .env
-node app.js
+node server.js
 
 # Ou en passant les variables directement
-ADMIN_PASSWORD=monmotdepasse TRIP_TITLE="Paris → Rome" node app.js
+ADMIN_PASSWORD=monmotdepasse TRIP_TITLE="Paris → Rome" node server.js
 ```
 
 ### 5. Rendre accessible publiquement avec Nginx
@@ -123,7 +123,7 @@ sudo certbot --nginx -d VOTRE_DOMAINE.fr
 npm install -g pm2
 
 # Démarrer (les variables sont lues depuis .env automatiquement)
-pm2 start app.js --name velo-journal
+pm2 start server.js --name velo-journal
 
 # Démarrer automatiquement au reboot
 pm2 startup
@@ -159,9 +159,17 @@ pm2 save
 
 ```
 velo-journal/
-├── app.js             ← tout le code (backend + templates HTML)
+├── server.js          ← point d'entrée (crée les dossiers, lance le serveur)
 ├── package.json
 ├── .env               ← vos secrets (ne pas commiter !)
+├── src/
+│   ├── app.js         ← assemblage Express (middleware, routes)
+│   ├── config.js      ← lecture du .env, constantes, chemins
+│   ├── lib/           ← utilitaires génériques (dates, HTML, ZIP, log…)
+│   ├── middleware/    ← auth, CSRF, upload (multer)
+│   ├── services/      ← logique métier (posts, GPX, dépenses, stats…)
+│   ├── routes/        ← routeurs Express par domaine
+│   └── views/         ← templates HTML (layout, pages, scripts client)
 ├── data/
 │   └── posts.json     ← vos étapes (auto-créé)
 └── public/
