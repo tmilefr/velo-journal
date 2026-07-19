@@ -28,6 +28,7 @@ const PORT = process.env.PORT || 3000;
 
 // ── Chemins ───────────────────────────────────────────────
 const DATA        = path.join(ROOT, 'data', 'posts.json');
+const SUBSCRIBERS = path.join(ROOT, 'data', 'subscribers.json');
 const PUBLIC_DIR  = path.join(ROOT, 'public');
 const UPLOADS_DIR = path.join(PUBLIC_DIR, 'uploads');
 const LOG_FILE    = path.join(ROOT, 'application.log');
@@ -42,18 +43,31 @@ const TRIP_TITLE      = process.env.TRIP_TITLE      || 'Nijumatim, carnet de voy
 const TRIP_START      = process.env.TRIP_START      || '';
 const TRIP_END        = process.env.TRIP_END        || '';
 
+// ── E-mail (notifications d'abonnés) ──────────────────────
+const SMTP_HOST   = process.env.SMTP_HOST   || '';
+const SMTP_PORT   = parseInt(process.env.SMTP_PORT, 10) || 587;
+const SMTP_SECURE = process.env.SMTP_SECURE === '1' || process.env.SMTP_SECURE === 'true';
+const SMTP_USER   = process.env.SMTP_USER   || '';
+const SMTP_PASS   = process.env.SMTP_PASS   || '';
+const MAIL_FROM   = process.env.MAIL_FROM   || SMTP_USER;
+const BASE_URL    = (process.env.BASE_URL   || '').replace(/\/+$/, ''); // ex. https://monvoyage.fr
+const MAIL_ENABLED = !!(SMTP_HOST && MAIL_FROM);
+
 if (ADMIN_PASSWORD === 'velo2024')     console.warn('⚠️  ADMIN_PASSWORD est la valeur par défaut — changez-la dans .env !');
 if (FAMILY_PASSWORD === 'famille2024') console.warn('⚠️  FAMILY_PASSWORD est la valeur par défaut — changez-la dans .env !');
 if (!process.env.SESSION_SECRET)       console.warn('⚠️  SESSION_SECRET non défini — les sessions seront invalidées à chaque redémarrage !');
 if (!MYMEMORY_EMAIL)                   console.warn('ℹ️  MYMEMORY_EMAIL non défini — quota de traduction limité à 5 000 caractères/jour (50 000 avec un email renseigné dans .env).');
+if (!MAIL_ENABLED)                     console.warn('ℹ️  SMTP_HOST non défini — abonnements e-mail désactivés (renseignez SMTP_HOST/SMTP_USER/SMTP_PASS dans .env pour les activer).');
 
 const AUTHORS = ['NiJuMaTim'];
 
 module.exports = {
   ROOT, PORT,
-  DATA, PUBLIC_DIR, UPLOADS_DIR, LOG_FILE,
+  DATA, SUBSCRIBERS, PUBLIC_DIR, UPLOADS_DIR, LOG_FILE,
   ADMIN_PASSWORD, FAMILY_PASSWORD, MARGOT_PASSWORD,
   MYMEMORY_EMAIL, SESSION_SECRET,
   TRIP_TITLE, TRIP_START, TRIP_END,
+  SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS,
+  MAIL_FROM, BASE_URL, MAIL_ENABLED,
   AUTHORS,
 };

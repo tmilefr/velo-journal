@@ -5,6 +5,7 @@ const path    = require('path');
 const { DATA, UPLOADS_DIR } = require('../config');
 const { buildZip } = require('../lib/zip');
 const { readPosts, writePosts } = require('../services/posts');
+const { readSubscribers } = require('../services/subscribers');
 const { isVideoUrl } = require('../services/media');
 const { upload } = require('../middleware/upload');
 const { csrfToken, requireCsrf } = require('../middleware/csrf');
@@ -61,7 +62,7 @@ router.get('/settings', requireAuth, (req, res) => {
         errors:  parseInt(req.query.errors, 10) || 0,
       }
     : null;
-  req.session.save(() => res.send(renderSettings(token, req.query.restored === '1', recalc)));
+  req.session.save(() => res.send(renderSettings(token, req.query.restored === '1', recalc, readSubscribers())));
 });
 
 // ── Panorama : profils de dénivelé de toutes les étapes mis bout à bout ──

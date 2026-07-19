@@ -9,8 +9,9 @@ Journal de voyage vélo auto-hébergé. Postez vos étapes depuis votre téléph
 - **Carte Leaflet** — tracé automatique de votre itinéraire
 - **Statistiques** — km cumulés, D+ total, nombre d'étapes
 - **Flux RSS** — pour les proches qui utilisent un lecteur RSS
+- **Notifications e-mail** — vos proches s'abonnent avec leur e-mail (double opt-in) et sont prévenus à chaque nouvelle étape publiée
 - **Mot de passe** — page de post protégée, page famille publique
-- **Zéro base de données** — tout dans un fichier JSON
+- **Zéro base de données** — tout dans des fichiers JSON
 
 ---
 
@@ -51,6 +52,13 @@ Créez un fichier `.env` dans le dossier du projet :
 | `TRIP_START`     | _(vide)_          | Ville de départ (affiché dans le header) |
 | `TRIP_END`       | _(vide)_          | Ville d'arrivée                          |
 | `NODE_ENV`       | _(vide)_          | Mettre `production` en prod (active cookie secure) |
+| `SMTP_HOST`      | _(vide)_          | Serveur SMTP pour les notifications e-mail (vide = fonctionnalité désactivée) |
+| `SMTP_PORT`      | `587`             | Port SMTP                                |
+| `SMTP_SECURE`    | _(vide)_          | Mettre `1` pour TLS implicite (port 465) |
+| `SMTP_USER`      | _(vide)_          | Identifiant SMTP                         |
+| `SMTP_PASS`      | _(vide)_          | Mot de passe SMTP                        |
+| `MAIL_FROM`      | `SMTP_USER`       | Adresse expéditrice des e-mails          |
+| `BASE_URL`       | _(auto)_          | URL publique du site pour les liens dans les e-mails (ex. `https://monvoyage.fr`) — déduite de la requête si vide |
 
 > ⚠️ **Important** — Le serveur affiche un avertissement au démarrage si `ADMIN_PASSWORD`, `FAMILY_PASSWORD` ou `SESSION_SECRET` sont encore à leur valeur par défaut. Changez-les avant de mettre le site en ligne.
 
@@ -153,6 +161,25 @@ pm2 save
 
 `https://votre-domaine.fr/rss` — pour ceux qui utilisent Feedly, NetNewsWire, etc.
 
+### Notifications e-mail
+
+Si SMTP est configuré dans `.env`, un bandeau **« 🔔 Être prévenu des nouvelles étapes par e-mail »** apparaît en haut du journal :
+
+1. Le lecteur saisit son adresse et reçoit un e-mail de confirmation (double opt-in, lien valable 7 jours)
+2. Une fois confirmé, il reçoit un e-mail à **chaque nouvelle étape publiée** — une seule fois par étape, jamais lors des modifications
+3. Chaque e-mail contient un lien de désinscription en un clic
+4. La liste des abonnés se gère depuis la page **Système** (admin)
+
+Exemple de configuration SMTP (Gmail avec mot de passe d'application) :
+
+```env
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=vous@gmail.com
+SMTP_PASS=xxxx xxxx xxxx xxxx
+BASE_URL=https://votre-domaine.fr
+```
+
 ---
 
 ## Structure des fichiers
@@ -171,7 +198,8 @@ velo-journal/
 │   ├── routes/        ← routeurs Express par domaine
 │   └── views/         ← templates HTML (layout, pages, scripts client)
 ├── data/
-│   └── posts.json     ← vos étapes (auto-créé)
+│   ├── posts.json     ← vos étapes (auto-créé)
+│   └── subscribers.json ← abonnés e-mail (auto-créé)
 └── public/
     └── uploads/       ← vos photos (auto-créé)
 ```
