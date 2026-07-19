@@ -163,7 +163,7 @@ pm2 save
 
 ### Notifications e-mail
 
-Si SMTP est configuré dans `.env`, un bandeau **« 🔔 Être prévenu des nouvelles étapes par e-mail »** apparaît en haut du journal, visible uniquement une fois connecté (rien n'est exposé sans mot de passe). L'abonnement lui-même ne retient que l'adresse e-mail :
+Si SMTP est configuré dans `.env`, une icône **🔔** apparaît à côté du menu (sur le journal, la timeline, la carte et la préparation) et ouvre une fenêtre d'abonnement. Visible uniquement une fois connecté — rien n'est exposé sans mot de passe. L'abonnement lui-même ne retient que l'adresse e-mail :
 
 1. Le lecteur saisit son adresse et reçoit un e-mail de confirmation (double opt-in, lien valable 7 jours)
 2. Une fois confirmé, il reçoit un e-mail à **chaque nouvelle étape publiée** — une seule fois par étape, jamais lors des modifications

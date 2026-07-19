@@ -8,7 +8,7 @@ const { CSS, renderHeader } = require('./layout');
 //  renderTimeline
 // ══════════════════════════════════════════════════════════
 
-function renderTimeline(posts, isAdmin = false, isStrictAdmin = false) {
+function renderTimeline(posts, isAdmin = false, isStrictAdmin = false, csrf = '') {
   const timelineItems = posts.length === 0
     ? `<div class="empty"><div class="empty-icon">🗺️</div><h3>Aucune étape pour l'instant</h3></div>`
     : posts.map((p, i) => `
@@ -44,7 +44,7 @@ function renderTimeline(posts, isAdmin = false, isStrictAdmin = false) {
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Timeline — ${TRIP_TITLE}</title><style>${CSS}</style>
   </head><body>
-    ${renderHeader({ activePage: 'timeline', isAdmin, isStrictAdmin, showMap: true })}
+    ${renderHeader({ activePage: 'timeline', isAdmin, isStrictAdmin, showMap: true, csrf })}
     <div class="timeline-wrap"><div class="timeline">${timelineItems}</div></div>
   </body></html>`;
 }

@@ -1,5 +1,4 @@
 const { TRIP_TITLE } = require('../config');
-const { renderSubscribeWidget } = require('./subscribeWidget');
 const { totalKm, totalDPlus } = require('../services/stats');
 const { CSS, renderHeader } = require('./layout');
 const {
@@ -29,13 +28,12 @@ function renderPublic(posts, isAdmin = false, csrf = '', isStrictAdmin = false) 
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>${TRIP_TITLE}</title><style>${CSS}</style>
   </head><body>
-    ${renderHeader({ activePage: 'journal', isAdmin, isStrictAdmin, showMap: withGps.length > 0 })}
+    ${renderHeader({ activePage: 'journal', isAdmin, isStrictAdmin, showMap: withGps.length > 0, csrf })}
     <div class="stats-bar">
       <div class="stat"><div class="stat-num">${km.toLocaleString('fr-FR')}</div><div class="stat-lbl">km</div></div>
       <div class="stat"><div class="stat-num">${posts.length}</div><div class="stat-lbl">étapes</div></div>
       <div class="stat"><div class="stat-num">${dp}</div><div class="stat-lbl">m D+</div></div>
     </div>
-    ${renderSubscribeWidget(csrf)}
     <div class="feed" id="feed">${postCards}</div>
     ${hasMore ? `<div id="loadMoreSentinel" data-offset="${PAGE}" style="text-align:center;padding:24px 12px 40px">
       <div class="lazy-spinner" id="lazySpinner" style="display:none">⏳ Chargement…</div>
