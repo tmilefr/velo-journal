@@ -227,6 +227,21 @@ const CSS = `
   .exp-grand-total .egt-num{font-family:'Playfair Display',serif;font-size:32px;font-weight:700;}
   .exp-grand-total .egt-lbl{font-size:12px;text-transform:uppercase;letter-spacing:0.08em;opacity:0.9;margin-top:4px;}
 
+  /* ── ABONNEMENT E-MAIL ───────────────────────────── */
+  .sub-strip{max-width:620px;margin:16px auto -6px;padding:0 12px;display:flex;flex-direction:column;gap:8px;}
+  .sub-toggle{align-self:center;background:var(--mist);border:1.5px dashed var(--teal-light);color:var(--ocean-mid);border-radius:20px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s;}
+  .sub-toggle:hover{background:var(--sage);}
+  .sub-toggle.sub-done{border-style:solid;background:var(--sage);color:var(--emerald);}
+  .sub-form{display:flex;gap:8px;justify-content:center;}
+  .sub-form input{flex:1;max-width:280px;border:1.5px solid var(--sand);border-radius:10px;padding:9px 12px;font-size:14px;font-family:inherit;background:#fff;color:var(--ink);}
+  .sub-form input:focus{outline:none;border-color:var(--teal-light);box-shadow:0 0 0 3px rgba(23,162,184,0.12);}
+  .sub-form .sub-btn{background:linear-gradient(135deg,var(--ocean-mid),var(--teal));color:#fff;border:none;border-radius:10px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;transition:opacity .15s;}
+  .sub-form .sub-btn:hover{opacity:.9}
+  .sub-form .sub-btn[disabled]{opacity:.6;cursor:default}
+  .sub-msg{text-align:center;font-size:13px;padding:8px 12px;border-radius:10px;}
+  .sub-msg.ok{background:var(--sage);color:var(--emerald);border:1px solid var(--emerald-light);}
+  .sub-msg.err{background:#fef2f2;color:#dc2626;border:1px solid #fecaca;}
+
   /* ── FEED ────────────────────────────────────────── */
   .feed{max-width:620px;margin:0 auto;padding:20px 12px 80px;display:flex;flex-direction:column;gap:20px;}
 

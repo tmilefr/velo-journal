@@ -10,6 +10,7 @@ const { readPosts, writePosts } = require('../services/posts');
 const { parseExpenses } = require('../services/expenses');
 const { parseGpxStats } = require('../services/gpx');
 const { resizeUploadedImages, deletePostFiles } = require('../services/media');
+const { maybeNotifyNewPost, siteBaseUrl } = require('../services/mailer');
 const { upload } = require('../middleware/upload');
 const { csrfToken, requireCsrf } = require('../middleware/csrf');
 const { requireAuth } = require('../middleware/auth');
@@ -61,8 +62,9 @@ router.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', ma
   const posts    = readPosts();
   const validViz = ['all', 'margot', 'admin'];
   const forcedViz = req.session.margot ? 'margot' : (validViz.includes(visibility) ? visibility : 'all');
+  const newId    = crypto.randomBytes(8).toString('hex');
   posts.push({
-    id:         crypto.randomBytes(8).toString('hex'),
+    id:         newId,
     date:       finalDate,
     endDate:    finalEndDate,
     title:      title.trim(),
@@ -83,6 +85,7 @@ router.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', ma
     comments:   []
   });
   writePosts(posts);
+  maybeNotifyNewPost(newId, siteBaseUrl(req));
   res.redirect(type === 'preparation' ? '/preparation' : '/');
 });
 
@@ -197,6 +200,12 @@ router.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos'
       : {},
   };
   writePosts(posts);
+  // Un post qui devient public à l'occasion de cette édition (ex. brouillon en
+  // visibilité admin qu'on « valide ») déclenche la notification des abonnés —
+  // une seule fois : maybeNotifyNewPost ignore les posts déjà notifiés.
+  const wasPublic = !existing.visibility || existing.visibility === 'all';
+  const isPublic  = !posts[idx].visibility || posts[idx].visibility === 'all';
+  if (!wasPublic && isPublic) maybeNotifyNewPost(req.params.id, siteBaseUrl(req));
   res.redirect('/#post-' + req.params.id);
 });
 

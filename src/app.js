@@ -51,6 +51,7 @@ app.use(require('./routes/pages'));
 app.use(require('./routes/comments'));
 app.use(require('./routes/translate'));
 app.use(require('./routes/auth'));
+app.use(require('./routes/subscribe'));
 app.use(require('./routes/posts'));
 app.use(require('./routes/system'));
 
