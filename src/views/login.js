@@ -1,14 +1,12 @@
 const { TRIP_TITLE, TRIP_START, TRIP_END } = require('../config');
 const { esc } = require('../lib/html');
 const { CSS } = require('./layout');
-const { renderSubscribeWidget } = require('./subscribeWidget');
 
 // ══════════════════════════════════════════════════════════
 //  renderLogin
 // ══════════════════════════════════════════════════════════
 
-function renderLogin(error, next = '/', csrf = '') {
-  const subscribeWidget = renderSubscribeWidget(csrf);
+function renderLogin(error, next = '/') {
   return `<!DOCTYPE html><html lang="fr"><head>
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>${TRIP_TITLE} — Accès</title>
@@ -34,7 +32,6 @@ function renderLogin(error, next = '/', csrf = '') {
           <button class="btn-submit" type="submit">Accéder au journal 🚴</button>
         </form>
       </div>
-      ${subscribeWidget ? `<p style="text-align:center;font-size:12px;color:var(--ink-light);margin:18px 0 -8px">Pas besoin de mot de passe pour suivre le voyage par e-mail :</p>${subscribeWidget}` : ''}
     </div>
   </body></html>`;
 }

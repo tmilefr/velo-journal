@@ -1,6 +1,7 @@
 // ── Widget d'abonnement e-mail (bandeau 🔔 + formulaire inline) ──
-// Partagé entre le journal et la page de connexion : l'inscription
-// n'est pas rattachée au compte, seule l'adresse e-mail compte.
+// Affiché uniquement sur les pages accessibles après connexion :
+// rien du site n'est proposé à qui n'a pas le mot de passe.
+// L'abonnement lui-même ne retient que l'adresse e-mail.
 const { MAIL_ENABLED } = require('../config');
 
 function renderSubscribeWidget(csrf) {
