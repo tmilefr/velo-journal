@@ -148,3 +148,4 @@ vite.config.ts.timestamp-*
 package-lock.json
 data/posts.json
 data/subscribers.json
+data/mail.log
