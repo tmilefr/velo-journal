@@ -19,7 +19,7 @@ function renderPreparation(posts, isAdmin = false, csrf = '', isStrictAdmin = fa
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Préparation — ${TRIP_TITLE}</title><style>${CSS}</style>
   </head><body>
-    ${renderHeader({ activePage: 'preparation', isAdmin, isStrictAdmin, showMap: true })}
+    ${renderHeader({ activePage: 'preparation', isAdmin, isStrictAdmin, showMap: true, csrf })}
     <div style="background:linear-gradient(135deg,var(--emerald) 0%,var(--ocean-mid) 100%);padding:20px 20px 18px;border-bottom:2px solid var(--sand)">
       <div style="max-width:620px;margin:0 auto;display:flex;align-items:center;gap:14px">
         <div style="font-size:36px">🛠️</div>

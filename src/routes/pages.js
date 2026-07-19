@@ -44,12 +44,14 @@ router.get('/api/posts', requireFamily, (req, res) => {
 
 router.get('/timeline', requireFamily, (req, res) => {
   const posts = filterPostsByRole(readPosts().filter(p => p.type !== 'preparation').sort((a, b) => new Date(a.date) - new Date(b.date)), req);
-  res.send(renderTimeline(posts, !!req.session.auth || !!req.session.margot, !!req.session.auth));
+  const token = csrfToken(req);
+  req.session.save(() => res.send(renderTimeline(posts, !!req.session.auth || !!req.session.margot, !!req.session.auth, token)));
 });
 
 router.get('/map', requireFamily, (req, res) => {
   const posts = filterPostsByRole(readPosts().filter(p => p.type !== 'preparation').sort((a, b) => new Date(a.date) - new Date(b.date)), req);
-  res.send(renderMap(posts, !!req.session.auth || !!req.session.margot, !!req.session.auth));
+  const token = csrfToken(req);
+  req.session.save(() => res.send(renderMap(posts, !!req.session.auth || !!req.session.margot, !!req.session.auth, token)));
 });
 
 router.get('/stats', requireAdmin, (req, res) => {

@@ -5,7 +5,7 @@ const { CSS, renderHeader } = require('./layout');
 //  renderMap
 // ══════════════════════════════════════════════════════════
 
-function renderMap(posts, isAdmin = false, isStrictAdmin = false) {
+function renderMap(posts, isAdmin = false, isStrictAdmin = false, csrf = '') {
   const withGps = posts.filter(p => p.lat && p.lon);
   const gpsJson = JSON.stringify(withGps.map(p => ({
     lat: p.lat, lon: p.lon, title: p.title, location: p.location || '',
@@ -41,7 +41,7 @@ function renderMap(posts, isAdmin = false, isStrictAdmin = false) {
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   </head><body>
     <div class="map-page">
-      ${renderHeader({ activePage: 'map', isAdmin, isStrictAdmin, showMap: true })}
+      ${renderHeader({ activePage: 'map', isAdmin, isStrictAdmin, showMap: true, csrf })}
       <div id="map-container">
         <div id="fullmap">
           ${withGps.length === 0 ? `
