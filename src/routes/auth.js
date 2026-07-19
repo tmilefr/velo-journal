@@ -2,6 +2,7 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const { ADMIN_PASSWORD, FAMILY_PASSWORD, MARGOT_PASSWORD } = require('../config');
+const { csrfToken } = require('../middleware/csrf');
 const { renderLogin } = require('../views/login');
 
 const router = express.Router();
@@ -17,7 +18,10 @@ const loginLimiter = rateLimit({
 
 router.get('/login', (req, res) => {
   if (req.session.auth || req.session.family || req.session.margot) return res.redirect('/');
-  res.send(renderLogin(false, req.query.next || '/'));
+  // Token CSRF émis dès la page de connexion : le widget d'abonnement
+  // e-mail y est proposé sans exiger le mot de passe.
+  const token = csrfToken(req);
+  req.session.save(() => res.send(renderLogin(false, req.query.next || '/', token)));
 });
 
 router.post('/login', loginLimiter, (req, res) => {
@@ -26,7 +30,8 @@ router.post('/login', loginLimiter, (req, res) => {
   if (pw === ADMIN_PASSWORD) { req.session.auth = true; return res.redirect(next !== '/' ? next : '/'); }
   if (MARGOT_PASSWORD && pw === MARGOT_PASSWORD) { req.session.margot = true; return res.redirect(next); }
   if (pw === FAMILY_PASSWORD) { req.session.family = true; return res.redirect(next); }
-  res.send(renderLogin(true, next));
+  const token = csrfToken(req);
+  req.session.save(() => res.send(renderLogin(true, next, token)));
 });
 
 router.get('/family-login', (req, res) => res.redirect('/login' + (req.query.next ? '?next=' + encodeURIComponent(req.query.next) : '')));

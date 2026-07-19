@@ -4,7 +4,7 @@ const rateLimit = require('express-rate-limit');
 const { MAIL_ENABLED } = require('../config');
 const { subscribe, findByToken, confirmByToken, unsubscribeByToken, removeEmail } = require('../services/subscribers');
 const { sendConfirmationEmail, siteBaseUrl } = require('../services/mailer');
-const { requireFamily, requireAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 const { requireCsrf } = require('../middleware/csrf');
 const {
   renderConfirmSuccess, renderConfirmInvalid,
@@ -21,8 +21,10 @@ const subscribeLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// ── Inscription (depuis le bandeau du journal) ────────────
-router.post('/subscribe', requireFamily, subscribeLimiter, requireCsrf, async (req, res) => {
+// ── Inscription (bandeau du journal ou de la page de connexion) ──
+// Volontairement non rattachée au compte : le mot de passe famille est
+// générique, seule l'adresse e-mail (validée par double opt-in) compte.
+router.post('/subscribe', subscribeLimiter, requireCsrf, async (req, res) => {
   if (!MAIL_ENABLED) {
     return res.status(503).json({ ok: false, message: "L'envoi d'e-mails n'est pas configuré sur ce serveur." });
   }

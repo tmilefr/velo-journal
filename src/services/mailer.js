@@ -1,9 +1,10 @@
 // ── Envoi d'e-mails : confirmation d'abonnement et notification de nouvelle étape ──
 // Nécessite SMTP_HOST (+ SMTP_USER/SMTP_PASS/MAIL_FROM) dans .env, sinon désactivé.
+const fs         = require('fs');
 const nodemailer = require('nodemailer');
 const {
   SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS,
-  MAIL_FROM, MAIL_ENABLED, BASE_URL, TRIP_TITLE,
+  MAIL_FROM, MAIL_ENABLED, BASE_URL, MAIL_LOG, TRIP_TITLE,
 } = require('../config');
 const { esc, stripTags } = require('../lib/html');
 const { formatDateShort } = require('../lib/dates');
@@ -14,6 +15,13 @@ const { confirmedSubscribers } = require('./subscribers');
 // BASE_URL si défini, sinon déduite de la requête (trust proxy actif).
 function siteBaseUrl(req) {
   return BASE_URL || `${req.protocol}://${req.get('host')}`;
+}
+
+// Trace chaque envoi d'e-mail dans data/mail.log (une ligne par envoi) :
+// 2026-07-19T10:00:00.000Z CONFIRMATION lecteur@example.fr OK
+function logMailSend(kind, email, ok, detail = '') {
+  const line = `${new Date().toISOString()} ${kind} ${email} ${ok ? 'OK' : 'ECHEC'}${detail ? ' — ' + detail : ''}\n`;
+  try { fs.appendFileSync(MAIL_LOG, line); } catch (e) { /* le log ne doit jamais bloquer un envoi */ }
 }
 
 let transporter = null;
@@ -68,7 +76,14 @@ async function sendConfirmationEmail(sub, baseUrl) {
     <p style="font-size:13px;color:#5a8080">Si vous n'êtes pas à l'origine de cette demande, ignorez simplement cet e-mail — ce lien expirera dans 7 jours.</p>
   `);
   const text = `Confirmez votre abonnement aux nouvelles étapes de ${TRIP_TITLE} en ouvrant ce lien :\n${confirmUrl}\n\nSi vous n'êtes pas à l'origine de cette demande, ignorez cet e-mail.`;
-  await sendMail(sub.email, `Confirmez votre abonnement — ${TRIP_TITLE}`, html, text);
+  try {
+    await sendMail(sub.email, `Confirmez votre abonnement — ${TRIP_TITLE}`, html, text);
+    console.log(`[mailer] e-mail de confirmation d'inscription envoyé à ${sub.email}`);
+    logMailSend('CONFIRMATION', sub.email, true);
+  } catch (e) {
+    logMailSend('CONFIRMATION', sub.email, false, e.message);
+    throw e;
+  }
 }
 
 // ── E-mail « nouvelle étape » ─────────────────────────────
@@ -116,9 +131,11 @@ async function notifySubscribers(post, baseUrl) {
     try {
       const { subject, html, text } = buildPostEmail(post, baseUrl, sub);
       await sendMail(sub.email, subject, html, text);
+      logMailSend(`NOTIFICATION post=${post.id}`, sub.email, true);
       sent++;
     } catch (e) {
       console.error(`[mailer] échec d'envoi à ${sub.email} :`, e.message);
+      logMailSend(`NOTIFICATION post=${post.id}`, sub.email, false, e.message);
     }
   }
   console.log(`[mailer] notification envoyée à ${sent}/${subs.length} abonné(s)`);
