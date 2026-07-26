@@ -41,39 +41,71 @@ function postExpenseTotal(p) {
   return (p.expenses || []).reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
 }
 
+// Aplatit les dépenses de plusieurs publications en une seule liste de lignes
+function flattenExpenses(posts) {
+  const items = [];
+  posts.forEach(p => {
+    (p.expenses || []).forEach(e => {
+      items.push({
+        amount:      parseFloat(e.amount) || 0,
+        payer:       e.payer,
+        category:    e.category,
+        subcategory: e.subcategory || null,
+        label:       e.label || '',
+        date:        p.date,
+        postId:      p.id,
+        postTitle:   p.title || p.location || ''
+      });
+    });
+  });
+  return items;
+}
+
+// Agrège une liste de lignes de dépenses : total, répartition par catégorie
+// (+ sous-catégorie), par payeur, et détail des lignes pour chaque regroupement
+function aggregateExpenses(items) {
+  const agg = { total: 0, byCat: {}, byCatSub: {}, byPayer: {}, itemsByCat: {}, itemsByPayer: {} };
+  items.forEach(it => {
+    agg.total += it.amount;
+    agg.byCat[it.category] = (agg.byCat[it.category] || 0) + it.amount;
+    agg.byPayer[it.payer]  = (agg.byPayer[it.payer]  || 0) + it.amount;
+    if (it.subcategory) {
+      if (!agg.byCatSub[it.category]) agg.byCatSub[it.category] = {};
+      agg.byCatSub[it.category][it.subcategory] = (agg.byCatSub[it.category][it.subcategory] || 0) + it.amount;
+    }
+    if (!agg.itemsByCat[it.category]) agg.itemsByCat[it.category] = [];
+    agg.itemsByCat[it.category].push(it);
+    if (!agg.itemsByPayer[it.payer]) agg.itemsByPayer[it.payer] = [];
+    agg.itemsByPayer[it.payer].push(it);
+  });
+  Object.values(agg.itemsByCat).forEach(arr => arr.sort((a, b) => new Date(a.date) - new Date(b.date)));
+  Object.values(agg.itemsByPayer).forEach(arr => arr.sort((a, b) => new Date(a.date) - new Date(b.date)));
+  return agg;
+}
+
+// Synthèse des dépenses regroupées par mois (YYYY-MM en Europe/Paris)
 function expensesByMonth(posts) {
-  const map = {};
+  const itemsByMonth = {};
   posts.forEach(p => {
     if (!p.expenses || !p.expenses.length) return;
     const d = new Date(p.date);
     const key = new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit' }).format(d); // YYYY-MM
-    if (!map[key]) map[key] = { total: 0, byCat: {}, byPayer: {}, itemsByCat: {} };
-    p.expenses.forEach(e => {
-      const amt = parseFloat(e.amount) || 0;
-      map[key].total += amt;
-      map[key].byCat[e.category]   = (map[key].byCat[e.category]   || 0) + amt;
-      map[key].byPayer[e.payer]    = (map[key].byPayer[e.payer]    || 0) + amt;
-      if (!map[key].itemsByCat[e.category]) map[key].itemsByCat[e.category] = [];
-      map[key].itemsByCat[e.category].push({
-        amount:    amt,
-        payer:     e.payer,
-        label:     e.label || '',
-        subcategory: e.subcategory || null,
-        date:      p.date,
-        postId:   p.id,
-        postTitle: p.title || p.location || ''
-      });
-    });
+    if (!itemsByMonth[key]) itemsByMonth[key] = [];
+    itemsByMonth[key].push(...flattenExpenses([p]));
   });
-  Object.values(map).forEach(m => {
-    Object.values(m.itemsByCat).forEach(arr => arr.sort((a, b) => new Date(a.date) - new Date(b.date)));
-  });
+  const map = {};
+  Object.keys(itemsByMonth).forEach(key => { map[key] = aggregateExpenses(itemsByMonth[key]); });
   return map;
+}
+
+// Synthèse globale des dépenses, toutes publications confondues
+function expensesSummary(posts) {
+  return aggregateExpenses(flattenExpenses(posts));
 }
 
 module.exports = {
   EXPENSE_CATEGORIES, EXPENSE_PAYERS,
   EXPENSE_CAT_LABELS, EXPENSE_PAYER_LABELS,
   EXPENSE_SUBCATEGORIES, EXPENSE_SUBCAT_LABELS,
-  parseExpenses, postExpenseTotal, expensesByMonth,
+  parseExpenses, postExpenseTotal, expensesByMonth, expensesSummary,
 };

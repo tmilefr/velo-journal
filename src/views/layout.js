@@ -229,6 +229,12 @@ const CSS = `
   .exp-grand-total{background:linear-gradient(135deg,var(--ocean),var(--emerald));color:#fff;border-radius:14px;padding:16px;text-align:center;margin-bottom:16px;}
   .exp-grand-total .egt-num{font-family:'Playfair Display',serif;font-size:32px;font-weight:700;}
   .exp-grand-total .egt-lbl{font-size:12px;text-transform:uppercase;letter-spacing:0.08em;opacity:0.9;margin-top:4px;}
+  .exp-detail-subtotals{display:flex;flex-direction:column;gap:4px;padding-bottom:6px;margin-bottom:6px;border-bottom:1px dashed var(--sand);}
+  .exp-subcat-row{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-mid);}
+  .exp-subcat-lbl{width:90px;flex-shrink:0;}
+  .exp-subcat-track{flex:1;height:6px;background:var(--sand);border-radius:4px;overflow:hidden;}
+  .exp-subcat-fill{display:block;height:100%;border-radius:4px;}
+  .exp-subcat-amt{flex-shrink:0;width:60px;text-align:right;font-weight:600;}
 
   /* ── ABONNEMENT E-MAIL (cloche + modale) ─────────── */
   .sub-bell{width:40px;height:40px;border-radius:10px;border:1.5px solid var(--sand);background:var(--mist);font-size:17px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:background .15s,transform .15s;padding:0;}
