@@ -73,7 +73,7 @@ function renderCard(p, isAdmin, csrf, isStrictAdmin = false) {
         ${imgs.map(ph => {
           const cap = captionOf(ph);
           return cap
-            ? `<figure><img src="${ph}" alt="${esc(cap)}" loading="lazy" data-postid="${p.id}" data-caption="${esc(cap)}"><figcaption>${esc(cap)}</figcaption></figure>`
+            ? `<figure><img src="${ph}" alt="${esc(cap)}" loading="lazy" data-postid="${p.id}" data-caption="${esc(cap)}"><figcaption title="${esc(cap)}">${esc(cap)}</figcaption></figure>`
             : `<img src="${ph}" alt="photo" loading="lazy" data-postid="${p.id}">`;
         }).join('')}
       </div>` : '';
