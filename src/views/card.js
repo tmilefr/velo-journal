@@ -78,8 +78,27 @@ function renderCard(p, isAdmin, csrf, isStrictAdmin = false) {
         }).join('')}
       </div>` : '';
         const vidHtml = vids.length ? `
-      <div class="card-videos">
-        ${vids.map(ph => `<video src="${ph}" controls preload="metadata" playsinline></video>`).join('')}
+      <div class="card-videos${vids.length > 1 ? ' multi' : ''}">
+        <div class="cvid-viewport">
+          <div class="cvid-track">
+            ${vids.map(ph => {
+              const cap = captionOf(ph);
+              return `<div class="cvid-slide">
+              <video src="${ph}" controls preload="metadata" playsinline></video>
+              ${cap ? `<div class="cvid-cap">${esc(cap)}</div>` : ''}
+            </div>`;
+            }).join('')}
+          </div>
+        </div>
+        ${vids.length > 1 ? `
+        <button type="button" class="cvid-nav cvid-prev" aria-label="Vidéo précédente">&#8249;</button>
+        <button type="button" class="cvid-nav cvid-next" aria-label="Vidéo suivante">&#8250;</button>
+        <div class="cvid-bar">
+          <span class="cvid-counter">🎬 <b>1</b> / ${vids.length}</span>
+          <div class="cvid-dots">
+            ${vids.map((_, i) => `<button type="button" class="cvid-dot${i === 0 ? ' active' : ''}" data-i="${i}" aria-label="Vidéo ${i + 1}"></button>`).join('')}
+          </div>
+        </div>` : ''}
       </div>` : '';
         return imgHtml + vidHtml;
       })()}
