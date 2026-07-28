@@ -38,7 +38,7 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
           </div>
           <div class="field">
             <label>Photos / vidéos (max 10)</label>
-            <input type="file" name="photos" multiple accept="image/*,video/*" id="photoInputPost" onchange="renderPhotoGrid(this,'newCaptionsPost')">
+            <input type="file" name="photos" multiple accept="image/*,video/*" id="photoInputPost" data-photo-grid="newCaptionsPost">
             <div id="newCaptionsPost"></div>
           </div>
           <div class="field">
@@ -80,7 +80,7 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
           </div>
           <div class="field">
             <label>Trace GPX (optionnel)</label>
-            <input type="file" name="gpx" accept=".gpx,application/gpx+xml" onchange="parseGPX(this,'locationField','lat','lon')">
+            <input type="file" name="gpx" accept=".gpx,application/gpx+xml" data-gpx-parse="1">
             <div id="gpxInfo" style="display:none;margin-top:8px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px 12px;font-size:13px;color:#166534"></div>
           </div>
         </div>
