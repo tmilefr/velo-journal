@@ -280,8 +280,29 @@ const CSS = `
   .card-photos.single img{height:280px;}
   .card-photos.single figure img{height:240px;}
   .card-photos img:hover{transform:scale(1.02)}
-  .card-videos{display:flex;flex-direction:column;gap:10px;margin:0 -18px 16px;background:#000;}
-  .card-videos video{width:100%;max-height:480px;display:block;background:#000;}
+  /* ── CARROUSEL VIDÉOS ────────────────────────────── */
+  .card-videos{position:relative;margin:0 -18px 16px;background:#000;}
+  .cvid-viewport{overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;-ms-overflow-style:none;}
+  .cvid-viewport::-webkit-scrollbar{display:none;}
+  .cvid-track{display:flex;}
+  .cvid-slide{flex:0 0 100%;width:100%;min-width:0;scroll-snap-align:start;scroll-snap-stop:always;}
+  .cvid-slide video{width:100%;max-height:420px;display:block;background:#000;}
+  /* Hauteur figée en multi-vidéos (--vr = format de la vidéo la plus haute du post) :
+     toutes les diapos font la même hauteur, pas de saut de mise en page au défilement */
+  .card-videos.multi .cvid-slide video{aspect-ratio:var(--vr, 4/3);height:auto;object-fit:contain;}
+  .cvid-cap{font-size:11px;color:#e8e8e8;background:#1a1a1a;padding:5px 10px;text-align:center;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .cvid-nav{position:absolute;top:38%;transform:translateY(-50%);width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,0.25);background:rgba(0,0,0,0.45);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:.75;transition:opacity .15s,background .15s;z-index:2;}
+  .cvid-nav:hover{opacity:1;background:rgba(0,0,0,0.7);}
+  .cvid-nav:disabled{opacity:0;pointer-events:none;}
+  .cvid-prev{left:8px;}
+  .cvid-next{right:8px;}
+  .cvid-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 12px;background:#111;}
+  .cvid-counter{font-size:11px;color:#cbd5e1;letter-spacing:0.02em;white-space:nowrap;}
+  .cvid-counter b{color:#fff;font-weight:700;}
+  .cvid-dots{display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end;}
+  .cvid-dot{width:8px;height:8px;padding:0;border-radius:50%;border:none;background:rgba(255,255,255,0.3);cursor:pointer;transition:background .15s,transform .15s;}
+  .cvid-dot:hover{background:rgba(255,255,255,0.6);}
+  .cvid-dot.active{background:#fff;transform:scale(1.35);}
 
   /* ── LIGHTBOX ────────────────────────────────────── */
   .lightbox{display:none;position:fixed;inset:0;background:rgba(5,15,30,0.95);z-index:1000;align-items:center;justify-content:center;flex-direction:column;backdrop-filter:blur(8px);}
