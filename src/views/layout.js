@@ -436,6 +436,7 @@ const CSS = `
   .caption-popup-close:hover{background:rgba(255,255,255,0.32);}
   .caption-popup-body{padding:16px;}
   .caption-popup-body img{width:100%;max-height:160px;object-fit:cover;border-radius:8px;margin-bottom:10px;display:block;}
+  .caption-popup-body video{width:100%;max-height:200px;border-radius:8px;margin-bottom:10px;display:block;background:#000;}
   .caption-popup-body textarea{width:100%;box-sizing:border-box;min-height:70px;font-size:13px;padding:8px 10px;border-radius:8px;border:1.5px solid var(--sand);font-family:inherit;resize:vertical;color:var(--ink);}
   .caption-popup-body textarea:focus{outline:none;border-color:var(--teal-light);box-shadow:0 0 0 2px rgba(56,178,172,.15);}
   .caption-popup-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;}

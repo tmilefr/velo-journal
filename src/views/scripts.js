@@ -163,15 +163,13 @@ function renderPhotoGrid(input, containerId) {
     }
     media.className = 'photo-grid-media';
     card.appendChild(media);
-    if (f.type.indexOf('image/') === 0) {
-      var inp = document.createElement('input');
-      inp.type = 'text';
-      inp.className = 'photo-grid-caption caption-input';
-      inp.name = 'caption_new_' + i;
-      inp.maxLength = 200;
-      inp.placeholder = 'Légende…';
-      card.appendChild(inp);
-    }
+    var inp = document.createElement('input');
+    inp.type = 'text';
+    inp.className = 'photo-grid-caption caption-input';
+    inp.name = 'caption_new_' + i;
+    inp.maxLength = 200;
+    inp.placeholder = 'Légende…';
+    card.appendChild(inp);
     grid.appendChild(card);
   });
   c.appendChild(grid);
@@ -460,6 +458,17 @@ function initFormTabs(navId) {
   if (nextBtn) nextBtn.addEventListener('click', function(){ activate(idx + 1); });
   activate(0);
 }
+
+// ── Champs fichier : branchés ici et non via un attribut onchange, que la
+//    CSP (script-src-attr 'none') bloque ────────────────────
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('input[type=file][data-photo-grid]').forEach(function(inp) {
+    inp.addEventListener('change', function(){ renderPhotoGrid(inp, inp.dataset.photoGrid); });
+  });
+  document.querySelectorAll('input[type=file][data-gpx-parse]').forEach(function(inp) {
+    inp.addEventListener('change', function(){ parseGPX(inp, 'locationField', 'lat', 'lon'); });
+  });
+});
 </script>
 `;
 

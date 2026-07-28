@@ -48,10 +48,8 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
                   ${isVideoUrl(ph)
                     ? `<video src="${ph}" muted playsinline style="width:90px;height:90px;object-fit:cover;border-radius:8px;border:2px solid var(--teal-light);pointer-events:none"></video>`
                     : `<img src="${ph}" style="width:90px;height:90px;object-fit:cover;border-radius:8px;border:2px solid var(--teal-light);pointer-events:none">`}
-                  ${!isVideoUrl(ph) ? `
                   <button type="button" class="media-caption-btn${(post.captions && post.captions[i]) ? ' has-caption' : ''}" title="${(post.captions && post.captions[i]) ? 'Modifier la légende' : 'Ajouter une légende'}">💬</button>
                   <input type="hidden" name="caption_keep_${ph}" class="media-caption-input" value="${esc((post.captions && post.captions[i]) || '')}">
-                  ` : ''}
                 </div>`).join('')}
             </div>
             <div id="photoOrderInputs"></div>
@@ -59,7 +57,7 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
           </div>` : ''}
           <div class="field">
             <label>Ajouter des photos ou vidéos</label>
-            <input type="file" name="photos" multiple accept="image/*,video/*" onchange="renderPhotoGrid(this,'newCaptionsEdit')">
+            <input type="file" name="photos" multiple accept="image/*,video/*" data-photo-grid="newCaptionsEdit">
             <div id="newCaptionsEdit"></div>
           </div>
           <div class="field">
@@ -108,7 +106,7 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
           </div>` : ''}
           <div class="field">
             <label>Remplacer la trace GPX</label>
-            <input type="file" name="gpx" accept=".gpx,application/gpx+xml" onchange="parseGPX(this,'locationField','lat','lon')">
+            <input type="file" name="gpx" accept=".gpx,application/gpx+xml" data-gpx-parse="1">
             <div id="gpxInfo" style="display:none;margin-top:8px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px 12px;font-size:13px;color:#166534"></div>
           </div>
           ${post.gpx ? `
@@ -162,11 +160,12 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
     <div class="caption-popup" id="captionPopup" role="dialog" aria-modal="true">
       <div class="caption-popup-box">
         <div class="caption-popup-head">
-          <h3>💬 Légende de la photo</h3>
+          <h3>💬 Légende du média</h3>
           <button type="button" class="caption-popup-close" id="captionPopupClose">×</button>
         </div>
         <div class="caption-popup-body">
           <img id="captionPopupImg" src="" alt="">
+          <video id="captionPopupVid" src="" controls playsinline preload="metadata" style="display:none"></video>
           <textarea id="captionPopupText" maxlength="200" placeholder="Écrivez une légende…"></textarea>
           <div class="caption-popup-actions">
             <button type="button" class="caption-popup-save" id="captionPopupSave">Enregistrer</button>
@@ -241,6 +240,7 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
         // ── Popup de saisie des légendes depuis les vignettes ──
         var capPopup   = document.getElementById('captionPopup');
         var capImg     = document.getElementById('captionPopupImg');
+        var capVid     = document.getElementById('captionPopupVid');
         var capText    = document.getElementById('captionPopupText');
         var capSaveBtn = document.getElementById('captionPopupSave');
         var capCloseBtn= document.getElementById('captionPopupClose');
@@ -253,7 +253,12 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
           capTarget = item.querySelector('.media-caption-input');
           capBtn = btn;
           if (!capTarget) return;
-          capImg.src = item.dataset.url;
+          // Aperçu : vidéo ou image selon le type du média
+          var isVid = /\.(mp4|webm|mov|m4v|ogg|ogv)$/i.test(item.dataset.url || '');
+          capImg.style.display = isVid ? 'none' : 'block';
+          capVid.style.display = isVid ? 'block' : 'none';
+          capImg.src = isVid ? '' : item.dataset.url;
+          capVid.src = isVid ? item.dataset.url : '';
           capText.value = capTarget.value || '';
           capPopup.classList.add('open');
           document.body.style.overflow = 'hidden';
@@ -261,6 +266,7 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
         }
 
         function closeCaptionPopup() {
+          if (capVid && !capVid.paused) capVid.pause();
           capPopup.classList.remove('open');
           document.body.style.overflow = '';
           capTarget = null;
