@@ -1,7 +1,7 @@
 const { formatDate, postEndISO, postDaySpan } = require('../lib/dates');
 const { formatEuro, initials } = require('../lib/format');
 const { esc, renderBody } = require('../lib/html');
-const { isVideoUrl } = require('../services/media');
+const { isVideoUrl, pickCover } = require('../services/media');
 const {
   EXPENSE_CAT_LABELS, EXPENSE_PAYER_LABELS, EXPENSE_SUBCAT_LABELS,
   postExpenseTotal,
@@ -66,41 +66,32 @@ function renderCard(p, isAdmin, csrf, isStrictAdmin = false) {
       ${(nonRode > 0 && (p.km || p.dplus)) ? `
       <div class="card-restnote" style="margin-bottom:14px">🛌 ${nonRode} jour${nonRode > 1 ? 's' : ''} non roulé${nonRode > 1 ? 's' : ''} (repos) sur cette étape</div>` : ''}
       ${(() => {
-        const imgs = (p.photos || []).filter(ph => !isVideoUrl(ph));
-        const vids = (p.photos || []).filter(ph => isVideoUrl(ph));
-        const imgHtml = imgs.length ? `
-      <div class="card-photos${imgs.length === 1 ? ' single' : ''}" style="margin:0 -18px 16px;border-radius:0">
-        ${imgs.map(ph => {
-          const cap = captionOf(ph);
-          return cap
-            ? `<figure><img src="${ph}" alt="${esc(cap)}" loading="lazy" data-postid="${p.id}" data-caption="${esc(cap)}"><figcaption title="${esc(cap)}">${esc(cap)}</figcaption></figure>`
-            : `<img src="${ph}" alt="photo" loading="lazy" data-postid="${p.id}">`;
-        }).join('')}
-      </div>` : '';
-        const vidHtml = vids.length ? `
-      <div class="card-videos${vids.length > 1 ? ' multi' : ''}">
-        <div class="cvid-viewport">
-          <div class="cvid-track">
-            ${vids.map(ph => {
-              const cap = captionOf(ph);
-              return `<div class="cvid-slide">
-              <video src="${ph}" controls preload="metadata" playsinline></video>
-              ${cap ? `<div class="cvid-cap">${esc(cap)}</div>` : ''}
-            </div>`;
-            }).join('')}
-          </div>
-        </div>
-        ${vids.length > 1 ? `
-        <button type="button" class="cvid-nav cvid-prev" aria-label="Vidéo précédente">&#8249;</button>
-        <button type="button" class="cvid-nav cvid-next" aria-label="Vidéo suivante">&#8250;</button>
-        <div class="cvid-bar">
-          <span class="cvid-counter">🎬 <b>1</b> / ${vids.length}</span>
-          <div class="cvid-dots">
-            ${vids.map((_, i) => `<button type="button" class="cvid-dot${i === 0 ? ' active' : ''}" data-i="${i}" aria-label="Vidéo ${i + 1}"></button>`).join('')}
-          </div>
-        </div>` : ''}
-      </div>` : '';
-        return imgHtml + vidHtml;
+        // Une seule image de couverture sur la carte : le clic ouvre la galerie
+        // (toutes les photos et vidéos de l'étape) dans la visionneuse.
+        const media = (p.photos || []).map(ph => ({
+          url: ph, video: isVideoUrl(ph), cap: captionOf(ph),
+        }));
+        if (!media.length) return '';
+        const cover  = pickCover(p.photos, p.cover);
+        const start  = Math.max(0, media.findIndex(m => m.url === cover));
+        const c      = media[start];
+        const nPhoto = media.filter(m => !m.video).length;
+        const nVideo = media.length - nPhoto;
+        const others = media.length - 1;
+        const label  = [
+          nPhoto ? `📷 ${nPhoto}` : '',
+          nVideo ? `🎬 ${nVideo}` : '',
+        ].filter(Boolean).join(' · ');
+        return `
+      <button type="button" class="card-cover" data-media="${esc(JSON.stringify(media))}" data-start="${start}"
+              aria-label="Ouvrir la galerie — ${media.length} média${media.length > 1 ? 's' : ''}">
+        ${c.video
+          ? `<video class="card-cover-media" src="${c.url}" preload="metadata" muted playsinline></video>
+        <span class="card-cover-play">▶</span>`
+          : `<img class="card-cover-media" src="${c.url}" alt="${esc(c.cap || p.title)}" loading="lazy">`}
+        ${others ? `<span class="card-cover-badge">${label}<b>Voir tout</b></span>` : ''}
+        ${c.cap ? `<span class="card-cover-cap">${esc(c.cap)}</span>` : ''}
+      </button>`;
       })()}
       <div class="card-text">${renderBody(p.body)}</div>
       ${p.gpx ? `

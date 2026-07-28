@@ -9,7 +9,7 @@ const { sanitizeHtml } = require('../lib/html');
 const { readPosts, writePosts } = require('../services/posts');
 const { parseExpenses } = require('../services/expenses');
 const { parseGpxStats } = require('../services/gpx');
-const { resizeUploadedImages, deletePostFiles } = require('../services/media');
+const { resizeUploadedImages, deletePostFiles, pickCover } = require('../services/media');
 const { maybeNotifyNewPost, siteBaseUrl } = require('../services/mailer');
 const { upload } = require('../middleware/upload');
 const { csrfToken, requireCsrf } = require('../middleware/csrf');
@@ -79,6 +79,7 @@ router.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', ma
     type:       (type === 'preparation') ? 'preparation' : 'etape',
     photos,
     captions,
+    cover:      pickCover(photos, photos[parseInt(req.body.cover_new, 10)]),
     gpx:        gpxFile,
     expenses,
     privateNote: (privateNote || '').toString().trim().substring(0, 2000),
@@ -192,6 +193,9 @@ router.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos'
     visibility: validViz.includes(visibility) ? visibility : (existing.visibility || 'all'),
     photos,
     captions,
+    // Couverture : le choix de l'auteur, ou un repli automatique si le média
+    // retenu vient d'être supprimé de l'étape.
+    cover:      pickCover(photos, req.body.cover),
     gpx:        gpxFile,
     expenses:    parseExpenses(req.body),
     privateNote: (privateNote || '').toString().trim().substring(0, 2000),
