@@ -1,6 +1,6 @@
 const { isoToDatetimeLocal, isoToDateInput } = require('../lib/dates');
 const { esc } = require('../lib/html');
-const { isVideoUrl } = require('../services/media');
+const { isVideoUrl, pickCover } = require('../services/media');
 const { CSS, renderHeader } = require('./layout');
 const { FORM_SCRIPTS, richEditorHtml } = require('./scripts');
 
@@ -9,6 +9,7 @@ const { FORM_SCRIPTS, richEditorHtml } = require('./scripts');
 // ══════════════════════════════════════════════════════════
 
 function renderEditForm(post, err, isMargot = false, csrf = '') {
+  const cover = pickCover(post.photos, post.cover);
   return `<!DOCTYPE html><html lang="fr"><head>
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Modifier l'étape</title><style>${CSS}</style>
@@ -48,12 +49,14 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
                   ${isVideoUrl(ph)
                     ? `<video src="${ph}" muted playsinline style="width:90px;height:90px;object-fit:cover;border-radius:8px;border:2px solid var(--teal-light);pointer-events:none"></video>`
                     : `<img src="${ph}" style="width:90px;height:90px;object-fit:cover;border-radius:8px;border:2px solid var(--teal-light);pointer-events:none">`}
+                  <button type="button" class="media-cover-btn${ph === cover ? ' is-cover' : ''}" title="Afficher ce média sur la carte du post">⭐</button>
                   <button type="button" class="media-caption-btn${(post.captions && post.captions[i]) ? ' has-caption' : ''}" title="${(post.captions && post.captions[i]) ? 'Modifier la légende' : 'Ajouter une légende'}">💬</button>
                   <input type="hidden" name="caption_keep_${ph}" class="media-caption-input" value="${esc((post.captions && post.captions[i]) || '')}">
                 </div>`).join('')}
             </div>
             <div id="photoOrderInputs"></div>
-            <p style="font-size:11px;color:var(--ink-light);margin-top:6px">↕️ Maintenez et glissez une vignette pour changer l'ordre. 💬 pour ajouter une légende.</p>
+            <input type="hidden" name="cover" id="coverInput" value="${cover || ''}">
+            <p style="font-size:11px;color:var(--ink-light);margin-top:6px">↕️ Maintenez et glissez une vignette pour changer l'ordre. 💬 pour ajouter une légende. ⭐ pour choisir le média affiché sur la carte (les autres s'ouvrent au clic).</p>
           </div>` : ''}
           <div class="field">
             <label>Ajouter des photos ou vidéos</label>
@@ -235,6 +238,21 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
           });
 
           refreshOrder();
+        }
+
+        // ── Choix du média de couverture (⭐) ──
+        var coverInput = document.getElementById('coverInput');
+        if (sortable && coverInput) {
+          sortable.querySelectorAll('.media-cover-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+              var item = btn.closest('.media-item');
+              if (!item) return;
+              coverInput.value = item.dataset.url;
+              sortable.querySelectorAll('.media-cover-btn').forEach(function(b) {
+                b.classList.toggle('is-cover', b === btn);
+              });
+            });
+          });
         }
 
         // ── Popup de saisie des légendes depuis les vignettes ──

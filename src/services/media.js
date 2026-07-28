@@ -9,6 +9,16 @@ function isVideoUrl(u) {
   return /\.(mp4|webm|mov|m4v|ogg|ogv)$/i.test(u || '');
 }
 
+// Média mis en avant sur la carte du post.
+// On respecte le choix de l'auteur tant que ce média est toujours présent ;
+// sinon on retombe sur la première photo (à défaut, le premier média).
+function pickCover(photos, requested) {
+  const list = photos || [];
+  if (!list.length) return null;
+  if (requested && list.includes(requested)) return requested;
+  return list.find(u => !isVideoUrl(u)) || list[0];
+}
+
 async function resizeUploadedImages(files) {
   if (!sharp || !files || !files.length) return;
   for (const file of files) {
@@ -44,4 +54,4 @@ function deletePostFiles(post) {
   }
 }
 
-module.exports = { isVideoUrl, resizeUploadedImages, deletePostFiles };
+module.exports = { isVideoUrl, pickCover, resizeUploadedImages, deletePostFiles };

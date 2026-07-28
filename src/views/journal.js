@@ -2,7 +2,7 @@ const { TRIP_TITLE } = require('../config');
 const { totalKm, totalDPlus } = require('../services/stats');
 const { CSS, renderHeader } = require('./layout');
 const {
-  LIGHTBOX_JS, LIGHTBOX_HTML, TRANSLATE_JS, VIDEO_CAROUSEL_JS,
+  LIGHTBOX_JS, LIGHTBOX_HTML, TRANSLATE_JS, SINGLE_VIDEO_JS,
   ELEV_MODAL_HTML, ELEV_MODAL_JS, DELETE_CONFIRM_JS, COMMENTS_JS,
 } = require('./scripts');
 const { renderCard } = require('./card');
@@ -132,7 +132,6 @@ function renderPublic(posts, isAdmin = false, csrf = '', isStrictAdmin = false) 
               // Réactiver les comportements interactifs sur les nouvelles cartes
               if(window.bindGpxCanvases)window.bindGpxCanvases(feed);
               if(window.bindLightbox)window.bindLightbox(feed);
-              if(window.bindVideoCarousels)window.bindVideoCarousels(feed);
               if(window.bindElev)window.bindElev(feed);
               if(window.bindDelete)window.bindDelete(feed);
               if(window.bindComments)window.bindComments(feed);
@@ -198,7 +197,7 @@ function renderPublic(posts, isAdmin = false, csrf = '', isStrictAdmin = false) 
     })();
     </script>
     ${LIGHTBOX_JS}
-    ${VIDEO_CAROUSEL_JS}
+    ${SINGLE_VIDEO_JS}
     ${TRANSLATE_JS}
     ${ELEV_MODAL_JS}
     ${DELETE_CONFIRM_JS}
