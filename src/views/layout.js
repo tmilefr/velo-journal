@@ -192,6 +192,30 @@ const CSS = `
   .lb-caption{color:rgba(255,255,255,0.9);font-size:14px;margin-top:10px;text-align:center;max-width:90vw;max-height:22vh;overflow-y:auto;padding:0 12px;}
   .caption-input{width:100%;border:1.5px solid var(--sand);border-radius:8px;padding:6px 10px;font-size:13px;font-family:inherit;margin-top:4px;background:#fff;}
 
+  /* ── COUCHAGE (carte) ────────────────────────────── */
+  .card-sleep{display:flex;align-items:center;gap:12px;width:100%;margin-top:16px;padding:12px 14px;text-align:left;font-family:inherit;color:var(--ink);background:linear-gradient(135deg,var(--mist),var(--sage));border:1.5px solid var(--sand);border-radius:14px;}
+  button.card-sleep{cursor:pointer;transition:transform .15s,box-shadow .15s,border-color .15s;}
+  button.card-sleep:hover{border-color:var(--teal-light);box-shadow:0 4px 16px rgba(42,122,122,0.16);transform:translateY(-1px);}
+  button.card-sleep:active{transform:translateY(0);}
+  .card-sleep-icon{font-size:22px;line-height:1;flex-shrink:0;}
+  .card-sleep-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;}
+  .card-sleep-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:var(--teal);}
+  .card-sleep-place{font-family:'Playfair Display',serif;font-size:15px;font-weight:700;color:var(--ink);line-height:1.3;}
+  .card-sleep-hint{font-size:11px;color:var(--ink-light);margin-top:2px;}
+  .card-sleep-chev{flex-shrink:0;font-size:22px;color:var(--ocean-mid);line-height:1;}
+
+  /* ── COUCHAGE (fenêtre commentaire) ──────────────── */
+  .sleep-modal{display:none;position:fixed;inset:0;background:rgba(5,15,30,0.85);z-index:1100;align-items:center;justify-content:center;backdrop-filter:blur(6px);padding:16px;}
+  .sleep-modal.open{display:flex;}
+  .sleep-box{background:#fff;border-radius:16px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.4);overflow:hidden;}
+  .sleep-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:14px 18px;background:linear-gradient(135deg,var(--ocean-mid),var(--teal));}
+  .sleep-head h3{font-family:'Playfair Display',serif;font-size:16px;font-weight:700;color:#fff;margin:0;}
+  .sleep-head-place{font-size:12px;color:rgba(255,255,255,0.85);margin-top:2px;}
+  .sleep-close{background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.3);color:#fff;font-size:18px;width:30px;height:30px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s;padding:0;}
+  .sleep-close:hover{background:rgba(255,255,255,0.32);}
+  .sleep-body{padding:18px;font-size:14.5px;color:var(--ink-mid);line-height:1.75;white-space:pre-wrap;max-height:60vh;overflow-y:auto;}
+  .sleep-body.sleep-empty{color:var(--ink-light);font-style:italic;}
+
   /* ── NOTE PRIVÉE (admin) ─────────────────────────── */
   .card-private{margin-top:14px;background:#fffbeb;border:1.5px solid #fde68a;border-radius:12px;padding:12px 14px;}
   .card-private-head{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#92400e;margin-bottom:6px;}
