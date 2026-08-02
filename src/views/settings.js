@@ -13,7 +13,12 @@ function renderSubscribersCard(csrf, subscribers) {
       <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--ink)">${esc(s.email)}</span>
       ${s.confirmed
         ? `<span style="font-size:11px;background:var(--sage);color:var(--emerald);padding:2px 8px;border-radius:20px;font-weight:600;white-space:nowrap">✔ confirmé</span>`
-        : `<span style="font-size:11px;background:#fffbeb;color:#92400e;padding:2px 8px;border-radius:20px;font-weight:600;white-space:nowrap">⏳ en attente</span>`}
+        : `<span style="font-size:11px;background:#fffbeb;color:#92400e;padding:2px 8px;border-radius:20px;font-weight:600;white-space:nowrap">⏳ en attente</span>
+           <form method="POST" action="/subscribe/validate" class="form-sub-validate" style="margin:0">
+             <input type="hidden" name="_csrf" value="${csrf}">
+             <input type="hidden" name="email" value="${esc(s.email)}">
+             <button type="submit" class="sub-validate" title="Valider cette inscription à la main">✔ valider</button>
+           </form>`}
       <span style="font-size:11px;color:var(--ink-light);white-space:nowrap">${esc(formatDateShort(s.confirmedAt || s.createdAt))}</span>
       <form method="POST" action="/subscribe/remove" class="form-sub-remove" style="margin:0">
         <input type="hidden" name="_csrf" value="${csrf}">
@@ -22,11 +27,16 @@ function renderSubscribersCard(csrf, subscribers) {
       </form>
     </div>`).join('');
 
+  const pending = subscribers.filter(s => !s.confirmed).length;
+  const pendingNote = pending
+    ? ` ${pending} en attente — si l'e-mail de confirmation n'arrive jamais (spam, adresse dictée de vive voix…), le bouton « ✔ valider » confirme l'inscription à la main.`
+    : '';
+
   const body = !MAIL_ENABLED
     ? `<p style="font-size:14px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:10px 14px;line-height:1.6">⚠️ L'envoi d'e-mails n'est pas configuré : renseignez <code>SMTP_HOST</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code> (et <code>MAIL_FROM</code>) dans <code>.env</code> pour activer les abonnements.</p>`
     : subscribers.length === 0
       ? `<p style="font-size:14px;color:var(--ink-light);line-height:1.6">Personne n'est encore abonné. Le bandeau « 🔔 » en haut du journal permet à vos proches de laisser leur e-mail : ils recevront un message à chaque nouvelle étape publiée.</p>`
-      : `<p style="font-size:14px;color:var(--ink-light);margin-bottom:10px;line-height:1.6">${subscribers.filter(s => s.confirmed).length} abonné(s) confirmé(s) — prévenus une seule fois par étape, à sa première publication.</p>${rows}`;
+      : `<p style="font-size:14px;color:var(--ink-light);margin-bottom:10px;line-height:1.6">${subscribers.filter(s => s.confirmed).length} abonné(s) confirmé(s) — prévenus une seule fois par étape, à sa première publication.${pendingNote}</p>${rows}`;
 
   return `<div class="form-card" style="margin-top:16px" id="subscribers">
       <h2>🔔 Abonnés aux notifications</h2>
@@ -95,6 +105,12 @@ function renderSettings(csrf = '', restored = false, recalc = null, subscribers 
       document.querySelectorAll('.form-recalc').forEach(function(f) {
         f.addEventListener('submit', function(e) {
           if (!window.confirm('Recalculer les distances de toutes les étapes avec une trace GPX ? Les valeurs de km actuelles seront remplacées.')) e.preventDefault();
+        });
+      });
+      document.querySelectorAll('.form-sub-validate').forEach(function(f) {
+        f.addEventListener('submit', function(e) {
+          var email = f.querySelector('input[name=email]').value;
+          if (!window.confirm('Valider l\'inscription de ' + email + ' à la main ? Cette personne recevra les prochaines étapes sans avoir cliqué sur le lien de confirmation.')) e.preventDefault();
         });
       });
       document.querySelectorAll('.form-sub-remove').forEach(function(f) {

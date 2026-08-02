@@ -168,7 +168,7 @@ Si SMTP est configuré dans `.env`, une icône **🔔** apparaît à côté du m
 1. Le lecteur saisit son adresse et reçoit un e-mail de confirmation (double opt-in, lien valable 7 jours)
 2. Une fois confirmé, il reçoit un e-mail à **chaque nouvelle étape publiée** — une seule fois par étape, jamais lors des modifications
 3. Chaque e-mail contient un lien de désinscription en un clic
-4. La liste des abonnés se gère depuis la page **Système** (admin)
+4. La liste des abonnés se gère depuis la page **Système** (admin) : on peut retirer une adresse, ou **valider une inscription à la main** avec le bouton « ✔ valider » si l'e-mail de confirmation n'arrive jamais (spam, adresse dictée de vive voix…)
 5. Chaque envoi (confirmation d'inscription, notification) est tracé dans `data/mail.log`
 
 Exemple de configuration SMTP (Gmail avec mot de passe d'application) :

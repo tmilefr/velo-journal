@@ -85,6 +85,22 @@ function confirmByToken(token) {
   return sub;
 }
 
+// Confirmation manuelle par l'admin (page Système), quand l'e-mail de
+// confirmation n'arrive pas (spam, adresse recopiée à la main…).
+// Renvoie l'abonné confirmé, ou null si l'adresse est inconnue.
+function confirmByEmail(email) {
+  const clean = normalizeEmail(email);
+  const subs  = readSubscribers();
+  const sub   = subs.find(s => s.email === clean);
+  if (!sub) return null;
+  if (!sub.confirmed) {
+    sub.confirmed   = true;
+    sub.confirmedAt = new Date().toISOString();
+    writeSubscribers(subs);
+  }
+  return sub;
+}
+
 // Désabonne via token. Renvoie l'e-mail retiré ou null.
 function unsubscribeByToken(token) {
   const subs = readSubscribers();
@@ -109,6 +125,6 @@ function confirmedSubscribers() {
 
 module.exports = {
   readSubscribers, subscribe, findByToken,
-  confirmByToken, unsubscribeByToken, removeEmail,
+  confirmByToken, confirmByEmail, unsubscribeByToken, removeEmail,
   confirmedSubscribers,
 };
