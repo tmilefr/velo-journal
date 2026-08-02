@@ -135,7 +135,8 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
       <div class="upload-box">
         <div class="up-emoji">🚴</div>
         <h3>Publication en cours…</h3>
-        <p id="upMsg">Envoi des photos et de la trace</p>
+        <p id="upMsg">Envoi des éléments</p>
+        <div class="up-file" id="upFile"><span class="up-file-name"></span><span class="up-file-meta"></span></div>
         <div class="up-bar"><div class="up-bar-fill" id="upBarFill"></div></div>
         <div class="up-pct" id="upPct">0 %</div>
       </div>

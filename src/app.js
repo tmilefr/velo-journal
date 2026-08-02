@@ -35,7 +35,9 @@ app.use(helmet({
       scriptSrc:  ["'self'", "'unsafe-inline'", "unpkg.com"],
       styleSrc:   ["'self'", "'unsafe-inline'", "fonts.googleapis.com", "unpkg.com"],
       fontSrc:    ["'self'", "fonts.gstatic.com"],
-      imgSrc:     ["'self'", "data:", "*.tile.openstreetmap.org", "nominatim.openstreetmap.org"],
+      // blob: → aperçus locaux (URL.createObjectURL) des photos/vidéos avant envoi
+      imgSrc:     ["'self'", "data:", "blob:", "*.tile.openstreetmap.org", "nominatim.openstreetmap.org"],
+      mediaSrc:   ["'self'", "blob:"],
       connectSrc: ["'self'", "nominatim.openstreetmap.org", "unpkg.com"],
     }
   },

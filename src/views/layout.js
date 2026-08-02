@@ -543,7 +543,19 @@ const CSS = `
     font-family:'Playfair Display',serif;
     font-size:18px;color:var(--ink);margin-bottom:6px;
   }
-  .upload-box p{font-size:13px;color:var(--ink-light);margin-bottom:18px}
+  .upload-box p{font-size:13px;color:var(--ink-light);margin-bottom:14px}
+  .up-file{
+    display:none;
+    align-items:center;justify-content:space-between;gap:10px;
+    background:var(--mist);border:1px solid var(--sand);border-radius:8px;
+    padding:7px 10px;margin-bottom:14px;text-align:left;
+  }
+  .up-file.show{display:flex}
+  .up-file-name{
+    font-size:12px;font-weight:600;color:var(--ocean-mid);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .up-file-meta{font-size:11px;color:var(--ink-light);flex-shrink:0}
   .up-bar{
     height:12px;border-radius:8px;
     background:var(--sand);overflow:hidden;

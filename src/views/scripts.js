@@ -213,7 +213,31 @@ function initUploadProgress(formId, draftKey, bodyHiddenId) {
   var fill    = document.getElementById('upBarFill');
   var pct     = document.getElementById('upPct');
   var msg     = document.getElementById('upMsg');
+  var fileBox = document.getElementById('upFile');
+  var fileNameEl = fileBox ? fileBox.querySelector('.up-file-name') : null;
+  var fileMetaEl = fileBox ? fileBox.querySelector('.up-file-meta') : null;
   if (!form || !overlay) return;
+
+  function fmtSize(b) {
+    if (b >= 1048576) return (b / 1048576).toFixed(1).replace('.', ',') + ' Mo';
+    if (b >= 1024) return Math.round(b / 1024) + ' Ko';
+    return b + ' o';
+  }
+
+  // Fichiers dans l'ordre où FormData les sérialise, c.-à-d. l'ordre du DOM,
+  // avec l'octet de fin de chacun dans le flux (pour situer l'envoi en cours)
+  function collectFiles() {
+    var list = [], offset = 0;
+    form.querySelectorAll('input[type=file]').forEach(function(inp) {
+      Array.from(inp.files || []).forEach(function(f) {
+        offset += f.size;
+        var icon = f.type.indexOf('video/') === 0 ? '🎬'
+                 : (/\\.gpx$/i.test(f.name) ? '🗺️' : '📷');
+        list.push({ label: icon + ' ' + f.name, size: f.size, end: offset });
+      });
+    });
+    return list;
+  }
 
   form.addEventListener('submit', function(e) {
     e.preventDefault();
@@ -224,16 +248,44 @@ function initUploadProgress(formId, draftKey, bodyHiddenId) {
     // L'action contient déjà ?_csrf=… donc requireCsrf passe via req.query
     xhr.open('POST', form.getAttribute('action'), true);
 
+    var files      = collectFiles();
+    var filesBytes = files.length ? files[files.length - 1].end : 0;
+    var shownIdx   = -1;
+
+    function showFile(i) {
+      if (!fileBox || i === shownIdx) return;
+      shownIdx = i;
+      if (i < 0) { fileBox.classList.remove('show'); return; }
+      fileNameEl.textContent = files[i].label;
+      fileMetaEl.textContent = (i + 1) + '/' + files.length + ' · ' + fmtSize(files[i].size);
+      fileBox.classList.add('show');
+    }
+
     overlay.classList.add('open');
     fill.style.width = '0%';
     pct.textContent  = '0 %';
+    if (msg) msg.textContent = files.length ? 'Envoi des éléments' : 'Envoi de l\\'étape';
+    showFile(files.length ? 0 : -1);
 
     xhr.upload.addEventListener('progress', function(ev) {
       if (ev.lengthComputable) {
         var p = Math.round(ev.loaded / ev.total * 100);
         fill.style.width = p + '%';
         pct.textContent  = p + ' %';
-        if (p >= 100 && msg) msg.textContent = 'Traitement des médias sur le serveur…';
+        // Les champs texte et les en-têtes multipart sont négligeables devant les
+        // médias : on ramène les octets envoyés à l'échelle du contenu des fichiers
+        if (files.length && ev.total) {
+          var sent = ev.loaded * (filesBytes / ev.total);
+          var idx  = files.length - 1;
+          for (var i = 0; i < files.length; i++) {
+            if (sent < files[i].end) { idx = i; break; }
+          }
+          showFile(idx);
+        }
+        if (p >= 100) {
+          if (msg) msg.textContent = 'Traitement des médias sur le serveur…';
+          showFile(-1);
+        }
       }
     });
 
