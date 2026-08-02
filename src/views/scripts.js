@@ -700,52 +700,6 @@ const LIGHTBOX_HTML = `
   <div class="lb-thumbs" id="lb-thumbs"></div>
 </div>`;
 
-// ── Couchage : fenêtre affichant le commentaire d'un lieu de nuit ──
-const SLEEP_MODAL_HTML = `
-<div class="sleep-modal" id="sleepModal" role="dialog" aria-modal="true">
-  <div class="sleep-box">
-    <div class="sleep-head">
-      <div>
-        <h3>🛏️ Couchage</h3>
-        <div class="sleep-head-place" id="sleepPlace"></div>
-      </div>
-      <button class="sleep-close" id="sleepClose" title="Fermer">&#x2715;</button>
-    </div>
-    <div class="sleep-body" id="sleepComment"></div>
-  </div>
-</div>`;
-
-const SLEEP_MODAL_JS = `
-<script>
-(function(){
-  var modal=document.getElementById('sleepModal');
-  if(!modal)return;
-  var placeEl=document.getElementById('sleepPlace');
-  var textEl=document.getElementById('sleepComment');
-
-  function close(){ modal.classList.remove('open'); document.body.style.overflow=''; }
-  document.getElementById('sleepClose').addEventListener('click',close);
-  modal.addEventListener('click',function(e){ if(e.target===modal) close(); });
-  document.addEventListener('keydown',function(e){ if(e.key==='Escape'&&modal.classList.contains('open')) close(); });
-
-  function bindSleep(root){
-    (root||document).querySelectorAll('button.card-sleep').forEach(function(btn){
-      if(btn.dataset.sleepBound)return; btn.dataset.sleepBound='1';
-      btn.addEventListener('click',function(){
-        placeEl.textContent=btn.dataset.sleepPlace||'';
-        placeEl.style.display=btn.dataset.sleepPlace?'block':'none';
-        var c=btn.dataset.sleepComment||'';
-        textEl.textContent=c||'Aucun commentaire pour ce couchage.';
-        textEl.classList.toggle('sleep-empty',!c);
-        modal.classList.add('open'); document.body.style.overflow='hidden';
-      });
-    });
-  }
-  window.bindSleep=bindSleep;
-  bindSleep(document);
-})();
-</script>`;
-
 const ELEV_MODAL_HTML = `
 <div class="elev-modal" id="elevModal" role="dialog" aria-modal="true">
   <div class="elev-box">
@@ -956,6 +910,5 @@ module.exports = {
   FORM_SCRIPTS, richEditorHtml,
   LIGHTBOX_JS, LIGHTBOX_HTML, TRANSLATE_JS, SINGLE_VIDEO_JS,
   ELEV_MODAL_HTML, ELEV_MODAL_JS,
-  SLEEP_MODAL_HTML, SLEEP_MODAL_JS,
   DELETE_CONFIRM_JS, COMMENTS_JS,
 };
