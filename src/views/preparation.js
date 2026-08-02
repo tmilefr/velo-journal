@@ -2,7 +2,7 @@ const { TRIP_TITLE } = require('../config');
 const { CSS, renderHeader } = require('./layout');
 const {
   LIGHTBOX_JS, LIGHTBOX_HTML, TRANSLATE_JS, SINGLE_VIDEO_JS,
-  ELEV_MODAL_HTML, ELEV_MODAL_JS, SLEEP_MODAL_HTML, SLEEP_MODAL_JS,
+  ELEV_MODAL_HTML, ELEV_MODAL_JS,
   DELETE_CONFIRM_JS, COMMENTS_JS,
 } = require('./scripts');
 const { renderCard } = require('./card');
@@ -35,12 +35,10 @@ function renderPreparation(posts, isAdmin = false, csrf = '', isStrictAdmin = fa
     ${isAdmin ? '<a class="fab" href="/post?type=preparation" title="Nouvel article de préparation">+</a>' : ''}
     ${LIGHTBOX_HTML}
     ${ELEV_MODAL_HTML}
-    ${SLEEP_MODAL_HTML}
     ${LIGHTBOX_JS}
     ${SINGLE_VIDEO_JS}
     ${TRANSLATE_JS}
     ${ELEV_MODAL_JS}
-    ${SLEEP_MODAL_JS}
     ${DELETE_CONFIRM_JS}
     ${COMMENTS_JS}
   </body></html>`;

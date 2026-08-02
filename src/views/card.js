@@ -2,7 +2,6 @@ const { formatDate, postEndISO, postDaySpan } = require('../lib/dates');
 const { formatEuro, initials } = require('../lib/format');
 const { esc, renderBody } = require('../lib/html');
 const { isVideoUrl, pickCover } = require('../services/media');
-const { hasSleep } = require('../services/sleep');
 const {
   EXPENSE_CAT_LABELS, EXPENSE_PAYER_LABELS, EXPENSE_SUBCAT_LABELS,
   postExpenseTotal,
@@ -48,22 +47,21 @@ function renderCard(p, isAdmin, csrf, isStrictAdmin = false) {
     <div class="card-divider"></div>
     <div class="card-body">
       <h2 class="card-title">${esc(p.title)}</h2>
-      <div class="translate-widget" data-postid="${p.id}" data-csrf="${csrf}">
-        <select class="translate-select">
-          <option value="">🌐 Traduire…</option>
-          <option value="en">🇬🇧 English</option>
-          <option value="es">🇪🇸 Español</option>
-          <option value="de">🇩🇪 Deutsch</option>
-          <option value="it">🇮🇹 Italiano</option>
-          <option value="fr">🇫🇷 Texte original</option>
-        </select>
-        <span class="translate-status"></span>
-      </div>
-      ${(p.km || p.dplus) ? `
       <div class="card-badges" style="margin-bottom:${nonRode > 0 ? '8px' : '14px'}">
+        <div class="translate-widget" data-postid="${p.id}" data-csrf="${csrf}">
+          <select class="translate-select">
+            <option value="">🌐 Traduire…</option>
+            <option value="en">🇬🇧 English</option>
+            <option value="es">🇪🇸 Español</option>
+            <option value="de">🇩🇪 Deutsch</option>
+            <option value="it">🇮🇹 Italiano</option>
+            <option value="fr">🇫🇷 Texte original</option>
+          </select>
+          <span class="translate-status"></span>
+        </div>
         ${p.km    ? `<span class="km-badge">🚴 +${esc(String(p.km))} km</span>` : ''}
         ${p.dplus ? (p.gpx ? `<button type="button" class="dplus-badge dplus-clickable" data-elev-gpx="${p.gpx}" data-elev-title="${esc(p.title)}" title="Voir le profil de dénivelé">⛰️ ${esc(String(p.dplus))} m D+ 📈</button>` : `<span class="dplus-badge">⛰️ ${esc(String(p.dplus))} m D+</span>`) : ''}
-      </div>` : ''}
+      </div>
       ${(nonRode > 0 && (p.km || p.dplus)) ? `
       <div class="card-restnote" style="margin-bottom:14px">🛌 ${nonRode} jour${nonRode > 1 ? 's' : ''} non roulé${nonRode > 1 ? 's' : ''} (repos) sur cette étape</div>` : ''}
       ${(() => {
@@ -103,24 +101,6 @@ function renderCard(p, isAdmin, csrf, isStrictAdmin = false) {
           <a class="gpx-link" href="${p.gpx}" download>⬇️ Télécharger</a>
         </div>
       </div>` : ''}
-      ${(() => {
-        // Couchage de l'étape : affiché en fin de post. Le commentaire s'ouvre
-        // dans une fenêtre au clic (bouton) ; sans commentaire, simple encart.
-        if (!hasSleep(p)) return '';
-        const place = p.sleep.label || 'Lieu non précisé';
-        const attrs = `data-sleep-place="${esc(place)}" data-sleep-comment="${esc(p.sleep.comment || '')}"`;
-        const inner = `
-        <span class="card-sleep-icon">🛏️</span>
-        <span class="card-sleep-main">
-          <span class="card-sleep-lbl">Couchage</span>
-          <span class="card-sleep-place">${esc(place)}</span>
-          ${p.sleep.comment ? `<span class="card-sleep-hint">💬 Voir le commentaire</span>` : ''}
-        </span>
-        ${p.sleep.comment ? `<span class="card-sleep-chev">›</span>` : ''}`;
-        return p.sleep.comment
-          ? `<button type="button" class="card-sleep" ${attrs} aria-label="Commentaire sur le couchage — ${esc(place)}">${inner}</button>`
-          : `<div class="card-sleep">${inner}</div>`;
-      })()}
       ${(isStrictAdmin && p.expenses && p.expenses.length) ? `
       <div class="card-expenses">
         <div class="card-exp-head">
