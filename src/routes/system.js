@@ -6,7 +6,7 @@ const { DATA, UPLOADS_DIR } = require('../config');
 const { buildZip } = require('../lib/zip');
 const { readPosts, writePosts } = require('../services/posts');
 const { readSubscribers } = require('../services/subscribers');
-const { isVideoUrl } = require('../services/media');
+const { isVideoUrl, pickCover } = require('../services/media');
 const { upload } = require('../middleware/upload');
 const { csrfToken, requireCsrf } = require('../middleware/csrf');
 const { requireAuth } = require('../middleware/auth');
@@ -66,20 +66,28 @@ router.get('/settings', requireAuth, (req, res) => {
 });
 
 // ── Panorama : profils de dénivelé de toutes les étapes mis bout à bout ──
-// Génère (côté client, sur canvas) une grande image blanche avec la coupe
+// Génère (côté client, sur canvas) une série de pages A4 avec la coupe
 // altimétrique continue du voyage, un trait en biais vers chaque point
-// d'arrivée de GPX, et la photo de chaque étape reliée à sa trace.
+// d'arrivée de GPX, et la photo favorite de chaque étape reliée à sa trace.
 router.get('/panorama', requireAuth, (req, res) => {
   const stages = readPosts()
     .filter(p => p.gpx && p.type !== 'preparation')
     .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
-    .map(p => ({
-      gpx:   p.gpx,
-      title: p.title || p.location || '',
-      date:  p.date || '',
-      km:    parseInt(p.km) || 0,
-      photo: (p.photos || []).find(ph => !isVideoUrl(ph)) || null,
-    }));
+    .map(p => {
+      // Photo mise en avant par l'auteur (⭐) ; on ignore les vidéos, non
+      // dessinables sur un canvas, en retombant sur la première image.
+      const cover  = pickCover(p.photos, p.cover);
+      const photos = p.photos || [];
+      return {
+        gpx:   p.gpx,
+        title: p.title || p.location || '',
+        date:  p.date || '',
+        km:    parseInt(p.km) || 0,
+        photo: (cover && !isVideoUrl(cover))
+          ? cover
+          : (photos.find(ph => !isVideoUrl(ph)) || null),
+      };
+    });
   res.send(renderPanorama(stages));
 });
 

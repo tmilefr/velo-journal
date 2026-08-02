@@ -91,7 +91,7 @@ function renderSettings(csrf = '', restored = false, recalc = null, subscribers 
       </div>
       <div class="form-card" style="margin-top:16px">
         <h2>🏔️ Panorama du voyage</h2>
-        <p style="font-size:14px;color:var(--ink-light);margin-bottom:18px;line-height:1.6">Génère une grande image blanche avec <strong>tous les profils de dénivelé mis bout à bout</strong>. Un trait en biais relie chaque <strong>point d'arrivée de GPX</strong> à la photo de l'étape correspondante. Idéal à imprimer ou partager.</p>
+        <p style="font-size:14px;color:var(--ink-light);margin-bottom:18px;line-height:1.6">Génère <strong>tous les profils de dénivelé mis bout à bout</strong>, découpés en <strong>pages A4 paysage</strong> à recoller. Un trait en biais relie chaque <strong>point d'arrivée de GPX</strong> à la photo favorite (⭐) de l'étape correspondante. Idéal à imprimer ou partager.</p>
         <a href="/panorama" class="btn-submit" style="display:block;text-align:center;text-decoration:none;background:linear-gradient(135deg,var(--emerald),var(--emerald-mid))">🏔️ Générer le panorama</a>
       </div>
       ${renderSubscribersCard(csrf, subscribers)}
