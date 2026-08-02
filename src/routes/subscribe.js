@@ -2,7 +2,7 @@
 const express   = require('express');
 const rateLimit = require('express-rate-limit');
 const { MAIL_ENABLED } = require('../config');
-const { subscribe, findByToken, confirmByToken, unsubscribeByToken, removeEmail } = require('../services/subscribers');
+const { subscribe, findByToken, confirmByToken, confirmByEmail, unsubscribeByToken, removeEmail } = require('../services/subscribers');
 const { sendConfirmationEmail, siteBaseUrl } = require('../services/mailer');
 const { requireFamily, requireAuth } = require('../middleware/auth');
 const { requireCsrf } = require('../middleware/csrf');
@@ -63,6 +63,15 @@ router.post('/subscribe/stop/:token', (req, res) => {
   const email = unsubscribeByToken(req.params.token);
   if (!email) return res.status(404).send(renderConfirmInvalid());
   res.send(renderUnsubscribeDone(email));
+});
+
+// ── Admin : valider un abonné à la main depuis la page Système ──
+// Dépannage quand l'e-mail de confirmation n'arrive jamais (spam, faute
+// de frappe corrigée de vive voix…) : l'admin confirme l'abonnement
+// lui-même, sans passer par le lien du double opt-in.
+router.post('/subscribe/validate', requireAuth, requireCsrf, (req, res) => {
+  confirmByEmail(req.body.email);
+  res.redirect('/settings#subscribers');
 });
 
 // ── Admin : retirer un abonné depuis la page Système ──────

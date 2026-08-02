@@ -225,6 +225,10 @@ const CSS = `
   .comment-del{background:none;border:none;color:#dc2626;font-size:11px;cursor:pointer;padding:2px 6px;margin-left:6px;border-radius:6px;}
   .comment-del:hover{background:#fee2e2;}
 
+  /* ── VALIDATION MANUELLE D'UN ABONNÉ (système) ───── */
+  .sub-validate{background:none;border:1px solid var(--emerald);color:var(--emerald);font-size:11px;font-weight:600;cursor:pointer;padding:2px 8px;border-radius:20px;white-space:nowrap;}
+  .sub-validate:hover{background:var(--sage);}
+
   /* ── SYNTHÈSE DÉPENSES (stats) ───────────────────── */
   .exp-month-card{background:#fff;border:1px solid var(--sand);border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:0 2px 12px rgba(10,61,98,0.06);}
   .exp-month-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;}
