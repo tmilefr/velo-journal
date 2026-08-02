@@ -8,6 +8,7 @@ const { parisLocalToISO, isoToDatetimeLocal, parseEndDate } = require('../lib/da
 const { sanitizeHtml } = require('../lib/html');
 const { readPosts, writePosts } = require('../services/posts');
 const { parseExpenses } = require('../services/expenses');
+const { parseSleep } = require('../services/sleep');
 const { parseGpxStats } = require('../services/gpx');
 const { resizeUploadedImages, deletePostFiles, pickCover } = require('../services/media');
 const { maybeNotifyNewPost, siteBaseUrl } = require('../services/mailer');
@@ -82,6 +83,7 @@ router.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', ma
     cover:      pickCover(photos, photos[parseInt(req.body.cover_new, 10)]),
     gpx:        gpxFile,
     expenses,
+    sleep:      parseSleep(req.body),
     privateNote: (privateNote || '').toString().trim().substring(0, 2000),
     comments:   []
   });
@@ -198,6 +200,7 @@ router.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos'
     cover:      pickCover(photos, req.body.cover),
     gpx:        gpxFile,
     expenses:    parseExpenses(req.body),
+    sleep:       parseSleep(req.body),
     privateNote: (privateNote || '').toString().trim().substring(0, 2000),
     translations: (newTitle === existing.title && newBody === existing.body)
       ? (existing.translations || {})

@@ -4,9 +4,12 @@ const { esc } = require('../lib/html');
 // ── JS partagé pour formulaires ───────────────────────────
 const FORM_SCRIPTS = `
 <script>
-function initLocAutocomplete(fieldId, latId, lonId, suggestId) {
+// opts.poi : conserve le nom du lieu trouvé (camping, hôtel, refuge…) au lieu
+// de le remplacer par la ville — utile pour rechercher un point de couchage.
+function initLocAutocomplete(fieldId, latId, lonId, suggestId, opts) {
   var field = document.getElementById(fieldId);
   var list  = document.getElementById(suggestId);
+  var poi   = !!(opts && opts.poi);
   var timer = null, items = [], sel = -1;
   if (!field || !list) return;
   field.addEventListener('input', function() {
@@ -41,16 +44,25 @@ function initLocAutocomplete(fieldId, latId, lonId, suggestId) {
       .then(function(data) {
         items = data.map(function(r) {
           var a = r.address || {};
-          var name = a.city || a.town || a.village || a.hamlet || a.county || r.display_name.split(',')[0];
-          var detail = [a.state, a.country].filter(Boolean).join(', ');
-          return { display: name + (detail ? ', '+detail : ''), lat: r.lat, lon: r.lon };
+          var head = String(r.display_name || '').split(',')[0].trim();
+          var city = a.city || a.town || a.village || a.hamlet || a.county || '';
+          var name, detail;
+          if (poi) {
+            // On garde le nom propre du lieu et on situe avec la ville
+            name   = head || city;
+            detail = [city && city !== name ? city : '', a.state, a.country].filter(Boolean).join(', ');
+          } else {
+            name   = city || head;
+            detail = [a.state, a.country].filter(Boolean).join(', ');
+          }
+          return { name: name, detail: detail, display: name + (detail ? ', '+detail : ''), lat: r.lat, lon: r.lon };
         });
         if (!items.length) { list.classList.remove('open'); return; }
         sel = -1;
         list.innerHTML = items.map(function(it, i) {
           return '<div class="loc-suggestion-item" data-idx="'+i+'">'
-            + '<span class="loc-suggestion-name">'+escHtml(it.display.split(',')[0])+'</span>'
-            + '<span class="loc-suggestion-detail">'+escHtml(it.display.split(',').slice(1).join(',').trim())+'</span>'
+            + '<span class="loc-suggestion-name">'+escHtml(it.name)+'</span>'
+            + '<span class="loc-suggestion-detail">'+escHtml(it.detail)+'</span>'
             + '</div>';
         }).join('');
         list.classList.add('open');
@@ -329,7 +341,7 @@ function saveDraft(key, formId, bodyHiddenId) {
     var form = document.getElementById(formId);
     if (!form) return;
     var draft = {};
-    ['title','location','km','dplus','privateNote','postDate','endDate'].forEach(function(n) {
+    ['title','location','km','dplus','privateNote','postDate','endDate','sleepLocation','sleepLat','sleepLon','sleepComment'].forEach(function(n) {
       var el = form.querySelector('[name=' + n + ']');
       if (el) draft[n] = el.value;
     });
@@ -351,7 +363,7 @@ function restoreDraft(key, formId, bodyEditorId, bodyHiddenId) {
     if (!draft) return;
     var form = document.getElementById(formId);
     if (!form) return;
-    ['title','location','km','dplus','privateNote','postDate','endDate'].forEach(function(n) {
+    ['title','location','km','dplus','privateNote','postDate','endDate','sleepLocation','sleepLat','sleepLon','sleepComment'].forEach(function(n) {
       var el = form.querySelector('[name=' + n + ']');
       if (el && draft[n] != null) el.value = draft[n];
     });
@@ -688,6 +700,52 @@ const LIGHTBOX_HTML = `
   <div class="lb-thumbs" id="lb-thumbs"></div>
 </div>`;
 
+// ── Couchage : fenêtre affichant le commentaire d'un lieu de nuit ──
+const SLEEP_MODAL_HTML = `
+<div class="sleep-modal" id="sleepModal" role="dialog" aria-modal="true">
+  <div class="sleep-box">
+    <div class="sleep-head">
+      <div>
+        <h3>🛏️ Couchage</h3>
+        <div class="sleep-head-place" id="sleepPlace"></div>
+      </div>
+      <button class="sleep-close" id="sleepClose" title="Fermer">&#x2715;</button>
+    </div>
+    <div class="sleep-body" id="sleepComment"></div>
+  </div>
+</div>`;
+
+const SLEEP_MODAL_JS = `
+<script>
+(function(){
+  var modal=document.getElementById('sleepModal');
+  if(!modal)return;
+  var placeEl=document.getElementById('sleepPlace');
+  var textEl=document.getElementById('sleepComment');
+
+  function close(){ modal.classList.remove('open'); document.body.style.overflow=''; }
+  document.getElementById('sleepClose').addEventListener('click',close);
+  modal.addEventListener('click',function(e){ if(e.target===modal) close(); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape'&&modal.classList.contains('open')) close(); });
+
+  function bindSleep(root){
+    (root||document).querySelectorAll('button.card-sleep').forEach(function(btn){
+      if(btn.dataset.sleepBound)return; btn.dataset.sleepBound='1';
+      btn.addEventListener('click',function(){
+        placeEl.textContent=btn.dataset.sleepPlace||'';
+        placeEl.style.display=btn.dataset.sleepPlace?'block':'none';
+        var c=btn.dataset.sleepComment||'';
+        textEl.textContent=c||'Aucun commentaire pour ce couchage.';
+        textEl.classList.toggle('sleep-empty',!c);
+        modal.classList.add('open'); document.body.style.overflow='hidden';
+      });
+    });
+  }
+  window.bindSleep=bindSleep;
+  bindSleep(document);
+})();
+</script>`;
+
 const ELEV_MODAL_HTML = `
 <div class="elev-modal" id="elevModal" role="dialog" aria-modal="true">
   <div class="elev-box">
@@ -898,5 +956,6 @@ module.exports = {
   FORM_SCRIPTS, richEditorHtml,
   LIGHTBOX_JS, LIGHTBOX_HTML, TRANSLATE_JS, SINGLE_VIDEO_JS,
   ELEV_MODAL_HTML, ELEV_MODAL_JS,
+  SLEEP_MODAL_HTML, SLEEP_MODAL_JS,
   DELETE_CONFIRM_JS, COMMENTS_JS,
 };

@@ -3,7 +3,8 @@ const { totalKm, totalDPlus } = require('../services/stats');
 const { CSS, renderHeader } = require('./layout');
 const {
   LIGHTBOX_JS, LIGHTBOX_HTML, TRANSLATE_JS, SINGLE_VIDEO_JS,
-  ELEV_MODAL_HTML, ELEV_MODAL_JS, DELETE_CONFIRM_JS, COMMENTS_JS,
+  ELEV_MODAL_HTML, ELEV_MODAL_JS, SLEEP_MODAL_HTML, SLEEP_MODAL_JS,
+  DELETE_CONFIRM_JS, COMMENTS_JS,
 } = require('./scripts');
 const { renderCard } = require('./card');
 
@@ -41,6 +42,7 @@ function renderPublic(posts, isAdmin = false, csrf = '', isStrictAdmin = false) 
     ${isAdmin ? `<a class="fab" href="/post" title="Nouvelle étape">+</a>` : ''}
     ${LIGHTBOX_HTML}
     ${ELEV_MODAL_HTML}
+    ${SLEEP_MODAL_HTML}
     <script>
     (function(){
       function lon2xf(lon,z){return(lon+180)/360*Math.pow(2,z);}
@@ -133,6 +135,7 @@ function renderPublic(posts, isAdmin = false, csrf = '', isStrictAdmin = false) 
               if(window.bindGpxCanvases)window.bindGpxCanvases(feed);
               if(window.bindLightbox)window.bindLightbox(feed);
               if(window.bindElev)window.bindElev(feed);
+              if(window.bindSleep)window.bindSleep(feed);
               if(window.bindDelete)window.bindDelete(feed);
               if(window.bindComments)window.bindComments(feed);
               if(window.bindTranslate)window.bindTranslate(feed);
@@ -200,6 +203,7 @@ function renderPublic(posts, isAdmin = false, csrf = '', isStrictAdmin = false) 
     ${SINGLE_VIDEO_JS}
     ${TRANSLATE_JS}
     ${ELEV_MODAL_JS}
+    ${SLEEP_MODAL_JS}
     ${DELETE_CONFIRM_JS}
     ${COMMENTS_JS}
   </body></html>`;

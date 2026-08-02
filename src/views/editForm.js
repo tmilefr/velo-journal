@@ -10,6 +10,7 @@ const { FORM_SCRIPTS, richEditorHtml } = require('./scripts');
 
 function renderEditForm(post, err, isMargot = false, csrf = '') {
   const cover = pickCover(post.photos, post.cover);
+  const sleep = post.sleep || { label: '', comment: '', lat: null, lon: null };
   return `<!DOCTYPE html><html lang="fr"><head>
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Modifier l'étape</title><style>${CSS}</style>
@@ -95,6 +96,22 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
             <input type="hidden" name="lat" id="lat" value="${post.lat||''}">
             <input type="hidden" name="lon" id="lon" value="${post.lon||''}">
             <button type="button" class="loc-search-btn" id="gpsBtnEdit">📍 GPS auto</button>
+          </div>
+          <div class="field">
+            <label>🛏️ Où dort-on ce soir ?</label>
+            <div class="loc-wrap">
+              <input name="sleepLocation" id="sleepLocationField" type="text" value="${esc(sleep.label)}" placeholder="Cherchez un camping, un hôtel, un lieu..." autocomplete="off" maxlength="120">
+              <div class="loc-suggestions" id="sleepLocSuggestions"></div>
+            </div>
+            <input type="hidden" name="sleepLat" id="sleepLat" value="${sleep.lat != null ? sleep.lat : ''}">
+            <input type="hidden" name="sleepLon" id="sleepLon" value="${sleep.lon != null ? sleep.lon : ''}">
+            <button type="button" class="loc-search-btn" id="gpsBtnSleepEdit">📍 GPS auto</button>
+            <div style="font-size:12px;color:var(--ink-light);margin-top:6px;line-height:1.5">🛏️ Choisissez un résultat de la recherche pour placer le couchage sur la carte avec son propre marqueur. Videz le lieu et le commentaire pour retirer le couchage.</div>
+          </div>
+          <div class="field">
+            <label>Commentaire sur le couchage</label>
+            <textarea name="sleepComment" placeholder="Accueil, confort, prix, douche chaude, voisins bruyants…" maxlength="800" style="min-height:80px">${esc(sleep.comment)}</textarea>
+            <div style="font-size:12px;color:var(--ink-light);margin-top:6px;line-height:1.5">💬 Le commentaire s'ouvre dans une fenêtre au clic sur le couchage, en fin de post.</div>
           </div>
           <div class="field-row">
             <div class="field"><label>Km du jour</label><input name="km" type="number" min="0" max="500" step="0.1" value="${post.km||''}"></div>
@@ -182,8 +199,11 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
         initRichEditor('bodyEditor', 'bodyHidden', 'bodyCount', 4000);
         initFormTabs('editTabs');
         initLocAutocomplete('locationField', 'lat', 'lon', 'locSuggestions');
+        initLocAutocomplete('sleepLocationField', 'sleepLat', 'sleepLon', 'sleepLocSuggestions', { poi: true });
         var btn = document.getElementById('gpsBtnEdit');
         if (btn) btn.addEventListener('click', function() { getGPS('locationField', 'lat', 'lon'); });
+        var sleepBtn = document.getElementById('gpsBtnSleepEdit');
+        if (sleepBtn) sleepBtn.addEventListener('click', function() { getGPS('sleepLocationField', 'sleepLat', 'sleepLon'); });
         initExpenses('expList', 'expAddBtn', 'expTotal', ${JSON.stringify(post.expenses || []).replace(/</g, '\\u003c')});
 
         // ── Réordonnancement des médias (drag & drop + tactile) ──

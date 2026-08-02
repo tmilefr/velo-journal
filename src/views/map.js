@@ -6,11 +6,26 @@ const { CSS, renderHeader } = require('./layout');
 // ══════════════════════════════════════════════════════════
 
 function renderMap(posts, isAdmin = false, isStrictAdmin = false, csrf = '') {
+  // Les données injectées dans le <script> viennent de champs libres : on
+  // neutralise « < » pour qu'un texte contenant </script> ne puisse pas
+  // refermer la balise.
+  const toScriptJson = v => JSON.stringify(v).replace(/</g, '\\u003c');
+
   const withGps = posts.filter(p => p.lat && p.lon);
-  const gpsJson = JSON.stringify(withGps.map(p => ({
+  const gpsJson = toScriptJson(withGps.map(p => ({
     lat: p.lat, lon: p.lon, title: p.title, location: p.location || '',
     km: p.km || 0, dplus: p.dplus || 0, date: p.date, id: p.id,
     photo: (p.photos || []).find(ph => !/\.(mp4|webm|mov|m4v|ogg|ogv)$/i.test(ph)) || null, gpx: p.gpx || null,
+  })));
+
+  // Lieux de couchage : marqueur dédié, indépendant du point d'arrivée de l'étape
+  const withSleep = posts.filter(p => p.sleep && p.sleep.lat && p.sleep.lon);
+  const sleepJson = toScriptJson(withSleep.map(p => ({
+    lat: p.sleep.lat, lon: p.sleep.lon,
+    label: p.sleep.label || '', comment: p.sleep.comment || '',
+    date: p.date, id: p.id, title: p.title,
+    // Point d'arrivée de l'étape, pour relier le couchage à celle-ci
+    plat: p.lat || null, plon: p.lon || null,
   })));
 
   return `<!DOCTYPE html><html lang="fr"><head>
@@ -37,6 +52,8 @@ function renderMap(posts, isAdmin = false, isStrictAdmin = false, csrf = '') {
       .map-popup-meta{font-size:11px;color:var(--ink-light);display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px;}
       .map-popup-badge{background:var(--mist);color:var(--ocean-mid);padding:2px 7px;border-radius:20px;font-weight:500;}
       .map-popup-link{display:inline-block;margin-top:6px;font-size:12px;color:var(--ocean-mid);font-weight:600;text-decoration:underline;}
+      .map-popup-sleep-kicker{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#7a4fb5;margin-bottom:2px;}
+      .map-popup-sleep-comment{font-size:12px;color:var(--ink-mid);line-height:1.6;white-space:pre-wrap;background:#f6f2fc;border:1px solid #e3d8f5;border-radius:8px;padding:7px 9px;margin-top:6px;max-height:150px;overflow-y:auto;}
     </style>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   </head><body>
@@ -44,7 +61,7 @@ function renderMap(posts, isAdmin = false, isStrictAdmin = false, csrf = '') {
       ${renderHeader({ activePage: 'map', isAdmin, isStrictAdmin, showMap: true, csrf })}
       <div id="map-container">
         <div id="fullmap">
-          ${withGps.length === 0 ? `
+          ${(withGps.length === 0 && withSleep.length === 0) ? `
           <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--mist);">
             <div style="font-size:48px;margin-bottom:12px">🗺️</div>
             <h3 style="font-family:'Playfair Display',serif;font-size:20px;color:var(--ink-mid);margin-bottom:8px">Aucun point GPS pour l'instant</h3>
@@ -61,6 +78,7 @@ function renderMap(posts, isAdmin = false, isStrictAdmin = false, csrf = '') {
               <div class="map-legend-row"><div class="map-legend-dot" style="background:linear-gradient(135deg,#e67e22,#f39c12)"></div>Point de départ</div>
               <div class="map-legend-row"><div class="map-legend-dot" style="background:linear-gradient(135deg,#2a7a7a,#4aabab)"></div>Étape intermédiaire</div>
               <div class="map-legend-row"><div class="map-legend-dot" style="background:linear-gradient(135deg,#1a7a4a,#2ecc71)"></div>Dernière position</div>
+              ${withSleep.length ? `<div class="map-legend-row"><div class="map-legend-dot" style="background:linear-gradient(135deg,#7a4fb5,#a67ee0)"></div>🛏️ Couchage</div>` : ''}
               <div class="map-legend-row" style="margin-top:6px;padding-top:6px;border-top:1px solid var(--sand)">
                 <div style="width:28px;height:4px;background:#3a9090;border-radius:2px;flex-shrink:0"></div>Trace GPS du jour
               </div>
@@ -72,8 +90,9 @@ function renderMap(posts, isAdmin = false, isStrictAdmin = false, csrf = '') {
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
       const gpsData = ${gpsJson};
+      const sleepData = ${sleepJson};
       function initMap() {
-        if (!gpsData.length) return;
+        if (!gpsData.length && !sleepData.length) return;
         const map = L.map('fullmap', { zoomControl: false, scrollWheelZoom: true });
         L.control.zoom({ position: 'bottomright' }).addTo(map);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(map);
@@ -143,7 +162,30 @@ function renderMap(posts, isAdmin = false, isStrictAdmin = false, csrf = '') {
             +'</div>';
           marker.bindPopup(popupHtml, { maxWidth: 260, className: 'map-custom-popup' });
         });
-        map.fitBounds(L.latLngBounds(pts).pad(.18));
+        // ── Lieux de couchage ──
+        const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        sleepData.forEach(s => {
+          // Rattache visuellement le couchage au point d'arrivée de l'étape
+          if (s.plat && s.plon && ptDist([s.plat, s.plon], [s.lat, s.lon]) > 40) {
+            L.polyline([[s.plat, s.plon], [s.lat, s.lon]], { color: '#7a4fb5', weight: 2, opacity: .65, dashArray: '4,6' }).addTo(map);
+          }
+          const ic = L.divIcon({
+            html: '<div style="background:linear-gradient(135deg,#7a4fb5,#a67ee0);border:2.5px solid #fff;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.35)">🛏️</div>',
+            iconSize: [26,26], iconAnchor: [13,13], className: ''
+          });
+          const marker = L.marker([s.lat, s.lon], { icon: ic }).addTo(map);
+          const dateStr = new Date(s.date).toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' });
+          const popupHtml = '<div style="min-width:190px;max-width:260px">'
+            +'<div class="map-popup-sleep-kicker">🛏️ Couchage</div>'
+            +'<div class="map-popup-title">'+esc(s.label || 'Lieu non précisé')+'</div>'
+            +'<div class="map-popup-meta"><span>'+dateStr+'</span></div>'
+            +(s.comment?'<div class="map-popup-sleep-comment">'+esc(s.comment)+'</div>':'')
+            +'<a href="/#post-'+esc(s.id)+'" class="map-popup-link">Lire l&#39;&eacute;tape &rarr;</a>'
+            +'</div>';
+          marker.bindPopup(popupHtml, { maxWidth: 280, className: 'map-custom-popup' });
+        });
+        const allPts = pts.concat(sleepData.map(s => [s.lat, s.lon]));
+        map.fitBounds(L.latLngBounds(allPts).pad(.18));
         setTimeout(() => map.invalidateSize(), 50);
         setTimeout(() => map.invalidateSize(), 400);
         window.addEventListener('resize', () => map.invalidateSize());

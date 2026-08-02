@@ -2,6 +2,7 @@ const { formatDate, postEndISO, postDaySpan } = require('../lib/dates');
 const { formatEuro, initials } = require('../lib/format');
 const { esc, renderBody } = require('../lib/html');
 const { isVideoUrl, pickCover } = require('../services/media');
+const { hasSleep } = require('../services/sleep');
 const {
   EXPENSE_CAT_LABELS, EXPENSE_PAYER_LABELS, EXPENSE_SUBCAT_LABELS,
   postExpenseTotal,
@@ -102,6 +103,24 @@ function renderCard(p, isAdmin, csrf, isStrictAdmin = false) {
           <a class="gpx-link" href="${p.gpx}" download>⬇️ Télécharger</a>
         </div>
       </div>` : ''}
+      ${(() => {
+        // Couchage de l'étape : affiché en fin de post. Le commentaire s'ouvre
+        // dans une fenêtre au clic (bouton) ; sans commentaire, simple encart.
+        if (!hasSleep(p)) return '';
+        const place = p.sleep.label || 'Lieu non précisé';
+        const attrs = `data-sleep-place="${esc(place)}" data-sleep-comment="${esc(p.sleep.comment || '')}"`;
+        const inner = `
+        <span class="card-sleep-icon">🛏️</span>
+        <span class="card-sleep-main">
+          <span class="card-sleep-lbl">Couchage</span>
+          <span class="card-sleep-place">${esc(place)}</span>
+          ${p.sleep.comment ? `<span class="card-sleep-hint">💬 Voir le commentaire</span>` : ''}
+        </span>
+        ${p.sleep.comment ? `<span class="card-sleep-chev">›</span>` : ''}`;
+        return p.sleep.comment
+          ? `<button type="button" class="card-sleep" ${attrs} aria-label="Commentaire sur le couchage — ${esc(place)}">${inner}</button>`
+          : `<div class="card-sleep">${inner}</div>`;
+      })()}
       ${(isStrictAdmin && p.expenses && p.expenses.length) ? `
       <div class="card-expenses">
         <div class="card-exp-head">
