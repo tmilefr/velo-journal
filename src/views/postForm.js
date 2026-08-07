@@ -96,6 +96,17 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
             <div class="field"><label>Km du jour</label><input name="km" type="number" min="0" max="500" step="0.1"></div>
             <div class="field"><label>D+ (mètres)</label><input name="dplus" type="number" min="0" max="10000"></div>
           </div>
+          <div class="field-row">
+            <div class="field"><label>🚆 Km en train</label><input name="trainKm" type="number" min="0" max="5000" step="0.1"></div>
+            <div class="field"><label>Trajet en train</label><input name="trainLabel" type="text" placeholder="Ex : Lyon → Turin" maxlength="120"></div>
+          </div>
+          <div style="font-size:12px;color:var(--ink-light);margin:-6px 0 16px;line-height:1.5">🚆 Les kilomètres en train sont comptés à part : ils n'entrent ni dans les km roulés ni dans les moyennes, mais s'ajoutent au <strong>trajet total parcouru</strong>.</div>
+          <div class="field-row">
+            <div class="field"><label>Pays</label><input name="country" id="countryField" type="text" placeholder="Rempli automatiquement" maxlength="80"></div>
+            <div class="field"><label>Région</label><input name="region" id="regionField" type="text" placeholder="Rempli automatiquement" maxlength="80"></div>
+          </div>
+          <input type="hidden" name="countryCode" id="countryCodeField">
+          <div style="font-size:12px;color:var(--ink-light);margin:-6px 0 16px;line-height:1.5">🌍 Renseignés depuis la recherche de lieu (ou le GPS). Laissés vides, ils sont déduits des coordonnées à l'enregistrement. Ils servent au kilométrage par pays et par région.</div>
           <div class="field">
             <label>Trace GPX (optionnel)</label>
             <input type="file" name="gpx" accept=".gpx,application/gpx+xml" data-gpx-parse="1">
@@ -146,10 +157,11 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
       document.addEventListener('DOMContentLoaded', function() {
         initRichEditor('bodyEditor', 'bodyHidden', 'bodyCount', 4000);
         initFormTabs('postTabs');
-        initLocAutocomplete('locationField', 'lat', 'lon', 'locSuggestions');
+        var geoFields = { countryId: 'countryField', regionId: 'regionField', codeId: 'countryCodeField' };
+        initLocAutocomplete('locationField', 'lat', 'lon', 'locSuggestions', { geo: geoFields });
         initLocAutocomplete('sleepLocationField', 'sleepLat', 'sleepLon', 'sleepLocSuggestions', { poi: true });
         var btn = document.getElementById('gpsBtnPost');
-        if (btn) btn.addEventListener('click', function() { getGPS('locationField', 'lat', 'lon'); });
+        if (btn) btn.addEventListener('click', function() { getGPS('locationField', 'lat', 'lon', geoFields); });
         var sleepBtn = document.getElementById('gpsBtnSleepPost');
         if (sleepBtn) sleepBtn.addEventListener('click', function() { getGPS('sleepLocationField', 'sleepLat', 'sleepLon'); });
         initExpenses('expList', 'expAddBtn', 'expTotal', []);

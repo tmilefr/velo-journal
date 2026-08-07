@@ -2,7 +2,8 @@ const { TRIP_TITLE } = require('../config');
 const { formatDateShort, formatMonthLabel } = require('../lib/dates');
 const { formatEuro } = require('../lib/format');
 const { esc } = require('../lib/html');
-const { totalKm, distanceByMonth, computeStats } = require('../services/stats');
+const { totalKm, distanceByMonth, computeStats, trainStats, travelTotals, distanceByCountry } = require('../services/stats');
+const { flagEmoji } = require('../services/geo');
 const {
   EXPENSE_CATEGORIES, EXPENSE_PAYERS, EXPENSE_SUBCATEGORIES,
   EXPENSE_CAT_LABELS, EXPENSE_PAYER_LABELS, EXPENSE_SUBCAT_LABELS,
@@ -13,6 +14,19 @@ const { CSS, renderHeader } = require('./layout');
 // ══════════════════════════════════════════════════════════
 //  renderStats
 // ══════════════════════════════════════════════════════════
+
+// Dépliage des lignes de détail (dépenses, mois, régions) — partagé par toutes
+// les sections de la page, donc rendu une seule fois en bas de page.
+const TOGGLE_SCRIPT = `<script>
+  document.querySelectorAll('.exp-break-row-toggle').forEach(function(row) {
+    row.addEventListener('click', function() {
+      var detail = document.getElementById(row.dataset.target);
+      if (!detail) return;
+      var open = detail.classList.toggle('open');
+      row.classList.toggle('open', open);
+    });
+  });
+</script>`;
 
 function renderStats(posts, isAdmin = false, allPosts = null) {
   const s = computeStats(posts);
@@ -113,17 +127,84 @@ function renderStats(posts, isAdmin = false, allPosts = null) {
         <div class="exp-break-title">Par personne <span style="text-transform:none;font-weight:400">(cliquer pour le détail)</span></div>
         ${renderPayerRows(m, key)}
       </div>`;
+      }).join('')}`;
+
+  // ── Déplacements en train ────────────────────────────────
+  const train  = trainStats(posts);
+  const totals = travelTotals(posts);
+
+  const trainHtml = train.count === 0 ? '' : `
+      <div class="stats-section-title">🚆 Déplacements en train</div>
+      <div class="exp-month-card">
+        <div class="exp-month-head">
+          <span class="exp-month-name">${train.count} trajet${train.count > 1 ? 's' : ''} en train</span>
+          <span class="exp-month-total">${fr0(train.km)} km</span>
+        </div>
+        ${train.trips.map(t => {
+          const pct = Math.max(4, Math.round(t.km / (train.maxKm || 1) * 100));
+          return `<div class="train-row">
+            <span class="train-row-date">${formatDateShort(t.date)}</span>
+            <span class="train-row-lbl" title="${esc(t.label || t.title)}">${esc(t.label || t.title || '—')}</span>
+            <span class="train-row-track"><span class="train-row-fill" style="width:${pct}%"></span></span>
+            <span class="train-row-km">${fr1(t.km)} km</span>
+          </div>`;
+        }).join('')}
+        <div class="geo-sub" style="margin:10px 0 0">🚆 Ces kilomètres ne comptent pas comme jours roulés : ils s'ajoutent seulement au trajet total parcouru.</div>
+      </div>`;
+
+  // ── Kilométrage par pays, puis par région ────────────────
+  const byCountry    = distanceByCountry(posts);
+  const countryList  = Object.values(byCountry).sort((a, b) => (b.totalKm + b.trainKm) - (a.totalKm + a.trainKm));
+  const maxCountryKm = countryList.reduce((m, c) => Math.max(m, c.totalKm + c.trainKm), 1);
+  const regionCount  = countryList.reduce((n, c) => n + Object.keys(c.regions).length, 0);
+
+  const countryHtml = countryList.length === 0 ? '' : `
+      <div class="stats-section-title">🌍 Distance par pays et par région</div>
+      ${countryList.map((c, ci) => {
+        const regions   = Object.values(c.regions).sort((a, b) => (b.totalKm + b.trainKm) - (a.totalKm + a.trainKm));
+        const maxRegion = regions.reduce((m, r) => Math.max(m, r.totalKm + r.trainKm), 1);
+        const pctCountry = Math.max(2, Math.round((c.totalKm + c.trainKm) / maxCountryKm * 100));
+        const subParts = [
+          `🚴 ${fr0(c.totalKm)} km à vélo`,
+          c.trainKm > 0 ? `🚆 ${fr0(c.trainKm)} km en train` : '',
+          `${c.ridingDays} jour${c.ridingDays > 1 ? 's' : ''} roulé${c.ridingDays > 1 ? 's' : ''}`,
+          c.totalDplus > 0 ? `⛰️ ${fr0(c.totalDplus)} m D+` : '',
+        ].filter(Boolean);
+        const regionRows = regions.map((r, ri) => {
+          const detailId = `geodetail-${ci}-${ri}`;
+          const pct = Math.max(2, Math.round((r.totalKm + r.trainKm) / maxRegion * 100));
+          const stagesHtml = r.stages.map(st => `
+            <div class="exp-detail-item">
+              <span class="exp-detail-date">${formatDateShort(st.date)}</span>
+              <span class="exp-detail-lbl">${esc(st.title || '—')}</span>
+              <span class="exp-detail-payer">${st.trainKm > 0 ? `🚆 ${fr1(st.trainKm)} km` : (st.dplus > 0 ? `⛰️ ${fr0(st.dplus)} m` : '')}</span>
+              <span class="exp-detail-amt">${st.km > 0 ? `${fr1(st.km)} km` : '—'}</span>
+            </div>`).join('');
+          return `<div class="exp-break-row exp-break-row-toggle" data-target="${detailId}">
+            <div class="exp-break-lbl">${esc(r.region)} <span class="exp-break-caret">▾</span></div>
+            <div class="exp-break-track"><div class="exp-break-fill" style="width:${pct}%;background:var(--teal)"></div></div>
+            <div class="exp-break-val">${fr0(r.totalKm + r.trainKm)} km</div>
+          </div>
+          <div class="exp-detail" id="${detailId}">${stagesHtml}</div>`;
+        }).join('');
+        return `<div class="exp-month-card">
+          <div class="exp-month-head">
+            <span class="exp-month-name"><span class="geo-flag">${flagEmoji(c.countryCode)}</span>${esc(c.country)}</span>
+            <span class="exp-month-total">${fr0(c.totalKm + c.trainKm)} km</span>
+          </div>
+          <div class="geo-sub">${subParts.join(' · ')}</div>
+          <div class="exp-break-row" style="cursor:default">
+            <div class="exp-break-lbl">Part du voyage</div>
+            <div class="exp-break-track"><div class="exp-break-fill" style="width:${pctCountry}%;background:var(--ocean)"></div></div>
+            <div class="exp-break-val">${totals.totalKm > 0 ? Math.round((c.totalKm + c.trainKm) / totals.totalKm * 100) : 0} %</div>
+          </div>
+          <div class="exp-break-title">Par région <span style="text-transform:none;font-weight:400">(cliquer pour le détail des étapes)</span></div>
+          ${regionRows}
+        </div>`;
       }).join('')}
-      <script>
-        document.querySelectorAll('.exp-break-row-toggle').forEach(function(row) {
-          row.addEventListener('click', function() {
-            var detail = document.getElementById(row.dataset.target);
-            if (!detail) return;
-            var open = detail.classList.toggle('open');
-            row.classList.toggle('open', open);
-          });
-        });
-      </script>`;
+      <div class="stats-note">
+        🌍 Les kilomètres d'une étape sont attribués au pays et à la région de son <strong>point d'arrivée</strong>. Le pays et la région se corrigent à la main dans le formulaire d'édition de l'étape ; la page <strong>Système</strong> permet de compléter les étapes qui n'en ont pas encore.
+      </div>`;
 
   if (s.nDays === 0) {
     return `<!DOCTYPE html><html lang="fr"><head>
@@ -132,10 +213,19 @@ function renderStats(posts, isAdmin = false, allPosts = null) {
     </head><body>
       ${renderHeader({ activePage: 'stats', isAdmin, isStrictAdmin: true, showMap: false })}
       <div class="stats-wrap">
-        ${monthKeys.length === 0
+        ${monthKeys.length === 0 && train.count === 0 && countryList.length === 0
           ? `<div class="empty"><div class="empty-icon">📊</div><h3>Pas encore de jour roulé</h3><p>Les statistiques apparaîtront dès la première étape avec des kilomètres.</p></div>`
-          : expensesHtml}
+          : `${train.count > 0 ? `
+      <div class="stats-grid">
+        <div class="stat-card feature">
+          <div class="sc-icon">🧭</div>
+          <div class="sc-num">${fr0(totals.totalKm)} km</div>
+          <div class="sc-lbl">Trajet parcouru</div>
+          <div class="sc-sub">${fr0(totals.trainKm)} km en train sur ${totals.trainCount} trajet${totals.trainCount > 1 ? 's' : ''}</div>
+        </div>
+      </div>` : ''}${trainHtml}${countryHtml}${expensesHtml}`}
       </div>
+      ${TOGGLE_SCRIPT}
     </body></html>`;
   }
 
@@ -187,6 +277,15 @@ function renderStats(posts, isAdmin = false, allPosts = null) {
 
       <div class="stats-grid">
         <div class="stat-card feature">
+          <div class="sc-icon">🧭</div>
+          <div class="sc-num">${fr0(totals.totalKm)} km</div>
+          <div class="sc-lbl">Trajet parcouru</div>
+          <div class="sc-sub">${fr0(totals.bikeKm)} km à vélo${totals.trainKm > 0
+            ? ` · 🚆 ${fr0(totals.trainKm)} km en train (${totals.trainCount} trajet${totals.trainCount > 1 ? 's' : ''})`
+            : ' · aucun déplacement en train'}</div>
+        </div>
+
+        <div class="stat-card feature">
           <div class="sc-icon">🚴</div>
           <div class="sc-num">${fr1(s.avgKm)} km</div>
           <div class="sc-lbl">Moyenne par jour roulé</div>
@@ -234,6 +333,22 @@ function renderStats(posts, isAdmin = false, allPosts = null) {
           <div class="sc-lbl">km parcourus</div>
           <div class="sc-sub">${s.spanDays} jour${s.spanDays > 1 ? 's' : ''} depuis le départ</div>
         </div>
+
+        <div class="stat-card">
+          <div class="sc-icon">🚆</div>
+          <div class="sc-num">${fr0(totals.trainKm)}</div>
+          <div class="sc-lbl">km en train</div>
+          <div class="sc-sub">${train.count > 0
+            ? `${train.count} trajet${train.count > 1 ? 's' : ''}${train.longest ? ` · plus long ${fr0(train.maxKm)} km` : ''}`
+            : 'aucun trajet enregistré'}</div>
+        </div>
+
+        <div class="stat-card">
+          <div class="sc-icon">🌍</div>
+          <div class="sc-num">${countryList.length}</div>
+          <div class="sc-lbl">Pays traversé${countryList.length > 1 ? 's' : ''}</div>
+          <div class="sc-sub">${regionCount} région${regionCount > 1 ? 's' : ''} au total</div>
+        </div>
       </div>
 
       <div class="stats-note">
@@ -242,8 +357,13 @@ function renderStats(posts, isAdmin = false, allPosts = null) {
 
       ${kmMonthHtml}
 
+      ${trainHtml}
+
+      ${countryHtml}
+
       ${expensesHtml}
     </div>
+    ${TOGGLE_SCRIPT}
   </body></html>`;
 }
 

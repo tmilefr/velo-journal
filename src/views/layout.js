@@ -237,6 +237,20 @@ const CSS = `
   .exp-subcat-fill{display:block;height:100%;border-radius:4px;}
   .exp-subcat-amt{flex-shrink:0;width:60px;text-align:right;font-weight:600;}
 
+  /* ── TRAJETS EN TRAIN & KILOMÉTRAGE PAR PAYS (stats) ── */
+  .train-row{display:flex;align-items:center;gap:10px;font-size:13px;margin-bottom:8px;}
+  .train-row-date{width:78px;flex-shrink:0;color:var(--ink-light);font-size:11px;}
+  .train-row-lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-mid);}
+  .train-row-track{width:110px;flex-shrink:0;height:8px;background:var(--mist);border-radius:4px;overflow:hidden;border:1px solid var(--sand);}
+  .train-row-fill{display:block;height:100%;background:linear-gradient(90deg,var(--ocean),var(--teal));}
+  .train-row-km{width:74px;flex-shrink:0;text-align:right;font-weight:600;color:var(--ink-mid);font-size:12px;}
+  .geo-flag{margin-right:6px;}
+  .geo-sub{font-size:12px;color:var(--ink-light);margin:-6px 0 10px;line-height:1.5;}
+  @media(max-width:520px){
+    .train-row-track{width:60px;}
+    .train-row-date{width:64px;}
+  }
+
   /* ── ABONNEMENT E-MAIL (cloche + modale) ─────────── */
   .sub-bell{width:40px;height:40px;border-radius:10px;border:1.5px solid var(--sand);background:var(--mist);font-size:17px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:background .15s,transform .15s;padding:0;}
   .sub-bell:hover{background:var(--sage);transform:translateY(-1px);}

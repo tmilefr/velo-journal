@@ -10,6 +10,7 @@ const { readPosts, writePosts } = require('../services/posts');
 const { parseExpenses } = require('../services/expenses');
 const { parseSleep } = require('../services/sleep');
 const { parseGpxStats } = require('../services/gpx');
+const { resolvePostGeo, reverseGeocode, geoFromLocation } = require('../services/geo');
 const { resizeUploadedImages, deletePostFiles, pickCover } = require('../services/media');
 const { maybeNotifyNewPost, siteBaseUrl } = require('../services/mailer');
 const { upload } = require('../middleware/upload');
@@ -28,7 +29,8 @@ router.get('/post', requireAuth, (req, res) => {
 });
 
 router.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', maxCount:10},{name:'gpx', maxCount:1}]), async (req, res) => {
-  const { title, body, location, lat, lon, km, dplus, author, visibility, postDate, endDate, type, privateNote } = req.body;
+  const { title, body, location, lat, lon, km, dplus, trainKm, trainLabel, country, region, countryCode,
+          author, visibility, postDate, endDate, type, privateNote } = req.body;
   if (!title?.trim() || !body?.trim()) {
     return res.send(renderPostForm('Titre et texte obligatoires.', '', !!req.session.margot, csrfToken(req)));
   }
@@ -57,6 +59,10 @@ router.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', ma
     }
   }
 
+  // Pays / région : valeurs remontées par l'autocomplétion, sinon géocodage
+  // inverse des coordonnées de l'étape, sinon découpage du libellé du lieu.
+  const geo = await resolvePostGeo({ country, region, countryCode, lat: finalLat, lon: finalLon, location });
+
   const expenses = parseExpenses(req.body);
   const captions = (req.files?.photos || []).map((_, i) => (req.body['caption_new_' + i] || '').toString().trim().substring(0, 200));
 
@@ -75,6 +81,11 @@ router.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', ma
     lon:        finalLon,
     km:         finalKm,
     dplus:      finalDp,
+    trainKm:    Math.max(0, parseFloat(trainKm) || 0),
+    trainLabel: (trainLabel || '').toString().trim().substring(0, 120),
+    country:     geo.country,
+    region:      geo.region,
+    countryCode: geo.countryCode,
     author:     AUTHORS.includes(author) ? author : AUTHORS[0],
     visibility: forcedViz,
     type:       (type === 'preparation') ? 'preparation' : 'etape',
@@ -112,7 +123,8 @@ router.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos'
   const posts = readPosts();
   const idx   = posts.findIndex(p => p.id === req.params.id);
   if (idx === -1) return res.status(404).send('Étape introuvable');
-  const { title, body, location, lat, lon, km, dplus, visibility, postDate, endDate, privateNote } = req.body;
+  const { title, body, location, lat, lon, km, dplus, trainKm, trainLabel, country, region, countryCode,
+          visibility, postDate, endDate, privateNote } = req.body;
   if (!title?.trim() || !body?.trim()) {
     return res.send(renderEditForm(posts[idx], 'Titre et texte obligatoires.', !!req.session.margot, csrfToken(req)));
   }
@@ -178,6 +190,10 @@ router.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos'
     }
   }
 
+  // Pays / région : on ne relance un géocodage inverse que si les champs sont
+  // vides (lieu déplacé sans passer par l'autocomplétion, ancienne étape…).
+  const geo = await resolvePostGeo({ country, region, countryCode, lat: finalLat, lon: finalLon, location });
+
   const newTitle = title.trim();
   const newBody  = sanitizeHtml(body);
   const validViz = ['all', 'margot', 'admin'];
@@ -192,6 +208,11 @@ router.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos'
     lon:        finalLon,
     km:         finalKm,
     dplus:      finalDp,
+    trainKm:    Math.max(0, parseFloat(trainKm) || 0),
+    trainLabel: (trainLabel || '').toString().trim().substring(0, 120),
+    country:     geo.country,
+    region:      geo.region,
+    countryCode: geo.countryCode,
     visibility: validViz.includes(visibility) ? visibility : (existing.visibility || 'all'),
     photos,
     captions,
@@ -260,6 +281,37 @@ router.post('/recalc-distances', requireAuth, requireCsrf, async (req, res) => {
   }
   writePosts(posts);
   res.redirect(`/settings?recalc=${updated}&scanned=${scanned}&errors=${errors}`);
+});
+
+// ── Admin : renseigner le pays / la région des étapes qui n'en ont pas ──
+// Géocodage inverse (Nominatim) des coordonnées de chaque étape concernée.
+// Les étapes ayant déjà un pays ne sont pas retouchées : pour en corriger une,
+// il suffit de modifier ses champs « Pays » et « Région » dans le formulaire.
+router.post('/recalc-geo', requireAuth, requireCsrf, async (req, res) => {
+  const posts = readPosts();
+  let scanned = 0;   // étapes sans pays enregistré
+  let updated = 0;   // étapes désormais localisées
+  let errors  = 0;   // étapes qu'on n'a pas su localiser
+  for (let i = 0; i < posts.length; i++) {
+    const post = posts[i];
+    if (post.type === 'preparation') continue;
+    if ((post.country || '').trim()) continue;
+    scanned++;
+
+    let geo = null;
+    if (post.lat != null && post.lon != null) {
+      geo = await reverseGeocode(post.lat, post.lon);
+      // Nominatim : 1 requête par seconde maximum.
+      await new Promise(r => setTimeout(r, 1100));
+    }
+    if (!geo) geo = geoFromLocation(post.location);
+    if (!geo || !geo.country) { errors++; continue; }
+
+    posts[i] = { ...post, country: geo.country, region: geo.region || post.region || '', countryCode: geo.countryCode || '' };
+    updated++;
+  }
+  writePosts(posts);
+  res.redirect(`/settings?geo=${updated}&geoScanned=${scanned}&geoErrors=${errors}`);
 });
 
 module.exports = router;

@@ -62,7 +62,14 @@ router.get('/settings', requireAuth, (req, res) => {
         errors:  parseInt(req.query.errors, 10) || 0,
       }
     : null;
-  req.session.save(() => res.send(renderSettings(token, req.query.restored === '1', recalc, readSubscribers())));
+  const geo = req.query.geo != null
+    ? {
+        updated: parseInt(req.query.geo, 10) || 0,
+        scanned: parseInt(req.query.geoScanned, 10) || 0,
+        errors:  parseInt(req.query.geoErrors, 10) || 0,
+      }
+    : null;
+  req.session.save(() => res.send(renderSettings(token, req.query.restored === '1', recalc, readSubscribers(), geo)));
 });
 
 // ── Panorama : profils de dénivelé de toutes les étapes mis bout à bout ──

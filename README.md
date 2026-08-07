@@ -7,7 +7,7 @@ Journal de voyage vélo auto-hébergé. Postez vos étapes depuis votre téléph
 - **Page famille** — fil d'étapes avec photos, carte interactive, commentaires
 - **Interface mobile** — poster une étape depuis le téléphone (titre, texte, photos, GPS auto)
 - **Carte Leaflet** — tracé automatique de votre itinéraire
-- **Statistiques** — km cumulés, D+ total, nombre d'étapes
+- **Statistiques** — km cumulés, D+ total, nombre d'étapes, trajet total (vélo + train), kilométrage par pays et par région
 - **Flux RSS** — pour les proches qui utilisent un lecteur RSS
 - **Notifications e-mail** — vos proches s'abonnent avec leur e-mail (double opt-in) et sont prévenus à chaque nouvelle étape publiée
 - **Mot de passe** — page de post protégée, page famille publique
@@ -150,6 +150,17 @@ pm2 save
 4. Appuyez sur **📍 Détecter ma position** pour la carte
 5. Ajoutez des photos (jusqu'à 10)
 6. Publiez !
+
+### Déplacements en train et kilométrage par pays
+
+Dans l'onglet **Parcours** du formulaire d'étape :
+
+- **🚆 Km en train** et **Trajet en train** (ex. « Chambéry → Turin ») enregistrent un transfert ferroviaire. Ces kilomètres sont comptés **à part** : ils n'entrent ni dans les km roulés, ni dans les moyennes, ni dans les jours roulés, mais s'ajoutent au **trajet total parcouru** affiché en haut des statistiques.
+- **Pays** et **Région** sont remplis automatiquement dès qu'un lieu est choisi dans la recherche (ou via le bouton GPS). Laissés vides, ils sont déduits des coordonnées de l'étape à l'enregistrement (service OpenStreetMap / Nominatim), et à défaut du libellé du lieu (« Ville, Région, Pays »). Ils restent modifiables à la main.
+
+La page **Statistiques** en tire une section **🌍 Distance par pays et par région** : un bloc par pays (drapeau, km, D+, km en train, part du voyage) et, à l'intérieur, une ligne par région dépliable sur le détail des étapes. Les kilomètres d'une étape sont attribués au pays et à la région de son **point d'arrivée**.
+
+Pour les étapes déjà publiées avant cette fonctionnalité, la page **Système** propose **🌍 Compléter les pays et régions manquants** : les étapes sans pays sont localisées à partir de leurs coordonnées (une par seconde, comme l'exige Nominatim). Les étapes déjà renseignées ne sont jamais écrasées.
 
 ### Page famille
 
