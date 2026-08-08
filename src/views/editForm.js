@@ -11,6 +11,25 @@ const { FORM_SCRIPTS, richEditorHtml } = require('./scripts');
 function renderEditForm(post, err, isMargot = false, csrf = '') {
   const cover = pickCover(post.photos, post.cover);
   const sleep = post.sleep || { label: '', comment: '', lat: null, lon: null };
+
+  // Rappel de ce que la détection automatique a déjà trouvé, pour que l'auteur
+  // sache s'il a besoin de corriger quoi que ce soit.
+  const km1 = n => (Math.round(n * 10) / 10).toLocaleString('fr-FR');
+  const TRAIN_SOURCES = {
+    gpx:    ' Distance actuelle : longueur de la trace GPX.',
+    points: ' Distance actuelle : écart à vol d\'oiseau depuis l\'étape précédente.',
+    manual: ' Distance actuelle : valeur saisie ci-dessous.',
+  };
+  const trainSourceNote = post.trainKm > 0 ? ` <strong>${km1(post.trainKm)} km</strong>.${TRAIN_SOURCES[post.trainKmSource] || ''}` : '';
+
+  const GEO_SOURCES = { gpx: 'détectés le long de la trace GPX', point: 'détectés depuis les coordonnées', location: 'déduits du nom du lieu', manual: 'corrigés à la main' };
+  const geoDetected = post.country
+    ? ` : ${esc(post.country)}${post.region ? ` / ${esc(post.region)}` : ''}${GEO_SOURCES[post.geoSource] ? ` <span style="opacity:.75">(${GEO_SOURCES[post.geoSource]})</span>` : ''}`
+    : '';
+  const breakdown = Array.isArray(post.geoBreakdown) ? post.geoBreakdown : [];
+  const geoBreakdownNote = breakdown.length > 1
+    ? `Répartition détectée : ${breakdown.map(b => `${esc(b.region || b.country)} ${km1((b.km || 0) + (b.trainKm || 0))} km`).join(' · ')}. `
+    : '';
   return `<!DOCTYPE html><html lang="fr"><head>
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Modifier l'étape</title><style>${CSS}</style>
@@ -117,17 +136,27 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
             <div class="field"><label>Km du jour</label><input name="km" type="number" min="0" max="500" step="0.1" value="${post.km||''}"></div>
             <div class="field"><label>D+ (mètres)</label><input name="dplus" type="number" min="0" max="10000" value="${post.dplus||''}"></div>
           </div>
-          <div class="field-row">
-            <div class="field"><label>🚆 Km en train</label><input name="trainKm" type="number" min="0" max="5000" step="0.1" value="${post.trainKm||''}"></div>
-            <div class="field"><label>Trajet en train</label><input name="trainLabel" type="text" placeholder="Ex : Lyon → Turin" maxlength="120" value="${esc(post.trainLabel||'')}"></div>
+          <div class="field">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;font-size:13px;font-weight:500;letter-spacing:0">
+              <input type="checkbox" name="trainTransfer" value="1" ${post.trainTransfer ? 'checked' : ''} style="accent-color:var(--teal)">
+              🚆 Ce déplacement s'est fait en train
+            </label>
+            <div style="font-size:12px;color:var(--ink-light);margin-top:6px;line-height:1.5">Distance calculée automatiquement : longueur de la trace GPX si l'étape en a une, sinon écart à vol d'oiseau depuis la position de l'étape précédente.${trainSourceNote}</div>
           </div>
-          <div style="font-size:12px;color:var(--ink-light);margin:-6px 0 16px;line-height:1.5">🚆 Les kilomètres en train sont comptés à part : ils n'entrent ni dans les km roulés ni dans les moyennes, mais s'ajoutent au <strong>trajet total parcouru</strong>.</div>
           <div class="field-row">
-            <div class="field"><label>Pays</label><input name="country" id="countryField" type="text" placeholder="Rempli automatiquement" maxlength="80" value="${esc(post.country||'')}"></div>
-            <div class="field"><label>Région</label><input name="region" id="regionField" type="text" placeholder="Rempli automatiquement" maxlength="80" value="${esc(post.region||'')}"></div>
+            <div class="field"><label>Km en train <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, calculé</span></label><input name="trainKm" type="number" min="0" max="5000" step="0.1" value="${post.trainKmSource === 'manual' ? (post.trainKm || '') : ''}"></div>
+            <div class="field"><label>Trajet <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, déduit</span></label><input name="trainLabel" type="text" placeholder="Ex : Lyon → Turin" maxlength="120" value="${esc(post.trainLabel||'')}"></div>
           </div>
-          <input type="hidden" name="countryCode" id="countryCodeField" value="${esc(post.countryCode||'')}">
-          <div style="font-size:12px;color:var(--ink-light);margin:-6px 0 16px;line-height:1.5">🌍 Utilisés pour le kilométrage par pays et par région. Videz-les pour les faire redéduire des coordonnées à l'enregistrement.</div>
+          <details style="margin-bottom:16px"${(post.geoSource === 'manual') ? ' open' : ''}>
+            <summary style="font-size:12px;color:var(--ink-light);cursor:pointer">🌍 Pays et région${geoDetected} — cliquez pour corriger</summary>
+            <div class="field-row" style="margin-top:10px">
+              <div class="field"><label>Pays</label><input name="country" id="countryField" type="text" placeholder="Détecté au parcours" maxlength="80" value="${esc(post.country||'')}"></div>
+              <div class="field"><label>Région</label><input name="region" id="regionField" type="text" placeholder="Détectée au parcours" maxlength="80" value="${esc(post.region||'')}"></div>
+            </div>
+            <input type="hidden" name="countryCode" id="countryCodeField" value="${esc(post.countryCode||'')}">
+            <input type="hidden" name="geoManual" id="geoManualField" value="${post.geoSource === 'manual' ? '1' : '0'}">
+            <div style="font-size:12px;color:var(--ink-light);line-height:1.5">${geoBreakdownNote}Videz ces champs pour laisser la détection reprendre la main ; toute valeur saisie ici est figée.</div>
+          </details>
           ${post.gpx ? `
           <div class="field">
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;font-size:13px;font-weight:500;letter-spacing:0">
@@ -210,7 +239,8 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
       document.addEventListener('DOMContentLoaded', function() {
         initRichEditor('bodyEditor', 'bodyHidden', 'bodyCount', 4000);
         initFormTabs('editTabs');
-        var geoFields = { countryId: 'countryField', regionId: 'regionField', codeId: 'countryCodeField' };
+        var geoFields = { countryId: 'countryField', regionId: 'regionField', codeId: 'countryCodeField', manualId: 'geoManualField' };
+        watchGeoOverride(geoFields);
         initLocAutocomplete('locationField', 'lat', 'lon', 'locSuggestions', { geo: geoFields });
         initLocAutocomplete('sleepLocationField', 'sleepLat', 'sleepLon', 'sleepLocSuggestions', { poi: true });
         var btn = document.getElementById('gpsBtnEdit');

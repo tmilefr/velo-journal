@@ -1,6 +1,6 @@
 // ── Statistiques de roulage ───────────────────────────────
 const { parisDayNumber, postEndISO } = require('../lib/dates');
-const { postGeo } = require('./geo');
+const { postBreakdown } = require('./geo');
 
 function totalKm(posts) {
   return posts.reduce((s, p) => s + (parseFloat(p.km) || 0), 0);
@@ -88,10 +88,11 @@ function trainStats(posts) {
   const trips = posts
     .filter(p => p.type !== 'preparation' && (parseFloat(p.trainKm) || 0) > 0)
     .map(p => ({
-      date:  p.date,
-      km:    parseFloat(p.trainKm) || 0,
-      label: (p.trainLabel || '').trim(),
-      title: p.title || p.location || '',
+      date:   p.date,
+      km:     parseFloat(p.trainKm) || 0,
+      label:  (p.trainLabel || '').trim(),
+      title:  p.title || p.location || '',
+      source: p.trainKmSource || '', // 'gpx' | 'points' | 'manual'
     }))
     .sort((a, b) => new Date(a.date) - new Date(b.date));
 
@@ -109,36 +110,53 @@ function travelTotals(posts) {
 }
 
 // ── Kilométrage par pays, puis par région ─────────────────
-// Le kilométrage d'une étape est attribué au pays / à la région de son point
-// d'arrivée : une étape à cheval sur une frontière compte donc entièrement
-// pour le pays où elle se termine.
+// Le kilométrage d'une étape suit la répartition détectée le long de sa trace
+// GPX : une étape qui franchit une frontière est comptée dans chaque pays au
+// prorata des kilomètres parcourus. À défaut de trace, tout est attribué au
+// point d'arrivée de l'étape. Le D+ suit la même répartition (au prorata), et
+// une journée n'est comptée comme « roulée » que dans la région où l'on a
+// parcouru le plus de kilomètres, pour ne pas la compter deux fois.
 function distanceByCountry(posts) {
   const map = {};
   posts.forEach(p => {
     if (p.type === 'preparation') return;
-    const km      = parseFloat(p.km) || 0;
-    const trainKm = parseFloat(p.trainKm) || 0;
+    const parts = postBreakdown(p).filter(b => (b.km || 0) > 0 || (b.trainKm || 0) > 0);
+    if (!parts.length) return;
+
+    const stageKm = parts.reduce((s, b) => s + (b.km || 0), 0);
     const dplus   = parseInt(p.dplus) || 0;
-    if (km <= 0 && trainKm <= 0) return;
+    const mainPart = parts.reduce((a, b) => (((b.km || 0) + (b.trainKm || 0)) > ((a.km || 0) + (a.trainKm || 0)) ? b : a));
 
-    const { country, region, countryCode } = postGeo(p);
-    if (!map[country]) {
-      map[country] = { country, countryCode, totalKm: 0, trainKm: 0, totalDplus: 0, ridingDays: 0, regions: {} };
-    }
-    const c = map[country];
-    if (!c.countryCode && countryCode) c.countryCode = countryCode;
-    c.totalKm    += km;
-    c.trainKm    += trainKm;
-    c.totalDplus += dplus;
-    if (km > 0) c.ridingDays++;
+    parts.forEach(part => {
+      const km      = part.km || 0;
+      const trainKm = part.trainKm || 0;
+      const share   = stageKm > 0 ? km / stageKm : 0;
+      const partDplus = Math.round(dplus * share);
+      const country = part.country;
+      const region  = part.region || '';
 
-    if (!c.regions[region]) c.regions[region] = { region, totalKm: 0, trainKm: 0, totalDplus: 0, ridingDays: 0, stages: [] };
-    const r = c.regions[region];
-    r.totalKm    += km;
-    r.trainKm    += trainKm;
-    r.totalDplus += dplus;
-    if (km > 0) r.ridingDays++;
-    r.stages.push({ date: p.date, km, trainKm, dplus, title: p.title || p.location || '' });
+      if (!map[country]) {
+        map[country] = { country, countryCode: part.countryCode || '', totalKm: 0, trainKm: 0, totalDplus: 0, ridingDays: 0, regions: {} };
+      }
+      const c = map[country];
+      if (!c.countryCode && part.countryCode) c.countryCode = part.countryCode;
+      c.totalKm    += km;
+      c.trainKm    += trainKm;
+      c.totalDplus += partDplus;
+      if (km > 0 && part === mainPart) c.ridingDays++;
+
+      if (!c.regions[region]) c.regions[region] = { region, totalKm: 0, trainKm: 0, totalDplus: 0, ridingDays: 0, stages: [] };
+      const r = c.regions[region];
+      r.totalKm    += km;
+      r.trainKm    += trainKm;
+      r.totalDplus += partDplus;
+      if (km > 0 && part === mainPart) r.ridingDays++;
+      r.stages.push({
+        date: p.date, km, trainKm, dplus: partDplus,
+        title: p.title || p.location || '',
+        partial: parts.length > 1, // étape partagée avec une autre région
+      });
+    });
   });
 
   Object.values(map).forEach(c => {

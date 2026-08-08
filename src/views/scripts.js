@@ -18,6 +18,16 @@ function fillGeoFields(geo, address) {
   setVal(geo.regionId, address.state || address.region || address.province || address.county || address.state_district);
   setVal(geo.codeId, (address.country_code || '').toLowerCase());
 }
+// Marque les pays / régions comme « corrigés à la main » dès que l'auteur y
+// tape quelque chose : la détection automatique ne les écrasera plus.
+function watchGeoOverride(geo) {
+  if (!geo || !geo.manualId) return;
+  var flag = document.getElementById(geo.manualId);
+  [geo.countryId, geo.regionId].forEach(function(id) {
+    var el = id && document.getElementById(id);
+    if (el && flag) el.addEventListener('input', function() { flag.value = el.value.trim() ? '1' : '0'; });
+  });
+}
 // opts.poi : conserve le nom du lieu trouvé (camping, hôtel, refuge…) au lieu
 // de le remplacer par la ville — utile pour rechercher un point de couchage.
 // opts.geo : identifiants des champs pays / région / code pays à renseigner

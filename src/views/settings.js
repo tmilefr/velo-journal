@@ -44,16 +44,29 @@ function renderSubscribersCard(csrf, subscribers) {
     </div>`;
 }
 
-function renderSettings(csrf = '', restored = false, recalc = null, subscribers = [], geo = null) {
+function renderSettings(csrf = '', restored = false, recalc = null, subscribers = [], geo = null, geoJob = null) {
+  // Bandeau de lancement (retour de POST /recalc-geo)
   let geoBanner = '';
-  if (geo) {
-    if (geo.scanned === 0) {
-      geoBanner = `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:14px;color:#166534;font-weight:500">✅ Toutes les étapes ont déjà un pays — rien à compléter.</div>`;
-    } else {
-      const errPart = geo.errors ? ` · ⚠️ ${geo.errors} étape(s) sans position exploitable` : '';
-      geoBanner = `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:14px;color:#166534;font-weight:500">✅ Pays / régions complétés : ${geo.updated} étape(s) sur ${geo.scanned} sans localisation${errPart}.</div>`;
-    }
+  if (geo === 'running') {
+    geoBanner = `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:14px;color:#92400e;font-weight:500">⏳ Une détection est déjà en cours — laissez-la se terminer.</div>`;
+  } else if (geo === 'started') {
+    const n = geoJob ? geoJob.total : 0;
+    geoBanner = n === 0
+      ? `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:14px;color:#166534;font-weight:500">✅ Toutes les étapes sont déjà localisées — rien à détecter.</div>`
+      : `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:14px;color:#166534;font-weight:500">✅ Détection lancée sur ${n} étape${n > 1 ? 's' : ''} — l'avancement s'affiche ci-dessous.</div>`;
   }
+  // Avancement de la détection en cours (ou de la dernière terminée)
+  let geoProgress = '';
+  if (geoJob && geoJob.total > 0) {
+    const pct = Math.round(geoJob.done / geoJob.total * 100);
+    geoProgress = geoJob.running
+      ? `<div style="background:var(--mist);border:1px solid var(--sand);border-radius:12px;padding:12px 16px;margin-bottom:16px">
+           <div style="font-size:13px;color:var(--ink-mid);font-weight:600;margin-bottom:8px">⏳ Détection en cours — ${geoJob.done} / ${geoJob.total} étape${geoJob.total > 1 ? 's' : ''}</div>
+           <div class="exp-break-track"><div class="exp-break-fill" style="width:${Math.max(2, pct)}%;background:var(--ocean)"></div></div>
+         </div>`
+      : `<div style="background:var(--mist);border:1px solid var(--sand);border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:var(--ink-mid)">✅ Dernière détection : ${geoJob.updated} étape(s) localisée(s)${geoJob.errors ? ` · ⚠️ ${geoJob.errors} sans position exploitable` : ''}.</div>`;
+  }
+
   let recalcBanner = '';
   if (recalc) {
     if (recalc.scanned === 0) {
@@ -101,11 +114,18 @@ function renderSettings(csrf = '', restored = false, recalc = null, subscribers 
       </div>
       <div class="form-card" style="margin-top:16px">
         <h2>🌍 Pays et régions traversés</h2>
-        <p style="font-size:14px;color:var(--ink-light);margin-bottom:18px;line-height:1.6">Complète le <strong>pays</strong> et la <strong>région</strong> des étapes qui n'en ont pas encore, à partir de leurs coordonnées (service OpenStreetMap / Nominatim). Ces informations alimentent le <strong>kilométrage par pays et par région</strong> de la page Statistiques. Les étapes déjà renseignées ne sont pas modifiées — pour en corriger une, éditez-la directement. Le traitement interroge le service à raison d'une étape par seconde : comptez quelques instants sur un long voyage.</p>
+        <p style="font-size:14px;color:var(--ink-light);margin-bottom:18px;line-height:1.6">Détecte les pays et régions de chaque étape sans aucune saisie : les étapes avec une <strong>trace GPX</strong> sont découpées frontière par frontière (le kilométrage est réparti entre les régions traversées), les autres sont situées par leurs <strong>coordonnées</strong>. Les pays <strong>corrigés à la main</strong> ne sont jamais écrasés.</p>
+        ${geoProgress}
         <form method="POST" action="/recalc-geo" class="form-recalc-geo">
           <input type="hidden" name="_csrf" value="${csrf}">
-          <button class="btn-submit" type="submit" style="background:linear-gradient(135deg,var(--ocean),var(--emerald))">🌍 Compléter les pays et régions manquants</button>
+          <button class="btn-submit" type="submit" style="background:linear-gradient(135deg,var(--ocean),var(--emerald))">🌍 Détecter les étapes pas encore localisées</button>
         </form>
+        <form method="POST" action="/recalc-geo" class="form-recalc-geo">
+          <input type="hidden" name="_csrf" value="${csrf}">
+          <input type="hidden" name="force" value="1">
+          <button class="loc-search-btn" type="submit" style="display:block;width:100%;text-align:center;margin-top:10px">🔄 Tout recalculer (y compris les étapes déjà localisées)</button>
+        </form>
+        <p style="font-size:12px;color:var(--ink-light);margin-top:10px;line-height:1.5">⏳ Le service OpenStreetMap n'accepte qu'une requête par seconde : la détection tourne en arrière-plan (environ 2 requêtes par étape, davantage quand une trace franchit une frontière). Vous pouvez quitter cette page, le traitement continue.</p>
       </div>
       <div class="form-card" style="margin-top:16px">
         <h2>🏔️ Panorama du voyage</h2>
@@ -128,9 +148,13 @@ function renderSettings(csrf = '', restored = false, recalc = null, subscribers 
       document.querySelectorAll('.form-recalc-geo').forEach(function(f) {
         f.addEventListener('submit', function() {
           var b = f.querySelector('button[type=submit]');
-          if (b) { b.disabled = true; b.textContent = '🌍 Localisation des étapes en cours…'; }
+          if (b) { b.disabled = true; b.textContent = '🌍 Détection lancée…'; }
         });
       });
+      ${geoJob && geoJob.running
+        // La détection tourne côté serveur : on rafraîchit pour suivre l'avancement.
+        ? `setTimeout(function() { location.href = '/settings'; }, 5000);`
+        : ''}
       document.querySelectorAll('.form-sub-validate').forEach(function(f) {
         f.addEventListener('submit', function(e) {
           var email = f.querySelector('input[name=email]').value;

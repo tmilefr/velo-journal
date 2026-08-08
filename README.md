@@ -153,14 +153,28 @@ pm2 save
 
 ### Déplacements en train et kilométrage par pays
 
-Dans l'onglet **Parcours** du formulaire d'étape :
+Rien à saisir : tout se déduit de la trace GPX et des points GPS.
 
-- **🚆 Km en train** et **Trajet en train** (ex. « Chambéry → Turin ») enregistrent un transfert ferroviaire. Ces kilomètres sont comptés **à part** : ils n'entrent ni dans les km roulés, ni dans les moyennes, ni dans les jours roulés, mais s'ajoutent au **trajet total parcouru** affiché en haut des statistiques.
-- **Pays** et **Région** sont remplis automatiquement dès qu'un lieu est choisi dans la recherche (ou via le bouton GPS). Laissés vides, ils sont déduits des coordonnées de l'étape à l'enregistrement (service OpenStreetMap / Nominatim), et à défaut du libellé du lieu (« Ville, Région, Pays »). Ils restent modifiables à la main.
+**🚆 Déplacements en train** — cochez simplement « Ce déplacement s'est fait en train » dans l'onglet **Parcours**. La distance est calculée :
 
-La page **Statistiques** en tire une section **🌍 Distance par pays et par région** : un bloc par pays (drapeau, km, D+, km en train, part du voyage) et, à l'intérieur, une ligne par région dépliable sur le détail des étapes. Les kilomètres d'une étape sont attribués au pays et à la région de son **point d'arrivée**.
+| Situation | Distance retenue |
+|-----------|------------------|
+| L'étape porte une trace GPX | longueur de la trace (elle n'est alors pas comptée comme du roulage) |
+| Pas de trace | distance à vol d'oiseau entre la dernière position connue et celle de l'étape |
+| Un nombre est saisi dans « Km en train » | la valeur saisie, qui prime toujours |
 
-Pour les étapes déjà publiées avant cette fonctionnalité, la page **Système** propose **🌍 Compléter les pays et régions manquants** : les étapes sans pays sont localisées à partir de leurs coordonnées (une par seconde, comme l'exige Nominatim). Les étapes déjà renseignées ne sont jamais écrasées.
+Le libellé du trajet (« Turin → Gênes ») est déduit des lieux de départ et d'arrivée. Ces kilomètres sont comptés **à part** : ils n'entrent ni dans les km roulés, ni dans les moyennes, ni dans les jours roulés, mais s'ajoutent au **trajet total parcouru** affiché en haut des statistiques. La page des statistiques indique pour chaque trajet d'où vient sa distance (trace, à vol d'oiseau, saisie).
+
+**🌍 Pays et régions** — ils sont détectés après la publication, en tâche de fond :
+
+- **avec une trace GPX** : la trace est découpée frontière par frontière. Seules ses extrémités sont géocodées ; si elles ne sont pas dans la même région, le point de franchissement est trouvé par **dichotomie**. Une étape qui reste dans une région coûte 2 requêtes, chaque frontière traversée en coûte ~6. Le kilométrage (et le D+) est alors réparti entre les régions réellement traversées — une étape à cheval sur deux pays compte dans les deux, au prorata.
+- **sans trace** : l'étape est située par ses coordonnées, à défaut par son libellé de lieu (« Ville, Région, Pays »).
+
+La publication n'attend jamais ce calcul : le géocodage inverse (OpenStreetMap / Nominatim) est limité à une requête par seconde, donc toutes les requêtes de l'application passent par une file d'attente partagée, avec un cache des zones déjà résolues.
+
+La page **Statistiques** en tire une section **🌍 Distance par pays et par région** : un bloc par pays (drapeau, distance, D+, km en train, part du voyage) et, à l'intérieur, une ligne par région dépliable sur le détail des étapes.
+
+Pour les étapes déjà publiées, la page **Système** propose **🌍 Détecter les étapes pas encore localisées** (ou tout recalculer), avec l'avancement affiché en direct. Un pays saisi à la main dans le formulaire d'édition est figé : la détection ne l'écrase jamais.
 
 ### Page famille
 
