@@ -44,7 +44,16 @@ function renderSubscribersCard(csrf, subscribers) {
     </div>`;
 }
 
-function renderSettings(csrf = '', restored = false, recalc = null, subscribers = []) {
+function renderSettings(csrf = '', restored = false, recalc = null, subscribers = [], geo = null) {
+  let geoBanner = '';
+  if (geo) {
+    if (geo.scanned === 0) {
+      geoBanner = `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:14px;color:#166534;font-weight:500">✅ Toutes les étapes ont déjà un pays — rien à compléter.</div>`;
+    } else {
+      const errPart = geo.errors ? ` · ⚠️ ${geo.errors} étape(s) sans position exploitable` : '';
+      geoBanner = `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:14px;color:#166534;font-weight:500">✅ Pays / régions complétés : ${geo.updated} étape(s) sur ${geo.scanned} sans localisation${errPart}.</div>`;
+    }
+  }
   let recalcBanner = '';
   if (recalc) {
     if (recalc.scanned === 0) {
@@ -62,6 +71,7 @@ function renderSettings(csrf = '', restored = false, recalc = null, subscribers 
     <div class="form-wrap">
       ${restored ? `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:14px;color:#166534;font-weight:500">✅ Données restaurées avec succès.</div>` : ''}
       ${recalcBanner}
+      ${geoBanner}
       <div class="form-card" style="margin-bottom:16px">
         <h2>⬇️ Sauvegarder</h2>
         <p style="font-size:14px;color:var(--ink-light);margin-bottom:18px;line-height:1.6"><strong>Sauvegarde complète (recommandée)</strong> : une archive ZIP contenant les étapes <em>et</em> toutes les photos/vidéos. C'est la sauvegarde à conserver.</p>
@@ -90,6 +100,14 @@ function renderSettings(csrf = '', restored = false, recalc = null, subscribers 
         </form>
       </div>
       <div class="form-card" style="margin-top:16px">
+        <h2>🌍 Pays et régions traversés</h2>
+        <p style="font-size:14px;color:var(--ink-light);margin-bottom:18px;line-height:1.6">Complète le <strong>pays</strong> et la <strong>région</strong> des étapes qui n'en ont pas encore, à partir de leurs coordonnées (service OpenStreetMap / Nominatim). Ces informations alimentent le <strong>kilométrage par pays et par région</strong> de la page Statistiques. Les étapes déjà renseignées ne sont pas modifiées — pour en corriger une, éditez-la directement. Le traitement interroge le service à raison d'une étape par seconde : comptez quelques instants sur un long voyage.</p>
+        <form method="POST" action="/recalc-geo" class="form-recalc-geo">
+          <input type="hidden" name="_csrf" value="${csrf}">
+          <button class="btn-submit" type="submit" style="background:linear-gradient(135deg,var(--ocean),var(--emerald))">🌍 Compléter les pays et régions manquants</button>
+        </form>
+      </div>
+      <div class="form-card" style="margin-top:16px">
         <h2>🏔️ Panorama du voyage</h2>
         <p style="font-size:14px;color:var(--ink-light);margin-bottom:18px;line-height:1.6">Génère <strong>tous les profils de dénivelé mis bout à bout</strong>, découpés en <strong>pages A4 paysage</strong> à recoller. Un trait en biais relie chaque <strong>point d'arrivée de GPX</strong> à la photo favorite (⭐) de l'étape correspondante. Idéal à imprimer ou partager.</p>
         <a href="/panorama" class="btn-submit" style="display:block;text-align:center;text-decoration:none;background:linear-gradient(135deg,var(--emerald),var(--emerald-mid))">🏔️ Générer le panorama</a>
@@ -105,6 +123,12 @@ function renderSettings(csrf = '', restored = false, recalc = null, subscribers 
       document.querySelectorAll('.form-recalc').forEach(function(f) {
         f.addEventListener('submit', function(e) {
           if (!window.confirm('Recalculer les distances de toutes les étapes avec une trace GPX ? Les valeurs de km actuelles seront remplacées.')) e.preventDefault();
+        });
+      });
+      document.querySelectorAll('.form-recalc-geo').forEach(function(f) {
+        f.addEventListener('submit', function() {
+          var b = f.querySelector('button[type=submit]');
+          if (b) { b.disabled = true; b.textContent = '🌍 Localisation des étapes en cours…'; }
         });
       });
       document.querySelectorAll('.form-sub-validate').forEach(function(f) {

@@ -4,12 +4,29 @@ const { esc } = require('../lib/html');
 // ── JS partagé pour formulaires ───────────────────────────
 const FORM_SCRIPTS = `
 <script>
+// Renseigne les champs pays / région / code pays d'un formulaire à partir
+// d'une adresse Nominatim. geo = { countryId, regionId, codeId }.
+function fillGeoFields(geo, address) {
+  if (!geo || !address) return;
+  var setVal = function(id, val) {
+    var el = id && document.getElementById(id);
+    // On écrase, y compris avec une valeur vide : l'adresse fait foi (sinon un
+    // ancien pays resterait collé à une nouvelle position).
+    if (el) el.value = val || '';
+  };
+  setVal(geo.countryId, address.country);
+  setVal(geo.regionId, address.state || address.region || address.province || address.county || address.state_district);
+  setVal(geo.codeId, (address.country_code || '').toLowerCase());
+}
 // opts.poi : conserve le nom du lieu trouvé (camping, hôtel, refuge…) au lieu
 // de le remplacer par la ville — utile pour rechercher un point de couchage.
+// opts.geo : identifiants des champs pays / région / code pays à renseigner
+// quand une suggestion est choisie (kilométrage par pays et par région).
 function initLocAutocomplete(fieldId, latId, lonId, suggestId, opts) {
   var field = document.getElementById(fieldId);
   var list  = document.getElementById(suggestId);
   var poi   = !!(opts && opts.poi);
+  var geo   = (opts && opts.geo) || null;
   var timer = null, items = [], sel = -1;
   if (!field || !list) return;
   field.addEventListener('input', function() {
@@ -36,6 +53,7 @@ function initLocAutocomplete(fieldId, latId, lonId, suggestId, opts) {
     latEl.value = parseFloat(item.lat).toFixed(6);
     lonEl.value = parseFloat(item.lon).toFixed(6);
     latEl.dataset.manual = lonEl.dataset.manual = '1';
+    fillGeoFields(geo, item.address);
     list.classList.remove('open'); sel = -1;
   }
   function doSearch(q) {
@@ -55,7 +73,7 @@ function initLocAutocomplete(fieldId, latId, lonId, suggestId, opts) {
             name   = city || head;
             detail = [a.state, a.country].filter(Boolean).join(', ');
           }
-          return { name: name, detail: detail, display: name + (detail ? ', '+detail : ''), lat: r.lat, lon: r.lon };
+          return { name: name, detail: detail, display: name + (detail ? ', '+detail : ''), lat: r.lat, lon: r.lon, address: a };
         });
         if (!items.length) { list.classList.remove('open'); return; }
         sel = -1;
@@ -73,7 +91,9 @@ function initLocAutocomplete(fieldId, latId, lonId, suggestId, opts) {
   }
 }
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function getGPS(fieldId, latId, lonId) {
+// geo (optionnel) : { countryId, regionId, codeId } — champs pays / région
+// renseignés par géocodage inverse de la position relevée.
+function getGPS(fieldId, latId, lonId, geo) {
   if (!navigator.geolocation) return alert('Géolocalisation non disponible sur ce navigateur.');
   if (location.protocol !== 'https:' && location.hostname !== 'localhost') return alert('La géolocalisation nécessite HTTPS.');
   navigator.geolocation.getCurrentPosition(
@@ -83,10 +103,14 @@ function getGPS(fieldId, latId, lonId) {
       lonEl.value = pos.coords.longitude.toFixed(6);
       latEl.dataset.manual = lonEl.dataset.manual = '1';
       var field = document.getElementById(fieldId);
-      if (!field.value) {
+      if (!field.value || geo) {
         fetch('https://nominatim.openstreetmap.org/reverse?lat=' + pos.coords.latitude + '&lon=' + pos.coords.longitude + '&format=json')
           .then(function(r){ return r.json(); })
-          .then(function(d) { var a = d.address; field.value = [a.town||a.city||a.village, a.state].filter(Boolean).join(', '); })
+          .then(function(d) {
+            var a = d.address;
+            if (!field.value) field.value = [a.town||a.city||a.village, a.state].filter(Boolean).join(', ');
+            fillGeoFields(geo, a);
+          })
           .catch(function(){});
       }
       alert('Position enregistrée : ' + pos.coords.latitude.toFixed(4) + ', ' + pos.coords.longitude.toFixed(4));

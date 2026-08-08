@@ -1,5 +1,6 @@
 // ── Statistiques de roulage ───────────────────────────────
 const { parisDayNumber, postEndISO } = require('../lib/dates');
+const { postGeo } = require('./geo');
 
 function totalKm(posts) {
   return posts.reduce((s, p) => s + (parseFloat(p.km) || 0), 0);
@@ -79,4 +80,74 @@ function computeStats(posts) {
   };
 }
 
-module.exports = { totalKm, totalDPlus, distanceByMonth, computeStats };
+// ── Déplacements en train ─────────────────────────────────
+// Les kilomètres de train (champ `trainKm`) sont comptés à part : ils ne
+// gonflent ni les km roulés, ni les moyennes, ni les jours roulés. Ils ne
+// comptent que dans le « trajet parcouru » total du voyage.
+function trainStats(posts) {
+  const trips = posts
+    .filter(p => p.type !== 'preparation' && (parseFloat(p.trainKm) || 0) > 0)
+    .map(p => ({
+      date:  p.date,
+      km:    parseFloat(p.trainKm) || 0,
+      label: (p.trainLabel || '').trim(),
+      title: p.title || p.location || '',
+    }))
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  const km      = trips.reduce((s, t) => s + t.km, 0);
+  const maxKm   = trips.length ? Math.max(...trips.map(t => t.km)) : 0;
+  const longest = trips.find(t => t.km === maxKm) || null;
+  return { trips, km, count: trips.length, maxKm, longest };
+}
+
+// Distance totale du voyage : vélo + train.
+function travelTotals(posts) {
+  const bikeKm  = totalKm(posts.filter(p => p.type !== 'preparation'));
+  const train   = trainStats(posts);
+  return { bikeKm, trainKm: train.km, totalKm: bikeKm + train.km, trainCount: train.count };
+}
+
+// ── Kilométrage par pays, puis par région ─────────────────
+// Le kilométrage d'une étape est attribué au pays / à la région de son point
+// d'arrivée : une étape à cheval sur une frontière compte donc entièrement
+// pour le pays où elle se termine.
+function distanceByCountry(posts) {
+  const map = {};
+  posts.forEach(p => {
+    if (p.type === 'preparation') return;
+    const km      = parseFloat(p.km) || 0;
+    const trainKm = parseFloat(p.trainKm) || 0;
+    const dplus   = parseInt(p.dplus) || 0;
+    if (km <= 0 && trainKm <= 0) return;
+
+    const { country, region, countryCode } = postGeo(p);
+    if (!map[country]) {
+      map[country] = { country, countryCode, totalKm: 0, trainKm: 0, totalDplus: 0, ridingDays: 0, regions: {} };
+    }
+    const c = map[country];
+    if (!c.countryCode && countryCode) c.countryCode = countryCode;
+    c.totalKm    += km;
+    c.trainKm    += trainKm;
+    c.totalDplus += dplus;
+    if (km > 0) c.ridingDays++;
+
+    if (!c.regions[region]) c.regions[region] = { region, totalKm: 0, trainKm: 0, totalDplus: 0, ridingDays: 0, stages: [] };
+    const r = c.regions[region];
+    r.totalKm    += km;
+    r.trainKm    += trainKm;
+    r.totalDplus += dplus;
+    if (km > 0) r.ridingDays++;
+    r.stages.push({ date: p.date, km, trainKm, dplus, title: p.title || p.location || '' });
+  });
+
+  Object.values(map).forEach(c => {
+    Object.values(c.regions).forEach(r => r.stages.sort((a, b) => new Date(a.date) - new Date(b.date)));
+  });
+  return map;
+}
+
+module.exports = {
+  totalKm, totalDPlus, distanceByMonth, computeStats,
+  trainStats, travelTotals, distanceByCountry,
+};
