@@ -245,6 +245,7 @@ const CSS = `
   .train-row-fill{display:block;height:100%;background:linear-gradient(90deg,var(--ocean),var(--teal));}
   .train-row-km{width:74px;flex-shrink:0;text-align:right;font-weight:600;color:var(--ink-mid);font-size:12px;}
   .geo-flag{margin-right:6px;}
+  .geo-tag{display:inline-block;font-size:10px;background:var(--sand);color:var(--ink-light);padding:1px 6px;border-radius:10px;font-weight:600;vertical-align:middle;}
   .geo-sub{font-size:12px;color:var(--ink-light);margin:-6px 0 10px;line-height:1.5;}
   @media(max-width:520px){
     .train-row-track{width:60px;}

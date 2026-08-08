@@ -96,17 +96,27 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
             <div class="field"><label>Km du jour</label><input name="km" type="number" min="0" max="500" step="0.1"></div>
             <div class="field"><label>D+ (mètres)</label><input name="dplus" type="number" min="0" max="10000"></div>
           </div>
-          <div class="field-row">
-            <div class="field"><label>🚆 Km en train</label><input name="trainKm" type="number" min="0" max="5000" step="0.1"></div>
-            <div class="field"><label>Trajet en train</label><input name="trainLabel" type="text" placeholder="Ex : Lyon → Turin" maxlength="120"></div>
+          <div class="field">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;font-size:13px;font-weight:500;letter-spacing:0">
+              <input type="checkbox" name="trainTransfer" value="1" id="trainTransferPost" style="accent-color:var(--teal)">
+              🚆 Ce déplacement s'est fait en train
+            </label>
+            <div style="font-size:12px;color:var(--ink-light);margin-top:6px;line-height:1.5">La distance se calcule toute seule : longueur de la trace GPX si vous en joignez une, sinon écart à vol d'oiseau depuis la position de l'étape précédente. Ces kilomètres n'entrent ni dans les km roulés ni dans les moyennes, mais s'ajoutent au <strong>trajet total parcouru</strong>.</div>
           </div>
-          <div style="font-size:12px;color:var(--ink-light);margin:-6px 0 16px;line-height:1.5">🚆 Les kilomètres en train sont comptés à part : ils n'entrent ni dans les km roulés ni dans les moyennes, mais s'ajoutent au <strong>trajet total parcouru</strong>.</div>
           <div class="field-row">
-            <div class="field"><label>Pays</label><input name="country" id="countryField" type="text" placeholder="Rempli automatiquement" maxlength="80"></div>
-            <div class="field"><label>Région</label><input name="region" id="regionField" type="text" placeholder="Rempli automatiquement" maxlength="80"></div>
+            <div class="field"><label>Km en train <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, calculé</span></label><input name="trainKm" type="number" min="0" max="5000" step="0.1"></div>
+            <div class="field"><label>Trajet <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, déduit</span></label><input name="trainLabel" type="text" placeholder="Ex : Lyon → Turin" maxlength="120"></div>
           </div>
-          <input type="hidden" name="countryCode" id="countryCodeField">
-          <div style="font-size:12px;color:var(--ink-light);margin:-6px 0 16px;line-height:1.5">🌍 Renseignés depuis la recherche de lieu (ou le GPS). Laissés vides, ils sont déduits des coordonnées à l'enregistrement. Ils servent au kilométrage par pays et par région.</div>
+          <details style="margin-bottom:16px">
+            <summary style="font-size:12px;color:var(--ink-light);cursor:pointer">🌍 Pays et région — détectés automatiquement, cliquez pour corriger</summary>
+            <div class="field-row" style="margin-top:10px">
+              <div class="field"><label>Pays</label><input name="country" id="countryField" type="text" placeholder="Détecté au parcours" maxlength="80"></div>
+              <div class="field"><label>Région</label><input name="region" id="regionField" type="text" placeholder="Détectée au parcours" maxlength="80"></div>
+            </div>
+            <input type="hidden" name="countryCode" id="countryCodeField">
+            <input type="hidden" name="geoManual" id="geoManualField" value="0">
+            <div style="font-size:12px;color:var(--ink-light);line-height:1.5">Les pays et régions traversés sont déduits de la trace GPX (découpée frontière par frontière) ou des coordonnées de l'étape, juste après la publication. Ne remplissez ces champs que pour forcer une valeur : elle ne sera plus recalculée.</div>
+          </details>
           <div class="field">
             <label>Trace GPX (optionnel)</label>
             <input type="file" name="gpx" accept=".gpx,application/gpx+xml" data-gpx-parse="1">
@@ -157,7 +167,8 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
       document.addEventListener('DOMContentLoaded', function() {
         initRichEditor('bodyEditor', 'bodyHidden', 'bodyCount', 4000);
         initFormTabs('postTabs');
-        var geoFields = { countryId: 'countryField', regionId: 'regionField', codeId: 'countryCodeField' };
+        var geoFields = { countryId: 'countryField', regionId: 'regionField', codeId: 'countryCodeField', manualId: 'geoManualField' };
+        watchGeoOverride(geoFields);
         initLocAutocomplete('locationField', 'lat', 'lon', 'locSuggestions', { geo: geoFields });
         initLocAutocomplete('sleepLocationField', 'sleepLat', 'sleepLon', 'sleepLocSuggestions', { poi: true });
         var btn = document.getElementById('gpsBtnPost');

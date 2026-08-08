@@ -9,8 +9,9 @@ const { sanitizeHtml } = require('../lib/html');
 const { readPosts, writePosts } = require('../services/posts');
 const { parseExpenses } = require('../services/expenses');
 const { parseSleep } = require('../services/sleep');
-const { parseGpxStats } = require('../services/gpx');
-const { resolvePostGeo, reverseGeocode, geoFromLocation } = require('../services/geo');
+const { parseGpxStats, parseGpxTrack } = require('../services/gpx');
+const { initialPostGeo, enrichPostGeo, startGeoBackfill } = require('../services/geo');
+const { computeTrainTrip, autoTrainLabel } = require('../services/train');
 const { resizeUploadedImages, deletePostFiles, pickCover } = require('../services/media');
 const { maybeNotifyNewPost, siteBaseUrl } = require('../services/mailer');
 const { upload } = require('../middleware/upload');
@@ -34,6 +35,7 @@ router.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', ma
   if (!title?.trim() || !body?.trim()) {
     return res.send(renderPostForm('Titre et texte obligatoires.', '', !!req.session.margot, csrfToken(req)));
   }
+  const isTrainTransfer = req.body.trainTransfer === '1';
   await resizeUploadedImages(req.files?.photos || []);
   const photos  = (req.files?.photos || []).map(f => '/uploads/' + f.filename);
   const gpxFile = req.files?.gpx?.[0] ? '/uploads/' + req.files.gpx[0].filename : null;
@@ -49,24 +51,39 @@ router.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', ma
   let finalLon = parseFloat(lon) || null;
   let finalKm  = parseFloat(km) || 0;
   let finalDp  = parseInt(dplus) || 0;
+  let gpxKm    = 0;
   if (gpxFile) {
     const stats = await parseGpxStats(path.join(PUBLIC_DIR, gpxFile), true);
     if (stats) {
       // On ne dérive lat/lon du GPX que si aucun point n'a été fixé manuellement côté client.
       if (finalLat === null || finalLon === null) { finalLat = stats.lat; finalLon = stats.lon; }
-      if (!finalKm) finalKm = stats.km;
+      gpxKm = stats.km;
+      // Sur un transfert en train, la trace mesure le trajet ferroviaire :
+      // elle ne doit pas être comptée comme des kilomètres roulés.
+      if (!finalKm && !isTrainTransfer) finalKm = stats.km;
       if (!finalDp) finalDp = stats.dplus;
     }
   }
 
-  // Pays / région : valeurs remontées par l'autocomplétion, sinon géocodage
-  // inverse des coordonnées de l'étape, sinon découpage du libellé du lieu.
-  const geo = await resolvePostGeo({ country, region, countryCode, lat: finalLat, lon: finalLon, location });
+  const posts = readPosts();
+
+  // Train : distance déduite de la trace, ou du saut depuis la position
+  // précédente. La valeur saisie, si elle existe, reste prioritaire.
+  const trip = computeTrainTrip({
+    isTransfer: isTrainTransfer, manualKm: trainKm, gpxKm,
+    posts, dateISO: finalDate, lat: finalLat, lon: finalLon,
+  });
+  const finalTrainLabel = (trainLabel || '').toString().trim().substring(0, 120)
+    || autoTrainLabel(trip.from, location);
+
+  // Pays / région : correction saisie à la main ou libellé du lieu. La
+  // détection réelle (trace GPX, coordonnées) est faite juste après en tâche
+  // de fond, pour ne pas faire attendre la publication.
+  const geo = initialPostGeo({ country, region, countryCode, location, manual: req.body.geoManual === '1' });
 
   const expenses = parseExpenses(req.body);
   const captions = (req.files?.photos || []).map((_, i) => (req.body['caption_new_' + i] || '').toString().trim().substring(0, 200));
 
-  const posts    = readPosts();
   const validViz = ['all', 'margot', 'admin'];
   const forcedViz = req.session.margot ? 'margot' : (validViz.includes(visibility) ? visibility : 'all');
   const newId    = crypto.randomBytes(8).toString('hex');
@@ -81,11 +98,14 @@ router.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', ma
     lon:        finalLon,
     km:         finalKm,
     dplus:      finalDp,
-    trainKm:    Math.max(0, parseFloat(trainKm) || 0),
-    trainLabel: (trainLabel || '').toString().trim().substring(0, 120),
+    trainTransfer: isTrainTransfer,
+    trainKm:       trip.km,
+    trainKmSource: trip.source,
+    trainLabel:    finalTrainLabel,
     country:     geo.country,
     region:      geo.region,
     countryCode: geo.countryCode,
+    geoSource:   geo.geoSource,
     author:     AUTHORS.includes(author) ? author : AUTHORS[0],
     visibility: forcedViz,
     type:       (type === 'preparation') ? 'preparation' : 'etape',
@@ -100,6 +120,9 @@ router.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', ma
   });
   writePosts(posts);
   maybeNotifyNewPost(newId, siteBaseUrl(req));
+  // Détection des pays / régions traversés : en tâche de fond (Nominatim est
+  // limité à une requête par seconde), la publication n'attend pas.
+  enrichPostGeo(newId);
   res.redirect(type === 'preparation' ? '/preparation' : '/');
 });
 
@@ -128,6 +151,7 @@ router.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos'
   if (!title?.trim() || !body?.trim()) {
     return res.send(renderEditForm(posts[idx], 'Titre et texte obligatoires.', !!req.session.margot, csrfToken(req)));
   }
+  const isTrainTransfer = req.body.trainTransfer === '1';
   const existing = posts[idx];
 
   let finalDate = existing.date;
@@ -179,20 +203,35 @@ router.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos'
   let finalLon = parseFloat(lon) || null;
   let finalKm  = parseFloat(km) || 0;
   let finalDp  = parseInt(dplus) || 0;
+  let gpxKm    = 0;
   // Si un NOUVEAU GPX est fourni, on relit toutes ses stats côté serveur (fiable)
   if (req.files?.gpx?.[0] && gpxFile) {
     const stats = await parseGpxStats(path.join(PUBLIC_DIR, gpxFile), true);
     if (stats) {
       // On ne dérive lat/lon du GPX que si aucun point n'a été fixé manuellement côté client.
       if (finalLat === null || finalLon === null) { finalLat = stats.lat; finalLon = stats.lon; }
-      finalKm  = stats.km;
+      gpxKm    = stats.km;
+      // Transfert en train : la trace mesure le trajet ferroviaire, pas du roulage.
+      finalKm  = isTrainTransfer ? finalKm : stats.km;
       finalDp  = stats.dplus;
     }
+  } else if (gpxFile) {
+    const track = parseGpxTrack(path.join(PUBLIC_DIR, gpxFile));
+    if (track) gpxKm = track.totalKm;
   }
 
-  // Pays / région : on ne relance un géocodage inverse que si les champs sont
-  // vides (lieu déplacé sans passer par l'autocomplétion, ancienne étape…).
-  const geo = await resolvePostGeo({ country, region, countryCode, lat: finalLat, lon: finalLon, location });
+  // Train : distance déduite de la trace ou du saut depuis la position
+  // précédente, sauf si une valeur a été saisie.
+  const trip = computeTrainTrip({
+    isTransfer: isTrainTransfer, manualKm: trainKm, gpxKm,
+    posts, dateISO: finalDate, lat: finalLat, lon: finalLon, excludeId: req.params.id,
+  });
+  const finalTrainLabel = (trainLabel || '').toString().trim().substring(0, 120)
+    || autoTrainLabel(trip.from, location);
+
+  // Pays / région : correction saisie à la main ou libellé du lieu ; la
+  // détection depuis la trace / les coordonnées suit en tâche de fond.
+  const geo = initialPostGeo({ country, region, countryCode, location, manual: req.body.geoManual === '1' });
 
   const newTitle = title.trim();
   const newBody  = sanitizeHtml(body);
@@ -208,11 +247,15 @@ router.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos'
     lon:        finalLon,
     km:         finalKm,
     dplus:      finalDp,
-    trainKm:    Math.max(0, parseFloat(trainKm) || 0),
-    trainLabel: (trainLabel || '').toString().trim().substring(0, 120),
+    trainTransfer: isTrainTransfer,
+    trainKm:       trip.km,
+    trainKmSource: trip.source,
+    trainLabel:    finalTrainLabel,
     country:     geo.country,
     region:      geo.region,
     countryCode: geo.countryCode,
+    geoSource:   geo.geoSource,
+    geoBreakdown: [], // recalculé juste après, depuis la trace ou les coordonnées
     visibility: validViz.includes(visibility) ? visibility : (existing.visibility || 'all'),
     photos,
     captions,
@@ -234,6 +277,9 @@ router.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos'
   const wasPublic = !existing.visibility || existing.visibility === 'all';
   const isPublic  = !posts[idx].visibility || posts[idx].visibility === 'all';
   if (!wasPublic && isPublic) maybeNotifyNewPost(req.params.id, siteBaseUrl(req));
+  // Le parcours a pu changer (trace, position, mode de déplacement) : on
+  // relocalise l'étape en tâche de fond.
+  enrichPostGeo(req.params.id);
   res.redirect('/#post-' + req.params.id);
 });
 
@@ -283,35 +329,15 @@ router.post('/recalc-distances', requireAuth, requireCsrf, async (req, res) => {
   res.redirect(`/settings?recalc=${updated}&scanned=${scanned}&errors=${errors}`);
 });
 
-// ── Admin : renseigner le pays / la région des étapes qui n'en ont pas ──
-// Géocodage inverse (Nominatim) des coordonnées de chaque étape concernée.
-// Les étapes ayant déjà un pays ne sont pas retouchées : pour en corriger une,
-// il suffit de modifier ses champs « Pays » et « Région » dans le formulaire.
-router.post('/recalc-geo', requireAuth, requireCsrf, async (req, res) => {
-  const posts = readPosts();
-  let scanned = 0;   // étapes sans pays enregistré
-  let updated = 0;   // étapes désormais localisées
-  let errors  = 0;   // étapes qu'on n'a pas su localiser
-  for (let i = 0; i < posts.length; i++) {
-    const post = posts[i];
-    if (post.type === 'preparation') continue;
-    if ((post.country || '').trim()) continue;
-    scanned++;
-
-    let geo = null;
-    if (post.lat != null && post.lon != null) {
-      geo = await reverseGeocode(post.lat, post.lon);
-      // Nominatim : 1 requête par seconde maximum.
-      await new Promise(r => setTimeout(r, 1100));
-    }
-    if (!geo) geo = geoFromLocation(post.location);
-    if (!geo || !geo.country) { errors++; continue; }
-
-    posts[i] = { ...post, country: geo.country, region: geo.region || post.region || '', countryCode: geo.countryCode || '' };
-    updated++;
-  }
-  writePosts(posts);
-  res.redirect(`/settings?geo=${updated}&geoScanned=${scanned}&geoErrors=${errors}`);
+// ── Admin : détecter les pays et régions traversés ──
+// Relance la localisation des étapes (trace GPX découpée par pays, ou point
+// d'arrivée) en tâche de fond : Nominatim est limité à une requête par seconde,
+// un carnet entier dépasserait largement le temps d'une requête HTTP.
+//  - par défaut : seules les étapes pas encore localisées
+//  - « force »  : toutes, sauf les pays corrigés à la main
+router.post('/recalc-geo', requireAuth, requireCsrf, (req, res) => {
+  const job = startGeoBackfill({ force: req.body.force === '1' });
+  res.redirect(`/settings?geo=${job.alreadyRunning ? 'running' : 'started'}&geoTotal=${job.total}`);
 });
 
 module.exports = router;

@@ -1,5 +1,41 @@
 const fs = require('fs');
 const { fetchElevations, cumulativeDplus } = require('./elevation');
+const { haversineMeters } = require('../lib/distance');
+
+// Points d'une trace GPX, dans l'ordre. Renvoie [] si le fichier est illisible.
+function readTrackPoints(gpxAbsPath) {
+  try {
+    const txt = fs.readFileSync(gpxAbsPath, 'utf8');
+    return [...txt.matchAll(/<trkpt\s+lat="([^"]+)"\s+lon="([^"]+)"/g)]
+      .map(m => ({ lat: parseFloat(m[1]), lon: parseFloat(m[2]) }))
+      .filter(p => !isNaN(p.lat) && !isNaN(p.lon));
+  } catch(e) { return []; }
+}
+
+// Trace échantillonnée + distance cumulée, pour situer un point de la trace
+// dans le voyage (découpage par pays). `maxPoints` borne la résolution : la
+// distance cumulée reste celle de la trace complète, seuls les points
+// intermédiaires sont éclaircis.
+function parseGpxTrack(gpxAbsPath, maxPoints = 64) {
+  const pts = readTrackPoints(gpxAbsPath);
+  if (pts.length < 2) return null;
+
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) {
+    cum.push(cum[i - 1] + haversineMeters(pts[i-1].lat, pts[i-1].lon, pts[i].lat, pts[i].lon) / 1000);
+  }
+
+  const step = Math.max(1, Math.ceil(pts.length / maxPoints));
+  const idx  = [];
+  for (let i = 0; i < pts.length; i += step) idx.push(i);
+  if (idx[idx.length - 1] !== pts.length - 1) idx.push(pts.length - 1);
+
+  return {
+    points:  idx.map(i => pts[i]),
+    cumKm:   idx.map(i => cum[i]),
+    totalKm: cum[cum.length - 1],
+  };
+}
 
 // ── Parsing GPX côté serveur ──────────────────────────────
 // Async : si le GPX ne contient pas de balises <ele> et useElevationApi=true,
@@ -20,12 +56,7 @@ async function parseGpxStats(gpxAbsPath, useElevationApi = false) {
 
     let dist = 0;
     for (let i = 1; i < pts.length; i++) {
-      const R = 6371000;
-      const dLat = (pts[i].lat - pts[i-1].lat) * Math.PI / 180;
-      const dLon = (pts[i].lon - pts[i-1].lon) * Math.PI / 180;
-      const a = Math.sin(dLat/2)**2
-        + Math.cos(pts[i-1].lat*Math.PI/180) * Math.cos(pts[i].lat*Math.PI/180) * Math.sin(dLon/2)**2;
-      dist += R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      dist += haversineMeters(pts[i-1].lat, pts[i-1].lon, pts[i].lat, pts[i].lon);
     }
 
     let dplus = 0;
@@ -62,4 +93,4 @@ async function parseGpxStats(gpxAbsPath, useElevationApi = false) {
   } catch(e) { return null; }
 }
 
-module.exports = { parseGpxStats };
+module.exports = { parseGpxStats, parseGpxTrack, readTrackPoints };

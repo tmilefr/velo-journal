@@ -60,6 +60,7 @@ function renderCard(p, isAdmin, csrf, isStrictAdmin = false) {
           <span class="translate-status"></span>
         </div>
         ${p.km    ? `<span class="km-badge">🚴 +${esc(String(p.km))} km</span>` : ''}
+        ${p.trainKm ? `<span class="km-badge">🚆 ${esc(String(p.trainKm))} km${p.trainLabel ? ` · ${esc(p.trainLabel)}` : ''}</span>` : ''}
         ${p.dplus ? (p.gpx ? `<button type="button" class="dplus-badge dplus-clickable" data-elev-gpx="${p.gpx}" data-elev-title="${esc(p.title)}" title="Voir le profil de dénivelé">⛰️ ${esc(String(p.dplus))} m D+ 📈</button>` : `<span class="dplus-badge">⛰️ ${esc(String(p.dplus))} m D+</span>`) : ''}
       </div>
       ${(nonRode > 0 && (p.km || p.dplus)) ? `

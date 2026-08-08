@@ -17,6 +17,13 @@ const { CSS, renderHeader } = require('./layout');
 
 // Dépliage des lignes de détail (dépenses, mois, régions) — partagé par toutes
 // les sections de la page, donc rendu une seule fois en bas de page.
+// Comment la distance d'un trajet en train a été obtenue.
+const TRAIN_SOURCE_TAG = {
+  gpx:    ' <span class="geo-tag" title="Mesuré sur la trace GPX du trajet">trace</span>',
+  points: ' <span class="geo-tag" title="Distance à vol d\'oiseau entre le départ et l\'arrivée">↗ à vol d\'oiseau</span>',
+  manual: ' <span class="geo-tag" title="Distance saisie à la main">saisi</span>',
+};
+
 const TOGGLE_SCRIPT = `<script>
   document.querySelectorAll('.exp-break-row-toggle').forEach(function(row) {
     row.addEventListener('click', function() {
@@ -144,12 +151,12 @@ function renderStats(posts, isAdmin = false, allPosts = null) {
           const pct = Math.max(4, Math.round(t.km / (train.maxKm || 1) * 100));
           return `<div class="train-row">
             <span class="train-row-date">${formatDateShort(t.date)}</span>
-            <span class="train-row-lbl" title="${esc(t.label || t.title)}">${esc(t.label || t.title || '—')}</span>
+            <span class="train-row-lbl" title="${esc(t.label || t.title)}">${esc(t.label || t.title || '—')}${TRAIN_SOURCE_TAG[t.source] || ''}</span>
             <span class="train-row-track"><span class="train-row-fill" style="width:${pct}%"></span></span>
             <span class="train-row-km">${fr1(t.km)} km</span>
           </div>`;
         }).join('')}
-        <div class="geo-sub" style="margin:10px 0 0">🚆 Ces kilomètres ne comptent pas comme jours roulés : ils s'ajoutent seulement au trajet total parcouru.</div>
+        <div class="geo-sub" style="margin:10px 0 0">🚆 Distances mesurées sur la trace GPX du trajet, ou à vol d'oiseau (↗) entre les positions de départ et d'arrivée. Elles ne comptent pas comme jours roulés : elles s'ajoutent seulement au trajet total parcouru.</div>
       </div>`;
 
   // ── Kilométrage par pays, puis par région ────────────────
@@ -165,9 +172,11 @@ function renderStats(posts, isAdmin = false, allPosts = null) {
         const maxRegion = regions.reduce((m, r) => Math.max(m, r.totalKm + r.trainKm), 1);
         const pctCountry = Math.max(2, Math.round((c.totalKm + c.trainKm) / maxCountryKm * 100));
         const subParts = [
-          `🚴 ${fr0(c.totalKm)} km à vélo`,
+          c.totalKm > 0 ? `🚴 ${fr0(c.totalKm)} km à vélo` : '',
           c.trainKm > 0 ? `🚆 ${fr0(c.trainKm)} km en train` : '',
-          `${c.ridingDays} jour${c.ridingDays > 1 ? 's' : ''} roulé${c.ridingDays > 1 ? 's' : ''}`,
+          // Une étape à cheval sur deux régions n'est comptée comme journée
+          // roulée que du côté où l'on a fait le plus de kilomètres.
+          c.ridingDays > 0 ? `${c.ridingDays} jour${c.ridingDays > 1 ? 's' : ''} roulé${c.ridingDays > 1 ? 's' : ''}` : '',
           c.totalDplus > 0 ? `⛰️ ${fr0(c.totalDplus)} m D+` : '',
         ].filter(Boolean);
         const regionRows = regions.map((r, ri) => {
@@ -176,7 +185,7 @@ function renderStats(posts, isAdmin = false, allPosts = null) {
           const stagesHtml = r.stages.map(st => `
             <div class="exp-detail-item">
               <span class="exp-detail-date">${formatDateShort(st.date)}</span>
-              <span class="exp-detail-lbl">${esc(st.title || '—')}</span>
+              <span class="exp-detail-lbl">${esc(st.title || '—')}${st.partial ? ' <span class="geo-tag" title="Étape partagée avec une autre région : seule la part parcourue ici est comptée">part de l\'étape</span>' : ''}</span>
               <span class="exp-detail-payer">${st.trainKm > 0 ? `🚆 ${fr1(st.trainKm)} km` : (st.dplus > 0 ? `⛰️ ${fr0(st.dplus)} m` : '')}</span>
               <span class="exp-detail-amt">${st.km > 0 ? `${fr1(st.km)} km` : '—'}</span>
             </div>`).join('');
@@ -203,7 +212,7 @@ function renderStats(posts, isAdmin = false, allPosts = null) {
         </div>`;
       }).join('')}
       <div class="stats-note">
-        🌍 Les kilomètres d'une étape sont attribués au pays et à la région de son <strong>point d'arrivée</strong>. Le pays et la région se corrigent à la main dans le formulaire d'édition de l'étape ; la page <strong>Système</strong> permet de compléter les étapes qui n'en ont pas encore.
+        🌍 Rien à saisir : les étapes avec une <strong>trace GPX</strong> sont découpées le long du parcours, et leurs kilomètres répartis entre les régions réellement traversées. Les autres sont rattachées à leur <strong>point d'arrivée</strong>. La page <strong>Système</strong> relance la détection sur d'anciennes étapes ; le formulaire d'édition permet de forcer une valeur.
       </div>`;
 
   if (s.nDays === 0) {

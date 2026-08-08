@@ -7,6 +7,7 @@ const { buildZip } = require('../lib/zip');
 const { readPosts, writePosts } = require('../services/posts');
 const { readSubscribers } = require('../services/subscribers');
 const { isVideoUrl, pickCover } = require('../services/media');
+const { geoJobStatus } = require('../services/geo');
 const { upload } = require('../middleware/upload');
 const { csrfToken, requireCsrf } = require('../middleware/csrf');
 const { requireAuth } = require('../middleware/auth');
@@ -62,14 +63,12 @@ router.get('/settings', requireAuth, (req, res) => {
         errors:  parseInt(req.query.errors, 10) || 0,
       }
     : null;
-  const geo = req.query.geo != null
-    ? {
-        updated: parseInt(req.query.geo, 10) || 0,
-        scanned: parseInt(req.query.geoScanned, 10) || 0,
-        errors:  parseInt(req.query.geoErrors, 10) || 0,
-      }
-    : null;
-  req.session.save(() => res.send(renderSettings(token, req.query.restored === '1', recalc, readSubscribers(), geo)));
+  // Détection des pays : 'started' / 'running' au retour du POST, et l'état du
+  // traitement de fond (avancement ou bilan de la dernière exécution).
+  const geo = ['started', 'running'].includes(req.query.geo) ? req.query.geo : null;
+  req.session.save(() => res.send(
+    renderSettings(token, req.query.restored === '1', recalc, readSubscribers(), geo, geoJobStatus())
+  ));
 });
 
 // ── Panorama : profils de dénivelé de toutes les étapes mis bout à bout ──
