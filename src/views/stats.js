@@ -1,22 +1,15 @@
 const { TRIP_TITLE } = require('../config');
 const { formatDateShort, formatMonthLabel } = require('../lib/dates');
-const { formatEuro } = require('../lib/format');
 const { esc } = require('../lib/html');
 const { totalKm, distanceByMonth, computeStats, trainStats, travelTotals, distanceByCountry } = require('../services/stats');
 const { flagEmoji } = require('../services/geo');
-const {
-  EXPENSE_CATEGORIES, EXPENSE_PAYERS, EXPENSE_SUBCATEGORIES,
-  EXPENSE_CAT_LABELS, EXPENSE_PAYER_LABELS, EXPENSE_SUBCAT_LABELS,
-  expensesByMonth, expensesSummary,
-} = require('../services/expenses');
-const { CSS, renderHeader } = require('./layout');
+const { CSS, TOGGLE_SCRIPT, renderHeader } = require('./layout');
 
 // ══════════════════════════════════════════════════════════
-//  renderStats
+//  renderStats — distances, dénivelé, train, pays.
+//  Les chiffres financiers vivent à part, dans views/finances.js
 // ══════════════════════════════════════════════════════════
 
-// Dépliage des lignes de détail (dépenses, mois, régions) — partagé par toutes
-// les sections de la page, donc rendu une seule fois en bas de page.
 // Comment la distance d'un trajet en train a été obtenue.
 const TRAIN_SOURCE_TAG = {
   gpx:    ' <span class="geo-tag" title="Mesuré sur la trace GPX du trajet">trace</span>',
@@ -24,117 +17,11 @@ const TRAIN_SOURCE_TAG = {
   manual: ' <span class="geo-tag" title="Distance saisie à la main">saisi</span>',
 };
 
-const TOGGLE_SCRIPT = `<script>
-  document.querySelectorAll('.exp-break-row-toggle').forEach(function(row) {
-    row.addEventListener('click', function() {
-      var detail = document.getElementById(row.dataset.target);
-      if (!detail) return;
-      var open = detail.classList.toggle('open');
-      row.classList.toggle('open', open);
-    });
-  });
-</script>`;
-
-function renderStats(posts, isAdmin = false, allPosts = null) {
+function renderStats(posts, isAdmin = false) {
   const s = computeStats(posts);
 
   const fr1 = n => n.toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const fr0 = n => Math.round(n).toLocaleString('fr-FR');
-
-  // ── Synthèse des dépenses par mois (toutes publications, étapes + préparation) ──
-  const expSource = allPosts || posts;
-  const byMonth = expensesByMonth(expSource);
-  const monthKeys = Object.keys(byMonth).sort(); // ordre chronologique
-  const globalExp = expensesSummary(expSource);
-
-  const catColors = { restaurant: '#3a9e72', hebergement: '#2a7a7a', hotel: '#2a7a7a', camping: '#8a6d3b', nourriture: '#e07a3a', divers: '#7ecece' };
-  const payerColors = { julie: '#e07a3a', nico: '#2a7a7a', commun: '#3a9e72' };
-
-  // Lignes « Par catégorie » (dont sous-catégories, ex. hôtel/camping pour l'hébergement) avec détail dépliable
-  const renderCatRows = (agg, idPrefix) => EXPENSE_CATEGORIES.filter(c => agg.byCat[c]).map(c => {
-    const v = agg.byCat[c];
-    const pct = agg.total > 0 ? Math.max(2, Math.round(v / agg.total * 100)) : 0;
-    const items = (agg.itemsByCat[c] || []);
-    const detailId = `expdetail-${idPrefix}-${c}`;
-    const subs = EXPENSE_SUBCATEGORIES[c] || [];
-    const subTotals = agg.byCatSub[c] || {};
-    const subRows = subs.filter(sc => subTotals[sc]).map(sc => {
-      const sv = subTotals[sc];
-      const spct = v > 0 ? Math.max(2, Math.round(sv / v * 100)) : 0;
-      return `<div class="exp-subcat-row">
-        <span class="exp-subcat-lbl">${EXPENSE_SUBCAT_LABELS[sc]}</span>
-        <span class="exp-subcat-track"><span class="exp-subcat-fill" style="width:${spct}%;background:${catColors[sc] || 'var(--teal)'}"></span></span>
-        <span class="exp-subcat-amt">${formatEuro(sv)}</span>
-      </div>`;
-    }).join('');
-    const itemsHtml = items.map(it => `
-      <div class="exp-detail-item">
-        <span class="exp-detail-date">${formatDateShort(it.date)}</span>
-        <span class="exp-detail-lbl">${it.subcategory ? `<span class="exp-detail-subcat">${EXPENSE_SUBCAT_LABELS[it.subcategory]}</span> ` : ''}${esc(it.label || it.postTitle || '—')}</span>
-        <span class="exp-detail-payer">${EXPENSE_PAYER_LABELS[it.payer] || ''}</span>
-        <span class="exp-detail-amt">${formatEuro(it.amount)}</span>
-      </div>`).join('');
-    return `<div class="exp-break-row exp-break-row-toggle" data-target="${detailId}">
-      <div class="exp-break-lbl">${EXPENSE_CAT_LABELS[c]} <span class="exp-break-caret">▾</span></div>
-      <div class="exp-break-track"><div class="exp-break-fill" style="width:${pct}%;background:${catColors[c]}"></div></div>
-      <div class="exp-break-val">${formatEuro(v)}</div>
-    </div>
-    <div class="exp-detail" id="${detailId}">${subRows ? `<div class="exp-detail-subtotals">${subRows}</div>` : ''}${itemsHtml}</div>`;
-  }).join('');
-
-  // Lignes « Par personne » avec la même ergonomie dépliable que « Par catégorie »
-  const renderPayerRows = (agg, idPrefix) => EXPENSE_PAYERS.filter(pr => agg.byPayer[pr]).map(pr => {
-    const v = agg.byPayer[pr];
-    const pct = agg.total > 0 ? Math.max(2, Math.round(v / agg.total * 100)) : 0;
-    const items = (agg.itemsByPayer[pr] || []);
-    const detailId = `paydetail-${idPrefix}-${pr}`;
-    const itemsHtml = items.map(it => `
-      <div class="exp-detail-item">
-        <span class="exp-detail-date">${formatDateShort(it.date)}</span>
-        <span class="exp-detail-lbl">${it.subcategory ? `<span class="exp-detail-subcat">${EXPENSE_SUBCAT_LABELS[it.subcategory]}</span> ` : ''}${esc(it.label || it.postTitle || '—')}</span>
-        <span class="exp-detail-payer">${EXPENSE_CAT_LABELS[it.category] || ''}</span>
-        <span class="exp-detail-amt">${formatEuro(it.amount)}</span>
-      </div>`).join('');
-    return `<div class="exp-break-row exp-break-row-toggle" data-target="${detailId}">
-      <div class="exp-break-lbl">${EXPENSE_PAYER_LABELS[pr]} <span class="exp-break-caret">▾</span></div>
-      <div class="exp-break-track"><div class="exp-break-fill" style="width:${pct}%;background:${payerColors[pr]}"></div></div>
-      <div class="exp-break-val">${formatEuro(v)}</div>
-    </div>
-    <div class="exp-detail" id="${detailId}">${itemsHtml}</div>`;
-  }).join('');
-
-  const expensesHtml = monthKeys.length === 0 ? '' : `
-      <div class="stats-section-title">💶 Dépenses du voyage</div>
-      <div class="exp-grand-total">
-        <div class="egt-num">${formatEuro(globalExp.total)}</div>
-        <div class="egt-lbl">Total dépensé sur le voyage</div>
-      </div>
-      <div class="exp-month-card">
-        <div class="exp-month-head">
-          <span class="exp-month-name">Vue d'ensemble</span>
-          <span class="exp-month-total">${formatEuro(globalExp.total)}</span>
-        </div>
-        <div class="exp-break-title">Par catégorie <span style="text-transform:none;font-weight:400">(cliquer pour le détail)</span></div>
-        ${renderCatRows(globalExp, 'global')}
-        <div class="exp-break-title">Par personne <span style="text-transform:none;font-weight:400">(cliquer pour le détail)</span></div>
-        ${renderPayerRows(globalExp, 'global')}
-      </div>
-
-      <div class="stats-section-title">🗓️ Dépenses par mois</div>
-      ${monthKeys.map(key => {
-        const m = byMonth[key];
-        return `
-      <div class="exp-month-card">
-        <div class="exp-month-head">
-          <span class="exp-month-name">${formatMonthLabel(key)}</span>
-          <span class="exp-month-total">${formatEuro(m.total)}</span>
-        </div>
-        <div class="exp-break-title">Par catégorie <span style="text-transform:none;font-weight:400">(cliquer pour le détail)</span></div>
-        ${renderCatRows(m, key)}
-        <div class="exp-break-title">Par personne <span style="text-transform:none;font-weight:400">(cliquer pour le détail)</span></div>
-        ${renderPayerRows(m, key)}
-      </div>`;
-      }).join('')}`;
 
   // ── Déplacements en train ────────────────────────────────
   const train  = trainStats(posts);
@@ -222,7 +109,7 @@ function renderStats(posts, isAdmin = false, allPosts = null) {
     </head><body>
       ${renderHeader({ activePage: 'stats', isAdmin, isStrictAdmin: true, showMap: false })}
       <div class="stats-wrap">
-        ${monthKeys.length === 0 && train.count === 0 && countryList.length === 0
+        ${train.count === 0 && countryList.length === 0
           ? `<div class="empty"><div class="empty-icon">📊</div><h3>Pas encore de jour roulé</h3><p>Les statistiques apparaîtront dès la première étape avec des kilomètres.</p></div>`
           : `${train.count > 0 ? `
       <div class="stats-grid">
@@ -232,7 +119,7 @@ function renderStats(posts, isAdmin = false, allPosts = null) {
           <div class="sc-lbl">Trajet parcouru</div>
           <div class="sc-sub">${fr0(totals.trainKm)} km en train sur ${totals.trainCount} trajet${totals.trainCount > 1 ? 's' : ''}</div>
         </div>
-      </div>` : ''}${trainHtml}${countryHtml}${expensesHtml}`}
+      </div>` : ''}${trainHtml}${countryHtml}`}
       </div>
       ${TOGGLE_SCRIPT}
     </body></html>`;
@@ -369,8 +256,6 @@ function renderStats(posts, isAdmin = false, allPosts = null) {
       ${trainHtml}
 
       ${countryHtml}
-
-      ${expensesHtml}
     </div>
     ${TOGGLE_SCRIPT}
   </body></html>`;

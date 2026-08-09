@@ -8,6 +8,7 @@ const { renderPublic } = require('../views/journal');
 const { renderPreparation } = require('../views/preparation');
 const { renderTimeline } = require('../views/timeline');
 const { renderStats } = require('../views/stats');
+const { renderFinances } = require('../views/finances');
 const { renderMap } = require('../views/map');
 const { renderRSS } = require('../views/rss');
 
@@ -55,9 +56,14 @@ router.get('/map', requireFamily, (req, res) => {
 });
 
 router.get('/stats', requireAdmin, (req, res) => {
-  const allPosts = readPosts();
-  const posts = allPosts.filter(p => p.type !== 'preparation');
-  res.send(renderStats(posts, true, allPosts));
+  const posts = readPosts().filter(p => p.type !== 'preparation');
+  res.send(renderStats(posts, true));
+});
+
+// Statistiques financières : sous-page réservée aux administrateurs.
+// Les dépenses des pages de préparation comptent aussi, d'où readPosts() entier.
+router.get('/stats/finances', requireAdmin, (req, res) => {
+  res.send(renderFinances(readPosts()));
 });
 
 router.get('/preparation', requireFamily, (req, res) => {

@@ -8,6 +8,7 @@ Journal de voyage vélo auto-hébergé. Postez vos étapes depuis votre téléph
 - **Interface mobile** — poster une étape depuis le téléphone (titre, texte, photos, GPS auto)
 - **Carte Leaflet** — tracé automatique de votre itinéraire
 - **Statistiques** — km cumulés, D+ total, nombre d'étapes, trajet total (vélo + train), kilométrage par pays et par région
+- **Finances** — sous-page « Statistiques → 💶 Finances » réservée aux administrateurs : total dépensé, moyenne mensuelle, répartition par catégorie et par personne
 - **Flux RSS** — pour les proches qui utilisent un lecteur RSS
 - **Notifications e-mail** — vos proches s'abonnent avec leur e-mail (double opt-in) et sont prévenus à chaque nouvelle étape publiée
 - **Mot de passe** — page de post protégée, page famille publique
@@ -175,6 +176,15 @@ La publication n'attend jamais ce calcul : le géocodage inverse (OpenStreetMap 
 La page **Statistiques** en tire une section **🌍 Distance par pays et par région** : un bloc par pays (drapeau, distance, D+, km en train, part du voyage) et, à l'intérieur, une ligne par région dépliable sur le détail des étapes.
 
 Pour les étapes déjà publiées, la page **Système** propose **🌍 Détecter les étapes pas encore localisées** (ou tout recalculer), avec l'avancement affiché en direct. Un pays saisi à la main dans le formulaire d'édition est figé : la détection ne l'écrase jamais.
+
+### Statistiques et Finances
+
+Les chiffres du voyage sont séparés en deux pages, toutes deux réservées aux administrateurs :
+
+- **📊 Statistiques** (`/stats`) — distances, dénivelé, jours roulés, distance par mois, déplacements en train, kilométrage par pays et par région
+- **💶 Finances** (`/stats/finances`) — sous-entrée du menu « Statistiques » : total dépensé, moyenne par mois, répartition par catégorie (avec les sous-catégories hôtel/camping) et par personne, en vue d'ensemble puis mois par mois, chaque ligne dépliable sur le détail des dépenses
+
+Les dépenses saisies sur les **pages de préparation** comptent dans les Finances (achat de matériel, billets…) mais n'entrent évidemment pas dans les distances.
 
 ### Page famille
 

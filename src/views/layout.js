@@ -13,16 +13,30 @@ function renderHeader({ activePage = '', isAdmin = false, isStrictAdmin = false,
     { href: '/',           label: 'Journal',       key: 'journal',     icon: '📖' },
     { href: '/timeline',   label: 'Timeline',      key: 'timeline',    icon: '📅' },
     { href: '/map',        label: 'Carte',         key: 'map',         icon: '🗺️' },
-    ...(isStrictAdmin ? [{ href: '/stats', label: 'Statistiques', key: 'stats', icon: '📊' }] : []),
+    // Les chiffres du budget vivent dans une sous-entrée réservée aux administrateurs
+    ...(isStrictAdmin ? [{
+      href: '/stats', label: 'Statistiques', key: 'stats', icon: '📊',
+      children: [{ href: '/stats/finances', label: 'Finances', key: 'finances', icon: '💶' }],
+    }] : []),
     { href: '/preparation',label: 'Préparation',   key: 'preparation', icon: '🛠️' },
     ...(isAdmin ? [{ href: '/settings', label: 'Système', key: 'settings', icon: '⚙️' }] : []),
     { href: '/logout',     label: 'Déconnexion',   key: 'logout',      icon: '🔓' },
   ];
 
-  function makeLink(l) {
-    const cls = activePage === l.key ? ' class="active"' : '';
-    return `<a href="${l.href}"${cls}>${l.icon} ${l.label}</a>`;
+  // Une entrée parente reste surlignée quand on est sur l'une de ses sous-pages
+  const isActive = l => activePage === l.key || (l.children || []).some(c => c.key === activePage);
+
+  function makeLink(l, extraCls = '') {
+    const cls = [isActive(l) ? 'active' : '', extraCls].filter(Boolean).join(' ');
+    return `<a href="${l.href}"${cls ? ` class="${cls}"` : ''}>${l.icon} ${l.label}</a>`;
   }
+
+  // Bureau : la sous-entrée s'ouvre au survol du groupe. Mobile : elle est
+  // simplement listée en retrait sous son entrée parente.
+  const makeNavItem = l => !l.children
+    ? makeLink(l)
+    : `<span class="nav-group">${makeLink(l)}<span class="nav-sub">${l.children.map(c => makeLink(c)).join('')}</span></span>`;
+  const makeMobileItem = l => [makeLink(l), ...(l.children || []).map(c => makeLink(c, 'sub'))].join('');
 
   const sub = TRIP_START && TRIP_END
     ? `<span class="header-sub">${TRIP_START} → ${TRIP_END}</span>`
@@ -36,13 +50,13 @@ function renderHeader({ activePage = '', isAdmin = false, isStrictAdmin = false,
           <a href="/">${LOGO_SVG}</a>
           ${sub}
         </div>
-        <nav class="header-nav">${links.map(makeLink).join('')}</nav>
+        <nav class="header-nav">${links.map(makeNavItem).join('')}</nav>
         ${renderSubscribeBell(csrf)}
         <button class="hamburger" id="hamburger" aria-label="Menu">
           <span></span><span></span><span></span>
         </button>
       </div>
-      <nav class="mobile-menu" id="mobileMenu">${links.map(makeLink).join('')}</nav>
+      <nav class="mobile-menu" id="mobileMenu">${links.map(makeMobileItem).join('')}</nav>
     </div>
     ${renderSubscribeModal(csrf)}
     <script>
@@ -64,6 +78,23 @@ function renderHeader({ activePage = '', isAdmin = false, isStrictAdmin = false,
       })();
     </script>`;
 }
+
+// ══════════════════════════════════════════════════════════
+//  Dépliage des lignes de détail
+// ══════════════════════════════════════════════════════════
+
+// Partagé par les pages Statistiques et Finances : chaque ligne marquée
+// .exp-break-row-toggle ouvre/ferme le bloc de détail qu'elle désigne.
+const TOGGLE_SCRIPT = `<script>
+  document.querySelectorAll('.exp-break-row-toggle').forEach(function(row) {
+    row.addEventListener('click', function() {
+      var detail = document.getElementById(row.dataset.target);
+      if (!detail) return;
+      var open = detail.classList.toggle('open');
+      row.classList.toggle('open', open);
+    });
+  });
+</script>`;
 
 // ══════════════════════════════════════════════════════════
 //  CSS
@@ -106,6 +137,12 @@ const CSS = `
   .header-nav{display:flex;align-items:center;gap:4px;flex-shrink:0;}
   .header-nav a{color:var(--ink-mid);font-size:12px;font-weight:600;padding:6px 12px;border-radius:20px;border:1.5px solid var(--sand);background:var(--mist);transition:all .2s;white-space:nowrap;}
 
+  /* ── SOUS-MENU (bureau) ──────────────────────────── */
+  .nav-group{position:relative;display:inline-flex;}
+  .nav-sub{display:none;position:absolute;top:100%;left:0;padding-top:8px;flex-direction:column;gap:4px;z-index:210;}
+  .nav-group:hover .nav-sub,.nav-group:focus-within .nav-sub{display:flex}
+  .nav-sub a{background:#fff;box-shadow:0 8px 20px rgba(42,122,122,0.16);}
+
   /* ── HAMBURGER ───────────────────────────────────── */
   .hamburger{display:none;flex-direction:column;justify-content:center;align-items:center;gap:5px;width:40px;height:40px;border-radius:10px;border:1.5px solid var(--sand);background:var(--mist);cursor:pointer;flex-shrink:0;}
   .hamburger span{display:block;width:18px;height:2px;background:var(--ocean);border-radius:2px;transition:all .25s;}
@@ -117,6 +154,7 @@ const CSS = `
   .mobile-menu a{color:var(--ink-mid);font-size:14px;font-weight:500;padding:10px 14px;border-radius:10px;border:1px solid var(--sand);background:var(--mist);display:flex;align-items:center;gap:8px;transition:background .15s;text-decoration:none;}
   .mobile-menu a:hover{background:var(--sage);border-color:var(--teal-light)}
   .mobile-menu a.active{background:var(--sage);border-color:var(--teal);color:var(--ocean)}
+  .mobile-menu a.sub{margin-left:22px;font-size:13px;padding:8px 14px;}
 
   @media(max-width:600px){
     .header-nav{display:none}
@@ -587,4 +625,4 @@ const CSS = `
   }
 `;
 
-module.exports = { CSS, LOGO_SVG, renderHeader };
+module.exports = { CSS, LOGO_SVG, TOGGLE_SCRIPT, renderHeader };
