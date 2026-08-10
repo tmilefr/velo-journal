@@ -1,13 +1,215 @@
+// ── Système : sommaire et pages de section ────────────────
+// Le Système est découpé en pages autonomes (sauvegarde, recalculs, panorama,
+// abonnés), listées à la fois dans le sous-menu « ⚙️ Système » et dans le
+// sommaire /settings. Le découpage lui-même vit dans layout.js.
 const { TRIP_TITLE, MAIL_ENABLED } = require('../config');
 const { esc } = require('../lib/html');
 const { formatDateShort } = require('../lib/dates');
-const { CSS, renderHeader } = require('./layout');
+const { CSS, SYSTEM_SECTIONS, renderHeader } = require('./layout');
 
 // ══════════════════════════════════════════════════════════
-//  renderSettings
+//  Coquille commune
 // ══════════════════════════════════════════════════════════
 
-function renderSubscribersCard(csrf, subscribers) {
+const section = key => SYSTEM_SECTIONS.find(s => s.key === key);
+
+// Bandeaux d'information réutilisés d'une section à l'autre
+const banner = (bg, border, color, html) =>
+  `<div style="background:${bg};border:1px solid ${border};border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:14px;color:${color};font-weight:500;line-height:1.5">${html}</div>`;
+const bannerOk    = html => banner('#f0fdf4', '#bbf7d0', '#166534', html);
+const bannerWarn  = html => banner('#fffbeb', '#fde68a', '#92400e', html);
+const bannerInfo  = html => banner('var(--mist)', 'var(--sand)', 'var(--ink-mid)', html);
+
+// Page d'une section : en-tête (titre + description + retour au sommaire),
+// puis le contenu propre à la section.
+function renderSystemPage({ key, isStrictAdmin = false, banners = '', body = '', script = '' }) {
+  const s = section(key);
+  return `<!DOCTYPE html><html lang="fr"><head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>${s.title} — ${TRIP_TITLE}</title><style>${CSS}</style>
+  </head><body>
+    ${renderHeader({ activePage: key, isAdmin: true, isStrictAdmin, showMap: false })}
+    <div class="form-wrap">
+      <div class="sys-head">
+        <a href="/settings" class="sys-back">← Système</a>
+        <h1>${s.icon} ${s.title}</h1>
+        <p>${s.desc}</p>
+      </div>
+      ${banners}
+      ${body}
+    </div>
+    ${script}
+  </body></html>`;
+}
+
+// ══════════════════════════════════════════════════════════
+//  Sommaire : /settings
+// ══════════════════════════════════════════════════════════
+
+function renderSystemHome(isStrictAdmin = false, geoJob = null) {
+  // Une détection lancée depuis les Recalculs continue en arrière-plan :
+  // le sommaire en rappelle l'avancement où qu'on soit reparti.
+  const running = geoJob && geoJob.running && geoJob.total > 0
+    ? bannerInfo(`⏳ Détection des pays et régions en cours — ${geoJob.done} / ${geoJob.total} étape${geoJob.total > 1 ? 's' : ''}. <a href="/settings/recalc" style="text-decoration:underline">Voir l'avancement</a>`)
+    : '';
+
+  const cards = SYSTEM_SECTIONS.map(s => `
+    <a href="${s.href}" class="sys-card">
+      <span class="sys-card-icon">${s.icon}</span>
+      <span class="sys-card-body">
+        <span class="sys-card-title">${s.title}</span>
+        <span class="sys-card-desc">${s.desc}</span>
+      </span>
+      <span class="sys-card-go">›</span>
+    </a>`).join('');
+
+  return `<!DOCTYPE html><html lang="fr"><head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Système — ${TRIP_TITLE}</title><style>${CSS}</style>
+  </head><body>
+    ${renderHeader({ activePage: 'settings', isAdmin: true, isStrictAdmin, showMap: false })}
+    <div class="form-wrap">
+      <div class="sys-head">
+        <h1>⚙️ Système</h1>
+        <p>L'entretien du carnet, une page par sujet.</p>
+      </div>
+      ${running}
+      <div class="sys-grid">${cards}</div>
+    </div>
+  </body></html>`;
+}
+
+// ══════════════════════════════════════════════════════════
+//  Sauvegarde et restauration : /settings/backup
+// ══════════════════════════════════════════════════════════
+
+function renderBackup(csrf = '', restored = false, isStrictAdmin = false) {
+  return renderSystemPage({
+    key: 'sys-backup',
+    isStrictAdmin,
+    banners: restored ? bannerOk('✅ Données restaurées avec succès.') : '',
+    body: `
+      <div class="form-card" style="margin-bottom:16px">
+        <h2>⬇️ Sauvegarder</h2>
+        <p style="font-size:14px;color:var(--ink-light);margin-bottom:18px;line-height:1.6"><strong>Sauvegarde complète (recommandée)</strong> : une archive ZIP contenant les étapes <em>et</em> toutes les photos/vidéos. C'est la sauvegarde à conserver.</p>
+        <a href="/backup-full" class="btn-submit" style="display:block;text-align:center;text-decoration:none">📦 Télécharger la sauvegarde complète (ZIP)</a>
+        <p style="font-size:13px;color:var(--ink-light);margin:16px 0 10px;line-height:1.6">Sauvegarde légère : uniquement les textes des étapes au format <code>.json</code>, sans les médias.</p>
+        <a href="/backup" class="loc-search-btn" style="display:block;text-align:center;text-decoration:none;margin:0">⬇️ Télécharger les données seules (JSON)</a>
+      </div>
+      <div class="form-card">
+        <h2>⬆️ Restaurer</h2>
+        <p style="font-size:14px;color:var(--ink-light);margin-bottom:18px;line-height:1.6">Importe un fichier de sauvegarde JSON. <strong style="color:#dc2626">Les étapes actuelles seront remplacées</strong> par celles du fichier.</p>
+        <!-- Envoi multipart : requireCsrf s'exécute avant multer, le jeton doit
+             donc voyager dans l'URL (même convention que /post et /edit). -->
+        <form method="POST" action="/restore?_csrf=${csrf}" enctype="multipart/form-data" class="form-restore">
+          <input type="hidden" name="_csrf" value="${csrf}">
+          <div class="field">
+            <label>Fichier de sauvegarde (.json)</label>
+            <input type="file" name="backup" accept=".json,application/json" required style="padding:8px;background:#fff">
+          </div>
+          <button class="btn-submit" type="submit" style="background:linear-gradient(135deg,#dc2626,#b91c1c)">⬆️ Restaurer les données</button>
+        </form>
+      </div>`,
+    script: `<script>
+      document.querySelectorAll('.form-restore').forEach(function(f) {
+        f.addEventListener('submit', function(e) {
+          if (!window.confirm('Restaurer ces données ? Les étapes actuelles seront remplacées.')) e.preventDefault();
+        });
+      });
+    </script>`,
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+//  Recalculs : /settings/recalc
+// ══════════════════════════════════════════════════════════
+
+function renderRecalc(csrf = '', recalc = null, geo = null, geoJob = null, isStrictAdmin = false) {
+  // Bandeau de lancement (retour de POST /recalc-geo)
+  let geoBanner = '';
+  if (geo === 'running') {
+    geoBanner = bannerWarn('⏳ Une détection est déjà en cours — laissez-la se terminer.');
+  } else if (geo === 'started') {
+    const n = geoJob ? geoJob.total : 0;
+    geoBanner = n === 0
+      ? bannerOk('✅ Toutes les étapes sont déjà localisées — rien à détecter.')
+      : bannerOk(`✅ Détection lancée sur ${n} étape${n > 1 ? 's' : ''} — l'avancement s'affiche ci-dessous.`);
+  }
+  // Avancement de la détection en cours (ou de la dernière terminée)
+  let geoProgress = '';
+  if (geoJob && geoJob.total > 0) {
+    const pct = Math.round(geoJob.done / geoJob.total * 100);
+    geoProgress = geoJob.running
+      ? `<div style="background:var(--mist);border:1px solid var(--sand);border-radius:12px;padding:12px 16px;margin-bottom:16px">
+           <div style="font-size:13px;color:var(--ink-mid);font-weight:600;margin-bottom:8px">⏳ Détection en cours — ${geoJob.done} / ${geoJob.total} étape${geoJob.total > 1 ? 's' : ''}</div>
+           <div class="exp-break-track"><div class="exp-break-fill" style="width:${Math.max(2, pct)}%;background:var(--ocean)"></div></div>
+         </div>`
+      : `<div style="background:var(--mist);border:1px solid var(--sand);border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:var(--ink-mid)">✅ Dernière détection : ${geoJob.updated} étape(s) localisée(s)${geoJob.errors ? ` · ⚠️ ${geoJob.errors} sans position exploitable` : ''}.</div>`;
+  }
+
+  let recalcBanner = '';
+  if (recalc) {
+    if (recalc.scanned === 0) {
+      recalcBanner = bannerWarn('ℹ️ Aucune étape ne possède de trace GPX — rien à recalculer.');
+    } else {
+      const errPart = recalc.errors ? ` · ⚠️ ${recalc.errors} trace(s) illisible(s)` : '';
+      recalcBanner = bannerOk(`✅ Distances recalculées : ${recalc.updated} étape(s) mise(s) à jour sur ${recalc.scanned} avec trace GPX${errPart}.`);
+    }
+  }
+
+  return renderSystemPage({
+    key: 'sys-recalc',
+    isStrictAdmin,
+    banners: `${recalcBanner}${geoBanner}`,
+    body: `
+      <div class="form-card" style="margin-bottom:16px">
+        <h2>📐 Recalcul des distances</h2>
+        <p style="font-size:14px;color:var(--ink-light);margin-bottom:18px;line-height:1.6">Recalcule la distance (km) de <strong>toutes les étapes possédant une trace GPX</strong>, à partir des points de la trace. Les étapes sans GPX ne sont pas modifiées. Utile après un import ou pour corriger d'anciennes valeurs saisies à la main.</p>
+        <form method="POST" action="/recalc-distances" class="form-recalc">
+          <input type="hidden" name="_csrf" value="${csrf}">
+          <button class="btn-submit" type="submit" style="background:linear-gradient(135deg,var(--ocean),var(--teal))">📐 Recalculer toutes les distances</button>
+        </form>
+      </div>
+      <div class="form-card">
+        <h2>🌍 Pays et régions traversés</h2>
+        <p style="font-size:14px;color:var(--ink-light);margin-bottom:18px;line-height:1.6">Détecte les pays et régions de chaque étape sans aucune saisie : les étapes avec une <strong>trace GPX</strong> sont découpées frontière par frontière (le kilométrage est réparti entre les régions traversées), les autres sont situées par leurs <strong>coordonnées</strong>. Les pays <strong>corrigés à la main</strong> ne sont jamais écrasés.</p>
+        ${geoProgress}
+        <form method="POST" action="/recalc-geo" class="form-recalc-geo">
+          <input type="hidden" name="_csrf" value="${csrf}">
+          <button class="btn-submit" type="submit" style="background:linear-gradient(135deg,var(--ocean),var(--emerald))">🌍 Détecter les étapes pas encore localisées</button>
+        </form>
+        <form method="POST" action="/recalc-geo" class="form-recalc-geo">
+          <input type="hidden" name="_csrf" value="${csrf}">
+          <input type="hidden" name="force" value="1">
+          <button class="loc-search-btn" type="submit" style="display:block;width:100%;text-align:center;margin-top:10px">🔄 Tout recalculer (y compris les étapes déjà localisées)</button>
+        </form>
+        <p style="font-size:12px;color:var(--ink-light);margin-top:10px;line-height:1.5">⏳ Le service OpenStreetMap n'accepte qu'une requête par seconde : la détection tourne en arrière-plan (environ 2 requêtes par étape, davantage quand une trace franchit une frontière). Vous pouvez quitter cette page, le traitement continue.</p>
+      </div>`,
+    script: `<script>
+      document.querySelectorAll('.form-recalc').forEach(function(f) {
+        f.addEventListener('submit', function(e) {
+          if (!window.confirm('Recalculer les distances de toutes les étapes avec une trace GPX ? Les valeurs de km actuelles seront remplacées.')) e.preventDefault();
+        });
+      });
+      document.querySelectorAll('.form-recalc-geo').forEach(function(f) {
+        f.addEventListener('submit', function() {
+          var b = f.querySelector('button[type=submit]');
+          if (b) { b.disabled = true; b.textContent = '🌍 Détection lancée…'; }
+        });
+      });
+      ${geoJob && geoJob.running
+        // La détection tourne côté serveur : on rafraîchit pour suivre l'avancement.
+        ? `setTimeout(function() { location.href = '/settings/recalc'; }, 5000);`
+        : ''}
+    </script>`,
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+//  Abonnés : /settings/subscribers
+// ══════════════════════════════════════════════════════════
+
+function renderSubscribers(csrf = '', subscribers = [], isStrictAdmin = false) {
   const rows = subscribers.map(s => `
     <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px dashed var(--sand);font-size:13px">
       <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--ink)">${esc(s.email)}</span>
@@ -38,127 +240,18 @@ function renderSubscribersCard(csrf, subscribers) {
       ? `<p style="font-size:14px;color:var(--ink-light);line-height:1.6">Personne n'est encore abonné. Le bandeau « 🔔 » en haut du journal permet à vos proches de laisser leur e-mail : ils recevront un message à chaque nouvelle étape publiée.</p>`
       : `<p style="font-size:14px;color:var(--ink-light);margin-bottom:10px;line-height:1.6">${subscribers.filter(s => s.confirmed).length} abonné(s) confirmé(s) — prévenus une seule fois par étape, à sa première publication.${pendingNote}</p>${rows}`;
 
-  return `<div class="form-card" style="margin-top:16px" id="subscribers">
-      <h2>🔔 Abonnés aux notifications</h2>
-      ${body}
-    </div>`;
-}
-
-function renderSettings(csrf = '', restored = false, recalc = null, subscribers = [], geo = null, geoJob = null) {
-  // Bandeau de lancement (retour de POST /recalc-geo)
-  let geoBanner = '';
-  if (geo === 'running') {
-    geoBanner = `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:14px;color:#92400e;font-weight:500">⏳ Une détection est déjà en cours — laissez-la se terminer.</div>`;
-  } else if (geo === 'started') {
-    const n = geoJob ? geoJob.total : 0;
-    geoBanner = n === 0
-      ? `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:14px;color:#166534;font-weight:500">✅ Toutes les étapes sont déjà localisées — rien à détecter.</div>`
-      : `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:14px;color:#166534;font-weight:500">✅ Détection lancée sur ${n} étape${n > 1 ? 's' : ''} — l'avancement s'affiche ci-dessous.</div>`;
-  }
-  // Avancement de la détection en cours (ou de la dernière terminée)
-  let geoProgress = '';
-  if (geoJob && geoJob.total > 0) {
-    const pct = Math.round(geoJob.done / geoJob.total * 100);
-    geoProgress = geoJob.running
-      ? `<div style="background:var(--mist);border:1px solid var(--sand);border-radius:12px;padding:12px 16px;margin-bottom:16px">
-           <div style="font-size:13px;color:var(--ink-mid);font-weight:600;margin-bottom:8px">⏳ Détection en cours — ${geoJob.done} / ${geoJob.total} étape${geoJob.total > 1 ? 's' : ''}</div>
-           <div class="exp-break-track"><div class="exp-break-fill" style="width:${Math.max(2, pct)}%;background:var(--ocean)"></div></div>
-         </div>`
-      : `<div style="background:var(--mist);border:1px solid var(--sand);border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:var(--ink-mid)">✅ Dernière détection : ${geoJob.updated} étape(s) localisée(s)${geoJob.errors ? ` · ⚠️ ${geoJob.errors} sans position exploitable` : ''}.</div>`;
-  }
-
-  let recalcBanner = '';
-  if (recalc) {
-    if (recalc.scanned === 0) {
-      recalcBanner = `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:14px;color:#92400e;font-weight:500">ℹ️ Aucune étape ne possède de trace GPX — rien à recalculer.</div>`;
-    } else {
-      const errPart = recalc.errors ? ` · ⚠️ ${recalc.errors} trace(s) illisible(s)` : '';
-      recalcBanner = `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:14px;color:#166534;font-weight:500">✅ Distances recalculées : ${recalc.updated} étape(s) mise(s) à jour sur ${recalc.scanned} avec trace GPX${errPart}.</div>`;
-    }
-  }
-  return `<!DOCTYPE html><html lang="fr"><head>
-    <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Système — ${TRIP_TITLE}</title><style>${CSS}</style>
-  </head><body>
-    ${renderHeader({ activePage: 'settings', isAdmin: true, showMap: false })}
-    <div class="form-wrap">
-      ${restored ? `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:14px;color:#166534;font-weight:500">✅ Données restaurées avec succès.</div>` : ''}
-      ${recalcBanner}
-      ${geoBanner}
-      <div class="form-card" style="margin-bottom:16px">
-        <h2>⬇️ Sauvegarder</h2>
-        <p style="font-size:14px;color:var(--ink-light);margin-bottom:18px;line-height:1.6"><strong>Sauvegarde complète (recommandée)</strong> : une archive ZIP contenant les étapes <em>et</em> toutes les photos/vidéos. C'est la sauvegarde à conserver.</p>
-        <a href="/backup-full" class="btn-submit" style="display:block;text-align:center;text-decoration:none">📦 Télécharger la sauvegarde complète (ZIP)</a>
-        <p style="font-size:13px;color:var(--ink-light);margin:16px 0 10px;line-height:1.6">Sauvegarde légère : uniquement les textes des étapes au format <code>.json</code>, sans les médias.</p>
-        <a href="/backup" class="loc-search-btn" style="display:block;text-align:center;text-decoration:none;margin:0">⬇️ Télécharger les données seules (JSON)</a>
-      </div>
-      <div class="form-card">
-        <h2>⬆️ Restaurer</h2>
-        <p style="font-size:14px;color:var(--ink-light);margin-bottom:18px;line-height:1.6">Importe un fichier de sauvegarde JSON. <strong style="color:#dc2626">Les étapes actuelles seront remplacées</strong> par celles du fichier.</p>
-        <form method="POST" action="/restore" enctype="multipart/form-data" class="form-restore">
-          <input type="hidden" name="_csrf" value="${csrf}">
-          <div class="field">
-            <label>Fichier de sauvegarde (.json)</label>
-            <input type="file" name="backup" accept=".json,application/json" required style="padding:8px;background:#fff">
-          </div>
-          <button class="btn-submit" type="submit" style="background:linear-gradient(135deg,#dc2626,#b91c1c)">⬆️ Restaurer les données</button>
-        </form>
-      </div>
-      <div class="form-card" style="margin-top:16px">
-        <h2>📐 Recalcul des distances</h2>
-        <p style="font-size:14px;color:var(--ink-light);margin-bottom:18px;line-height:1.6">Recalcule la distance (km) de <strong>toutes les étapes possédant une trace GPX</strong>, à partir des points de la trace. Les étapes sans GPX ne sont pas modifiées. Utile après un import ou pour corriger d'anciennes valeurs saisies à la main.</p>
-        <form method="POST" action="/recalc-distances" class="form-recalc">
-          <input type="hidden" name="_csrf" value="${csrf}">
-          <button class="btn-submit" type="submit" style="background:linear-gradient(135deg,var(--ocean),var(--teal))">📐 Recalculer toutes les distances</button>
-        </form>
-      </div>
-      <div class="form-card" style="margin-top:16px">
-        <h2>🌍 Pays et régions traversés</h2>
-        <p style="font-size:14px;color:var(--ink-light);margin-bottom:18px;line-height:1.6">Détecte les pays et régions de chaque étape sans aucune saisie : les étapes avec une <strong>trace GPX</strong> sont découpées frontière par frontière (le kilométrage est réparti entre les régions traversées), les autres sont situées par leurs <strong>coordonnées</strong>. Les pays <strong>corrigés à la main</strong> ne sont jamais écrasés.</p>
-        ${geoProgress}
-        <form method="POST" action="/recalc-geo" class="form-recalc-geo">
-          <input type="hidden" name="_csrf" value="${csrf}">
-          <button class="btn-submit" type="submit" style="background:linear-gradient(135deg,var(--ocean),var(--emerald))">🌍 Détecter les étapes pas encore localisées</button>
-        </form>
-        <form method="POST" action="/recalc-geo" class="form-recalc-geo">
-          <input type="hidden" name="_csrf" value="${csrf}">
-          <input type="hidden" name="force" value="1">
-          <button class="loc-search-btn" type="submit" style="display:block;width:100%;text-align:center;margin-top:10px">🔄 Tout recalculer (y compris les étapes déjà localisées)</button>
-        </form>
-        <p style="font-size:12px;color:var(--ink-light);margin-top:10px;line-height:1.5">⏳ Le service OpenStreetMap n'accepte qu'une requête par seconde : la détection tourne en arrière-plan (environ 2 requêtes par étape, davantage quand une trace franchit une frontière). Vous pouvez quitter cette page, le traitement continue.</p>
-      </div>
-      <div class="form-card" style="margin-top:16px">
-        <h2>🏔️ Panorama du voyage</h2>
-        <p style="font-size:14px;color:var(--ink-light);margin-bottom:18px;line-height:1.6">Génère <strong>tous les profils de dénivelé mis bout à bout</strong>, découpés en <strong>pages A4 paysage</strong> à recoller. Un trait en biais relie chaque <strong>point d'arrivée de GPX</strong> à la photo favorite (⭐) de l'étape correspondante. Idéal à imprimer ou partager.</p>
-        <a href="/panorama" class="btn-submit" style="display:block;text-align:center;text-decoration:none;background:linear-gradient(135deg,var(--emerald),var(--emerald-mid))">🏔️ Générer le panorama</a>
-      </div>
-      ${renderSubscribersCard(csrf, subscribers)}
-    </div>
-    <script>
-      document.querySelectorAll('.form-restore').forEach(function(f) {
-        f.addEventListener('submit', function(e) {
-          if (!window.confirm('Restaurer ces données ? Les étapes actuelles seront remplacées.')) e.preventDefault();
-        });
-      });
-      document.querySelectorAll('.form-recalc').forEach(function(f) {
-        f.addEventListener('submit', function(e) {
-          if (!window.confirm('Recalculer les distances de toutes les étapes avec une trace GPX ? Les valeurs de km actuelles seront remplacées.')) e.preventDefault();
-        });
-      });
-      document.querySelectorAll('.form-recalc-geo').forEach(function(f) {
-        f.addEventListener('submit', function() {
-          var b = f.querySelector('button[type=submit]');
-          if (b) { b.disabled = true; b.textContent = '🌍 Détection lancée…'; }
-        });
-      });
-      ${geoJob && geoJob.running
-        // La détection tourne côté serveur : on rafraîchit pour suivre l'avancement.
-        ? `setTimeout(function() { location.href = '/settings'; }, 5000);`
-        : ''}
+  return renderSystemPage({
+    key: 'sys-subscribers',
+    isStrictAdmin,
+    body: `<div class="form-card" id="subscribers">
+        <h2>🔔 Abonnés aux notifications</h2>
+        ${body}
+      </div>`,
+    script: `<script>
       document.querySelectorAll('.form-sub-validate').forEach(function(f) {
         f.addEventListener('submit', function(e) {
           var email = f.querySelector('input[name=email]').value;
-          if (!window.confirm('Valider l\'inscription de ' + email + ' à la main ? Cette personne recevra les prochaines étapes sans avoir cliqué sur le lien de confirmation.')) e.preventDefault();
+          if (!window.confirm('Valider l\\'inscription de ' + email + ' à la main ? Cette personne recevra les prochaines étapes sans avoir cliqué sur le lien de confirmation.')) e.preventDefault();
         });
       });
       document.querySelectorAll('.form-sub-remove').forEach(function(f) {
@@ -167,8 +260,8 @@ function renderSettings(csrf = '', restored = false, recalc = null, subscribers 
           if (!window.confirm('Retirer ' + email + ' des abonnés ?')) e.preventDefault();
         });
       });
-    </script>
-  </body></html>`;
+    </script>`,
+  });
 }
 
-module.exports = { renderSettings };
+module.exports = { renderSystemHome, renderBackup, renderRecalc, renderSubscribers };

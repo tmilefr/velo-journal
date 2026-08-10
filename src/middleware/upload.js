@@ -23,4 +23,19 @@ const upload = multer({
   }
 });
 
-module.exports = { upload };
+// ── Multer (restauration d'une sauvegarde) ────────────────
+// Le filtre médias refuserait le .json d'une sauvegarde : la restauration a
+// son propre filtre. Le fichier est déposé au même endroit, relu puis
+// supprimé aussitôt par la route /restore.
+const uploadBackup = multer({
+  storage,
+  limits: { fileSize: 200 * 1024 * 1024 },
+  fileFilter: (_, file, cb) => {
+    const ok = file.originalname.toLowerCase().endsWith('.json')
+      || file.mimetype === 'application/json';
+    if (ok) cb(null, true);
+    else cb(new Error('Sauvegarde .json seulement'));
+  }
+});
+
+module.exports = { upload, uploadBackup };

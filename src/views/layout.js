@@ -8,18 +8,58 @@ const { renderSubscribeBell, renderSubscribeModal } = require('./subscribeWidget
 
 const LOGO_SVG = `<img src="/public/logo_nijumatim.png" class="header-logo" alt="${TRIP_TITLE || 'Nijumatim'}">`;
 
+// ══════════════════════════════════════════════════════════
+//  Sections du Système
+// ══════════════════════════════════════════════════════════
+
+// Source unique du découpage : chaque section donne une entrée du sous-menu
+// « Système », une carte du sommaire (/settings) et le titre de sa page.
+const SYSTEM_SECTIONS = [
+  {
+    key: 'sys-backup', href: '/settings/backup', icon: '💾',
+    label: 'Sauvegarde',
+    title: 'Sauvegarde et restauration',
+    desc: 'Télécharger l\'archive complète (étapes + médias) ou les données seules, et réimporter une sauvegarde.',
+  },
+  {
+    key: 'sys-recalc', href: '/settings/recalc', icon: '📐',
+    label: 'Recalculs',
+    title: 'Recalculs',
+    desc: 'Recalculer les distances depuis les traces GPX et détecter les pays et régions traversés.',
+  },
+  {
+    key: 'sys-panorama', href: '/panorama', icon: '🏔️',
+    label: 'Panorama',
+    title: 'Panorama du voyage',
+    desc: 'Tous les profils de dénivelé bout à bout, en pages A4 paysage à imprimer et recoller.',
+  },
+  {
+    key: 'sys-subscribers', href: '/settings/subscribers', icon: '🔔',
+    label: 'Abonnés',
+    title: 'Abonnés aux notifications',
+    desc: 'Gérer la liste des lecteurs prévenus par e-mail à chaque nouvelle étape publiée.',
+  },
+];
+
 function renderHeader({ activePage = '', isAdmin = false, isStrictAdmin = false, showMap = false, csrf = '' } = {}) {
   const links = [
     { href: '/',           label: 'Journal',       key: 'journal',     icon: '📖' },
     { href: '/timeline',   label: 'Timeline',      key: 'timeline',    icon: '📅' },
     { href: '/map',        label: 'Carte',         key: 'map',         icon: '🗺️' },
-    // Les chiffres du budget vivent dans une sous-entrée réservée aux administrateurs
+    // Les chiffres du voyage — distances et budget — sont réservés aux administrateurs
     ...(isStrictAdmin ? [{
       href: '/stats', label: 'Statistiques', key: 'stats', icon: '📊',
-      children: [{ href: '/stats/finances', label: 'Finances', key: 'finances', icon: '💶' }],
+      children: [
+        { href: '/stats',          label: 'Distances', key: 'stats',    icon: '📏' },
+        { href: '/stats/finances', label: 'Finances',  key: 'finances', icon: '💶' },
+      ],
     }] : []),
     { href: '/preparation',label: 'Préparation',   key: 'preparation', icon: '🛠️' },
-    ...(isAdmin ? [{ href: '/settings', label: 'Système', key: 'settings', icon: '⚙️' }] : []),
+    // Chaque partie du Système a sa page ; l'entrée parente ouvre le sommaire
+    ...(isAdmin ? [{
+      href: '/settings', label: 'Système', key: 'settings', icon: '⚙️',
+      children: SYSTEM_SECTIONS.map(s => ({ href: s.href, label: s.label, key: s.key, icon: s.icon })),
+    }] : []),
     { href: '/logout',     label: 'Déconnexion',   key: 'logout',      icon: '🔓' },
   ];
 
@@ -138,8 +178,10 @@ const CSS = `
   .header-nav a{color:var(--ink-mid);font-size:12px;font-weight:600;padding:6px 12px;border-radius:20px;border:1.5px solid var(--sand);background:var(--mist);transition:all .2s;white-space:nowrap;}
 
   /* ── SOUS-MENU (bureau) ──────────────────────────── */
+  /* Aligné sur le bord droit de l'entrée parente : les groupes vivent dans la
+     moitié droite de la barre, un dépliage vers la gauche ne déborde pas. */
   .nav-group{position:relative;display:inline-flex;}
-  .nav-sub{display:none;position:absolute;top:100%;left:0;padding-top:8px;flex-direction:column;gap:4px;z-index:210;}
+  .nav-sub{display:none;position:absolute;top:100%;right:0;padding-top:8px;flex-direction:column;gap:4px;z-index:210;}
   .nav-group:hover .nav-sub,.nav-group:focus-within .nav-sub{display:flex}
   .nav-sub a{background:#fff;box-shadow:0 8px 20px rgba(42,122,122,0.16);}
 
@@ -238,6 +280,21 @@ const CSS = `
   /* ── SUPPRESSION COMMENTAIRE ─────────────────────── */
   .comment-del{background:none;border:none;color:#dc2626;font-size:11px;cursor:pointer;padding:2px 6px;margin-left:6px;border-radius:6px;}
   .comment-del:hover{background:#fee2e2;}
+
+  /* ── SYSTÈME (sommaire et pages de section) ──────── */
+  .sys-head{margin-bottom:16px;}
+  .sys-head h1{font-family:'Playfair Display',serif;font-size:22px;color:var(--ocean);font-weight:700;line-height:1.25;}
+  .sys-head p{font-size:13px;color:var(--ink-light);margin-top:4px;line-height:1.6;}
+  .sys-grid{display:flex;flex-direction:column;gap:12px;}
+  .sys-card{display:flex;align-items:flex-start;gap:12px;background:#fff;border:1px solid var(--sand);border-radius:14px;padding:14px 16px;box-shadow:0 2px 12px rgba(10,61,98,0.06);transition:transform .15s,box-shadow .15s,border-color .15s;}
+  .sys-card:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(10,61,98,0.12);border-color:var(--teal-light);}
+  .sys-card-icon{font-size:22px;line-height:1.3;flex-shrink:0;}
+  .sys-card-body{flex:1;min-width:0;}
+  .sys-card-title{display:block;font-size:15px;font-weight:700;color:var(--ink);}
+  .sys-card-desc{display:block;font-size:13px;color:var(--ink-light);line-height:1.55;margin-top:2px;}
+  .sys-card-go{margin-left:auto;align-self:center;flex-shrink:0;color:var(--teal);font-size:18px;font-weight:700;}
+  .sys-back{display:inline-block;font-size:12px;font-weight:600;color:var(--ocean-mid);margin-bottom:10px;}
+  .sys-back:hover{text-decoration:underline;}
 
   /* ── VALIDATION MANUELLE D'UN ABONNÉ (système) ───── */
   .sub-validate{background:none;border:1px solid var(--emerald);color:var(--emerald);font-size:11px;font-weight:600;cursor:pointer;padding:2px 8px;border-radius:20px;white-space:nowrap;}
@@ -625,4 +682,4 @@ const CSS = `
   }
 `;
 
-module.exports = { CSS, LOGO_SVG, TOGGLE_SCRIPT, renderHeader };
+module.exports = { CSS, LOGO_SVG, TOGGLE_SCRIPT, SYSTEM_SECTIONS, renderHeader };

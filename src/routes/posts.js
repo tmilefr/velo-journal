@@ -326,7 +326,7 @@ router.post('/recalc-distances', requireAuth, requireCsrf, async (req, res) => {
     }
   }
   writePosts(posts);
-  res.redirect(`/settings?recalc=${updated}&scanned=${scanned}&errors=${errors}`);
+  res.redirect(`/settings/recalc?recalc=${updated}&scanned=${scanned}&errors=${errors}`);
 });
 
 // ── Admin : détecter les pays et régions traversés ──
@@ -337,7 +337,7 @@ router.post('/recalc-distances', requireAuth, requireCsrf, async (req, res) => {
 //  - « force »  : toutes, sauf les pays corrigés à la main
 router.post('/recalc-geo', requireAuth, requireCsrf, (req, res) => {
   const job = startGeoBackfill({ force: req.body.force === '1' });
-  res.redirect(`/settings?geo=${job.alreadyRunning ? 'running' : 'started'}&geoTotal=${job.total}`);
+  res.redirect(`/settings/recalc?geo=${job.alreadyRunning ? 'running' : 'started'}&geoTotal=${job.total}`);
 });
 
 module.exports = router;

@@ -7,8 +7,8 @@ Journal de voyage vélo auto-hébergé. Postez vos étapes depuis votre téléph
 - **Page famille** — fil d'étapes avec photos, carte interactive, commentaires
 - **Interface mobile** — poster une étape depuis le téléphone (titre, texte, photos, GPS auto)
 - **Carte Leaflet** — tracé automatique de votre itinéraire
-- **Statistiques** — km cumulés, D+ total, nombre d'étapes, trajet total (vélo + train), kilométrage par pays et par région
-- **Finances** — sous-page « Statistiques → 💶 Finances » réservée aux administrateurs : total dépensé, moyenne mensuelle, répartition par catégorie et par personne
+- **Statistiques** — menu à deux entrées réservé aux administrateurs : **📏 Distances** (km cumulés, D+ total, nombre d'étapes, trajet total vélo + train, kilométrage par pays et par région) et **💶 Finances** (total dépensé, moyenne mensuelle, répartition par catégorie et par personne)
+- **Système** — menu d'entretien du carnet (admin) : **💾 Sauvegarde**, **📐 Recalculs**, **🏔️ Panorama**, **🔔 Abonnés**
 - **Flux RSS** — pour les proches qui utilisent un lecteur RSS
 - **Notifications e-mail** — vos proches s'abonnent avec leur e-mail (double opt-in) et sont prévenus à chaque nouvelle étape publiée
 - **Mot de passe** — page de post protégée, page famille publique
@@ -175,16 +175,27 @@ La publication n'attend jamais ce calcul : le géocodage inverse (OpenStreetMap 
 
 La page **Statistiques** en tire une section **🌍 Distance par pays et par région** : un bloc par pays (drapeau, distance, D+, km en train, part du voyage) et, à l'intérieur, une ligne par région dépliable sur le détail des étapes.
 
-Pour les étapes déjà publiées, la page **Système** propose **🌍 Détecter les étapes pas encore localisées** (ou tout recalculer), avec l'avancement affiché en direct. Un pays saisi à la main dans le formulaire d'édition est figé : la détection ne l'écrase jamais.
+Pour les étapes déjà publiées, la page **Système → 📐 Recalculs** propose **🌍 Détecter les étapes pas encore localisées** (ou tout recalculer), avec l'avancement affiché en direct. Un pays saisi à la main dans le formulaire d'édition est figé : la détection ne l'écrase jamais.
 
 ### Statistiques et Finances
 
-Les chiffres du voyage sont séparés en deux pages, toutes deux réservées aux administrateurs :
+Les chiffres du voyage sont séparés en deux pages, réunies sous l'entrée de menu **📊 Statistiques** et toutes deux réservées aux administrateurs :
 
-- **📊 Statistiques** (`/stats`) — distances, dénivelé, jours roulés, distance par mois, déplacements en train, kilométrage par pays et par région
-- **💶 Finances** (`/stats/finances`) — sous-entrée du menu « Statistiques » : total dépensé, moyenne par mois, répartition par catégorie (avec les sous-catégories hôtel/camping) et par personne, en vue d'ensemble puis mois par mois, chaque ligne dépliable sur le détail des dépenses
+- **📏 Distances** (`/stats`) — distances, dénivelé, jours roulés, distance par mois, déplacements en train, kilométrage par pays et par région
+- **💶 Finances** (`/stats/finances`) — total dépensé, moyenne par mois, répartition par catégorie (avec les sous-catégories hôtel/camping) et par personne, en vue d'ensemble puis mois par mois, chaque ligne dépliable sur le détail des dépenses
 
 Les dépenses saisies sur les **pages de préparation** comptent dans les Finances (achat de matériel, billets…) mais n'entrent évidemment pas dans les distances.
+
+### Système
+
+L'entretien du carnet est regroupé sous l'entrée de menu **⚙️ Système**, une page par sujet. `/settings` en donne le sommaire ; le sous-menu y mène directement :
+
+- **💾 Sauvegarde** (`/settings/backup`) — archive complète en ZIP (étapes + médias), export léger des données seules en JSON, et restauration depuis un fichier JSON
+- **📐 Recalculs** (`/settings/recalc`) — recalcul des distances depuis les traces GPX, et détection des pays et régions traversés (avancement affiché en direct)
+- **🏔️ Panorama** (`/panorama`) — tous les profils de dénivelé bout à bout, en pages A4 paysage à imprimer et recoller
+- **🔔 Abonnés** (`/settings/subscribers`) — liste des abonnés e-mail, validation manuelle et retrait
+
+Le sommaire est accessible aux comptes admin et Margot ; les Statistiques restent réservées à l'admin.
 
 ### Page famille
 
@@ -203,7 +214,7 @@ Si SMTP est configuré dans `.env`, une icône **🔔** apparaît à côté du m
 1. Le lecteur saisit son adresse et reçoit un e-mail de confirmation (double opt-in, lien valable 7 jours)
 2. Une fois confirmé, il reçoit un e-mail à **chaque nouvelle étape publiée** — une seule fois par étape, jamais lors des modifications
 3. Chaque e-mail contient un lien de désinscription en un clic
-4. La liste des abonnés se gère depuis la page **Système** (admin) : on peut retirer une adresse, ou **valider une inscription à la main** avec le bouton « ✔ valider » si l'e-mail de confirmation n'arrive jamais (spam, adresse dictée de vive voix…)
+4. La liste des abonnés se gère depuis la page **Système → 🔔 Abonnés** (admin) : on peut retirer une adresse, ou **valider une inscription à la main** avec le bouton « ✔ valider » si l'e-mail de confirmation n'arrive jamais (spam, adresse dictée de vive voix…)
 5. Chaque envoi (confirmation d'inscription, notification) est tracé dans `data/mail.log`
 
 Exemple de configuration SMTP (Gmail avec mot de passe d'application) :
