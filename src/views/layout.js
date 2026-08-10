@@ -48,17 +48,20 @@ function renderHeader({ activePage = '', isAdmin = false, isStrictAdmin = false,
     { href: '/map',        label: 'Carte',         key: 'map',         icon: '🗺️' },
     // Les chiffres du voyage — distances et budget — sont réservés aux administrateurs
     ...(isStrictAdmin ? [{
-      href: '/stats', label: 'Statistiques', key: 'stats', icon: '📊',
+      label: 'Statistiques', key: 'grp-stats', icon: '📊',
       children: [
         { href: '/stats',          label: 'Distances', key: 'stats',    icon: '📏' },
         { href: '/stats/finances', label: 'Finances',  key: 'finances', icon: '💶' },
       ],
     }] : []),
     { href: '/preparation',label: 'Préparation',   key: 'preparation', icon: '🛠️' },
-    // Chaque partie du Système a sa page ; l'entrée parente ouvre le sommaire
+    // Chaque partie du Système a sa page ; le sommaire devient la première entrée
     ...(isAdmin ? [{
-      href: '/settings', label: 'Système', key: 'settings', icon: '⚙️',
-      children: SYSTEM_SECTIONS.map(s => ({ href: s.href, label: s.label, key: s.key, icon: s.icon })),
+      label: 'Système', key: 'grp-settings', icon: '⚙️',
+      children: [
+        { href: '/settings', label: 'Sommaire', key: 'settings', icon: '🗂️' },
+        ...SYSTEM_SECTIONS.map(s => ({ href: s.href, label: s.label, key: s.key, icon: s.icon })),
+      ],
     }] : []),
     { href: '/logout',     label: 'Déconnexion',   key: 'logout',      icon: '🔓' },
   ];
@@ -71,12 +74,30 @@ function renderHeader({ activePage = '', isAdmin = false, isStrictAdmin = false,
     return `<a href="${l.href}"${cls ? ` class="${cls}"` : ''}>${l.icon} ${l.label}</a>`;
   }
 
-  // Bureau : la sous-entrée s'ouvre au survol du groupe. Mobile : elle est
-  // simplement listée en retrait sous son entrée parente.
-  const makeNavItem = l => !l.children
-    ? makeLink(l)
-    : `<span class="nav-group">${makeLink(l)}<span class="nav-sub">${l.children.map(c => makeLink(c)).join('')}</span></span>`;
-  const makeMobileItem = l => [makeLink(l), ...(l.children || []).map(c => makeLink(c, 'sub'))].join('');
+  // Les entrées à sous-menu ne sont plus des liens : un clic replie ou déplie
+  // leur liste, au bureau comme sur mobile. Le groupe s'ouvre déjà quand on se
+  // trouve sur l'une de ses sous-pages (utile sur mobile, où le menu est en
+  // pleine largeur ; au bureau le dépliage flottant reste fermé au chargement).
+  function makeGroup(l, { prefix, openOnLoad }) {
+    const open = openOnLoad && isActive(l);
+    const id = `${prefix}-sub-${l.key}`;
+    const cls = k => (prefix === 'nav' ? `nav-${k}` : `m-${k}`);
+    return `<div class="${cls('group')}${open ? ' open' : ''}">`
+      + `<button type="button" class="${cls('parent')}${isActive(l) ? ' active' : ''}"`
+      + ` data-nav-toggle aria-expanded="${open ? 'true' : 'false'}" aria-controls="${id}">`
+      + `<span>${l.icon} ${l.label}</span><span class="nav-caret" aria-hidden="true">▾</span>`
+      + `</button>`
+      + `<div class="${cls('sub')}" id="${id}">`
+      + l.children.map(c => makeLink(c, prefix === 'm' ? 'sub' : '')).join('')
+      + `</div></div>`;
+  }
+
+  const makeNavItem = l => l.children
+    ? makeGroup(l, { prefix: 'nav', openOnLoad: false })
+    : makeLink(l);
+  const makeMobileItem = l => l.children
+    ? makeGroup(l, { prefix: 'm', openOnLoad: true })
+    : makeLink(l);
 
   const sub = TRIP_START && TRIP_END
     ? `<span class="header-sub">${TRIP_START} → ${TRIP_END}</span>`
@@ -101,16 +122,44 @@ function renderHeader({ activePage = '', isAdmin = false, isStrictAdmin = false,
     ${renderSubscribeModal(csrf)}
     <script>
       (function(){
+        // ── Sous-menus (Statistiques, Système) : ouverture au clic ──
+        var groups = [].slice.call(document.querySelectorAll('.nav-group, .m-group'));
+        function setOpen(g, open) {
+          g.classList.toggle('open', open);
+          var b = g.querySelector('[data-nav-toggle]');
+          if (b) b.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
+        function closeGroups(except) {
+          groups.forEach(function(g) { if (g !== except) setOpen(g, false); });
+        }
+        groups.forEach(function(g) {
+          var b = g.querySelector('[data-nav-toggle]');
+          if (!b) return;
+          b.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var willOpen = !g.classList.contains('open');
+            closeGroups(g);
+            setOpen(g, willOpen);
+          });
+        });
+        document.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape') closeGroups(null);
+        });
+
+        // ── Menu mobile (hamburger) ──
         var h = document.getElementById('hamburger');
         var m = document.getElementById('mobileMenu');
-        if (!h || !m) return;
-        h.addEventListener('click', function(e) {
-          e.stopPropagation();
-          var open = m.classList.toggle('open');
-          h.classList.toggle('open', open);
-        });
+        if (h && m) {
+          h.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var open = m.classList.toggle('open');
+            h.classList.toggle('open', open);
+          });
+        }
         document.addEventListener('click', function(e) {
-          if (!h.contains(e.target) && !m.contains(e.target)) {
+          groups.forEach(function(g) { if (!g.contains(e.target)) setOpen(g, false); });
+          if (h && m && !h.contains(e.target) && !m.contains(e.target)) {
             m.classList.remove('open');
             h.classList.remove('open');
           }
@@ -179,10 +228,15 @@ const CSS = `
 
   /* ── SOUS-MENU (bureau) ──────────────────────────── */
   /* Aligné sur le bord droit de l'entrée parente : les groupes vivent dans la
-     moitié droite de la barre, un dépliage vers la gauche ne déborde pas. */
+     moitié droite de la barre, un dépliage vers la gauche ne déborde pas.
+     L'ouverture se fait au clic (et non au survol) : même geste au doigt
+     qu'à la souris, et le menu reste ouvert le temps de choisir. */
   .nav-group{position:relative;display:inline-flex;}
+  .nav-parent{display:inline-flex;align-items:center;gap:5px;color:var(--ink-mid);font-size:12px;font-weight:600;font-family:inherit;line-height:1.6;padding:6px 12px;border-radius:20px;border:1.5px solid var(--sand);background:var(--mist);cursor:pointer;transition:all .2s;white-space:nowrap;}
+  .nav-caret{font-size:9px;line-height:1;transition:transform .2s;}
+  .nav-group.open .nav-caret,.m-group.open .nav-caret{transform:rotate(180deg);}
   .nav-sub{display:none;position:absolute;top:100%;right:0;padding-top:8px;flex-direction:column;gap:4px;z-index:210;}
-  .nav-group:hover .nav-sub,.nav-group:focus-within .nav-sub{display:flex}
+  .nav-group.open .nav-sub{display:flex}
   .nav-sub a{background:#fff;box-shadow:0 8px 20px rgba(42,122,122,0.16);}
 
   /* ── HAMBURGER ───────────────────────────────────── */
@@ -198,6 +252,16 @@ const CSS = `
   .mobile-menu a.active{background:var(--sage);border-color:var(--teal);color:var(--ocean)}
   .mobile-menu a.sub{margin-left:22px;font-size:13px;padding:8px 14px;}
 
+  /* ── SOUS-MENU (mobile) ──────────────────────────── */
+  /* Replié par défaut, déplié au clic sur l'entrée parente — et déjà ouvert
+     au chargement quand on se trouve sur l'une de ses sous-pages. */
+  .m-group{display:flex;flex-direction:column;gap:5px;}
+  .m-parent{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--ink-mid);font-size:14px;font-weight:500;font-family:inherit;padding:10px 14px;border-radius:10px;border:1px solid var(--sand);background:var(--mist);cursor:pointer;text-align:left;transition:background .15s;}
+  .m-parent:hover{background:var(--sage);border-color:var(--teal-light)}
+  .m-parent.active{background:var(--sage);border-color:var(--teal);color:var(--ocean)}
+  .m-sub{display:none;flex-direction:column;gap:5px;}
+  .m-group.open .m-sub{display:flex}
+
   @media(max-width:600px){
     .header-nav{display:none}
     .hamburger{display:flex}
@@ -205,8 +269,9 @@ const CSS = `
   @media(min-width:601px){
     .mobile-menu{display:none!important}
     .hamburger{display:none}
-    .header-nav a:hover{background:var(--sage);color:var(--ocean);border-color:var(--teal-light);}
-    .header-nav a.active{background:var(--sage);color:var(--ocean);border-color:var(--teal);}
+    .header-nav a:hover,.nav-parent:hover{background:var(--sage);color:var(--ocean);border-color:var(--teal-light);}
+    .header-nav a.active,.nav-parent.active{background:var(--sage);color:var(--ocean);border-color:var(--teal);}
+    .nav-group.open .nav-parent{background:var(--sage);color:var(--ocean);border-color:var(--teal-light);}
     .header-logo{height:40px;}
   }
 
