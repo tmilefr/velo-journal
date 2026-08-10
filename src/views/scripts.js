@@ -187,21 +187,60 @@ function previewPhotos(input) {
   });
 }
 
-function renderPhotoGrid(input, containerId) {
+// Retirer un média de la sélection suppose de reconstruire la FileList de
+// l'input : seul DataTransfer sait le faire, on masque la croix s'il manque.
+var CAN_EDIT_FILELIST = (function() {
+  try { return !!(new DataTransfer()).items; } catch (e) { return false; }
+})();
+
+// L'argument state sert au re-rendu après une suppression : il rapporte les
+// légendes déjà tapées et la couverture choisie, décalées sur ce qui reste.
+function renderPhotoGrid(input, containerId, state) {
   var c = document.getElementById(containerId);
   if (!c) return;
+  // Les aperçus du rendu précédent ne sont plus affichés : on rend la mémoire
+  if (c._blobUrls) c._blobUrls.forEach(function(u) { URL.revokeObjectURL(u); });
+  c._blobUrls = [];
   c.innerHTML = '';
   var files = Array.from(input.files);
-  if (!files.length) return;
   // Choix de la couverture (facultatif) : par défaut la première photo du lot
   var coverInput = input.dataset.coverInput ? document.getElementById(input.dataset.coverInput) : null;
-  var defaultCover = files.findIndex(function(f) { return f.type.indexOf('video/') !== 0; });
-  if (defaultCover < 0) defaultCover = 0;
-  if (coverInput) coverInput.value = String(defaultCover);
+  if (!files.length) {
+    if (coverInput) coverInput.value = '0';
+    return;
+  }
+  var typed = (state && state.captions) || [];
+  var cover = (state && state.cover != null) ? state.cover : -1;
+  if (cover < 0 || cover >= files.length) {
+    cover = files.findIndex(function(f) { return f.type.indexOf('video/') !== 0; });
+    if (cover < 0) cover = 0;
+  }
+  if (coverInput) coverInput.value = String(cover);
+
+  var hint = document.createElement('div');
+  hint.className = 'photo-grid-hint';
+  hint.textContent = files.length + (files.length > 1 ? ' médias sélectionnés' : ' média sélectionné')
+    + (CAN_EDIT_FILELIST ? ' — ✕ pour en retirer un avant publication' : '');
+  c.appendChild(hint);
+
   var grid = document.createElement('div');
   grid.className = 'photo-grid-new';
+
+  // Enlève le média d'indice i : la FileList, les légendes et la couverture
+  // se décalent ensemble pour rester alignées sur ce que reçoit le serveur.
+  function removeAt(i) {
+    var caps = Array.from(grid.querySelectorAll('.photo-grid-caption')).map(function(el) { return el.value; });
+    caps.splice(i, 1);
+    var dt = new DataTransfer();
+    files.forEach(function(f, k) { if (k !== i) dt.items.add(f); });
+    input.files = dt.files;
+    var nextCover = (cover === i) ? -1 : (cover > i ? cover - 1 : cover);
+    renderPhotoGrid(input, containerId, { captions: caps, cover: nextCover });
+  }
+
   files.forEach(function(f, i) {
     var url = URL.createObjectURL(f);
+    c._blobUrls.push(url);
     var card = document.createElement('div');
     card.className = 'photo-grid-card';
     var media;
@@ -214,20 +253,32 @@ function renderPhotoGrid(input, containerId) {
     }
     media.className = 'photo-grid-media';
     card.appendChild(media);
+    if (CAN_EDIT_FILELIST) {
+      var del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'photo-grid-remove';
+      del.textContent = '✕';
+      del.title = 'Retirer ce média de la sélection';
+      del.setAttribute('aria-label', 'Retirer ' + f.name + ' de la sélection');
+      del.addEventListener('click', function() { removeAt(i); });
+      card.appendChild(del);
+    }
     var inp = document.createElement('input');
     inp.type = 'text';
     inp.className = 'photo-grid-caption caption-input';
     inp.name = 'caption_new_' + i;
     inp.maxLength = 200;
     inp.placeholder = 'Légende…';
+    if (typed[i] != null) inp.value = typed[i];
     card.appendChild(inp);
     if (coverInput) {
       var cov = document.createElement('button');
       cov.type = 'button';
-      cov.className = 'photo-grid-cover' + (i === defaultCover ? ' is-cover' : '');
+      cov.className = 'photo-grid-cover' + (i === cover ? ' is-cover' : '');
       cov.textContent = '⭐ Couverture';
       cov.title = 'Afficher ce média sur la carte du post';
       cov.addEventListener('click', function() {
+        cover = i;
         coverInput.value = String(i);
         grid.querySelectorAll('.photo-grid-cover').forEach(function(b) {
           b.classList.toggle('is-cover', b === cov);
