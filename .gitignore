@@ -149,3 +149,6 @@ package-lock.json
 data/posts.json
 data/subscribers.json
 data/mail.log
+
+# Cache des grilles d'altitude de l'affiche (regénérable)
+tmp/relief/

@@ -8,7 +8,7 @@ Journal de voyage vélo auto-hébergé. Postez vos étapes depuis votre téléph
 - **Interface mobile** — poster une étape depuis le téléphone (titre, texte, photos, GPS auto)
 - **Carte Leaflet** — tracé automatique de votre itinéraire
 - **Statistiques** — menu à deux entrées réservé aux administrateurs : **📏 Distances** (km cumulés, D+ total, nombre d'étapes, trajet total vélo + train, kilométrage par pays et par région) et **💶 Finances** (total dépensé, moyenne mensuelle, répartition par catégorie et par personne)
-- **Système** — menu d'entretien du carnet (admin) : **💾 Sauvegarde**, **📐 Recalculs**, **🏔️ Panorama**, **🔔 Abonnés**
+- **Système** — menu d'entretien du carnet (admin) : **💾 Sauvegarde**, **📐 Recalculs**, **🖼️ Affiche**, **🔔 Abonnés**
 - **Flux RSS** — pour les proches qui utilisent un lecteur RSS
 - **Notifications e-mail** — vos proches s'abonnent avec leur e-mail (double opt-in) et sont prévenus à chaque nouvelle étape publiée
 - **Mot de passe** — page de post protégée, page famille publique
@@ -192,7 +192,7 @@ L'entretien du carnet est regroupé sous l'entrée de menu **⚙️ Système**, 
 
 - **💾 Sauvegarde** (`/settings/backup`) — archive complète en ZIP (étapes + médias), export léger des données seules en JSON, et restauration depuis un fichier JSON
 - **📐 Recalculs** (`/settings/recalc`) — recalcul des distances depuis les traces GPX, et détection des pays et régions traversés (avancement affiché en direct)
-- **🏔️ Panorama** (`/panorama`) — tous les profils de dénivelé bout à bout, en pages A4 paysage à imprimer et recoller
+- **🖼️ Affiche** (`/affiche`) — la carte du voyage au format **A3**, à imprimer et encadrer : les traces GPX sur un fond épuré (littoraux, frontières, relief ombré) et la photo favorite des étapes disposée tout autour du cadre, chacune reliée par un fil à son point d'arrivée. Portrait ou paysage, export PNG 150 / 300 dpi, impression A3 directe. Le relief est échantillonné via [Open-Meteo](https://open-meteo.com/) puis mis en cache dans `tmp/relief/` ; sans réseau, l'affiche se dessine simplement sans ombrage
 - **🔔 Abonnés** (`/settings/subscribers`) — liste des abonnés e-mail, validation manuelle et retrait
 
 Le sommaire est accessible aux comptes admin et Margot ; les Statistiques restent réservées à l'admin.
@@ -247,7 +247,10 @@ velo-journal/
 ├── data/
 │   ├── posts.json     ← vos étapes (auto-créé)
 │   └── subscribers.json ← abonnés e-mail (auto-créé)
+├── tmp/
+│   └── relief/        ← cache des grilles d'altitude de l'affiche (auto-créé)
 └── public/
+    ├── geo/           ← fond de carte du monde (frontières Natural Earth)
     └── uploads/       ← vos photos (auto-créé)
 ```
 
