@@ -8,7 +8,7 @@ const { CSS, renderHeader } = require('./layout');
 // de GPX, et la photo favorite de chaque étape reliée à sa trace.
 // Le tracé est découpé en pages A4 paysage successives, à recoller bord à
 // bord : chaque page reprend exactement là où la précédente s'arrête.
-function renderPanorama(stages) {
+function renderPanorama(stages, isStrictAdmin = false) {
   // Embarquage sûr des données (évite la fermeture prématurée de </script>)
   const dataJson  = JSON.stringify(stages).replace(/</g, '\\u003c');
   const titleJson = JSON.stringify(String(TRIP_TITLE || 'Panorama')).replace(/</g, '\\u003c');
@@ -30,9 +30,10 @@ function renderPanorama(stages) {
       .pano-btn:disabled{opacity:.5;cursor:default}
     </style>
   </head><body>
-    ${renderHeader({ activePage: 'settings', isAdmin: true, showMap: false })}
+    ${renderHeader({ activePage: 'sys-panorama', isAdmin: true, isStrictAdmin, showMap: false })}
     <div class="pano-wrap">
       <div class="form-card" style="margin-bottom:16px">
+        <a href="/settings" class="sys-back">← Système</a>
         <h2 style="margin-bottom:6px">🏔️ Panorama du voyage</h2>
         <p style="font-size:14px;color:var(--ink-light);line-height:1.6;margin:0">Tous les dénivelés bout à bout, découpés en pages A4 paysage à recoller. Chaque trait en biais pointe vers le point d'arrivée d'une trace GPX et sa photo favorite.</p>
       </div>

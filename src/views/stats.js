@@ -99,7 +99,7 @@ function renderStats(posts, isAdmin = false) {
         </div>`;
       }).join('')}
       <div class="stats-note">
-        🌍 Rien à saisir : les étapes avec une <strong>trace GPX</strong> sont découpées le long du parcours, et leurs kilomètres répartis entre les régions réellement traversées. Les autres sont rattachées à leur <strong>point d'arrivée</strong>. La page <strong>Système</strong> relance la détection sur d'anciennes étapes ; le formulaire d'édition permet de forcer une valeur.
+        🌍 Rien à saisir : les étapes avec une <strong>trace GPX</strong> sont découpées le long du parcours, et leurs kilomètres répartis entre les régions réellement traversées. Les autres sont rattachées à leur <strong>point d'arrivée</strong>. La page <strong>Système › Recalculs</strong> relance la détection sur d'anciennes étapes ; le formulaire d'édition permet de forcer une valeur.
       </div>`;
 
   if (s.nDays === 0) {

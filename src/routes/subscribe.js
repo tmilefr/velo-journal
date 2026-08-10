@@ -71,13 +71,13 @@ router.post('/subscribe/stop/:token', (req, res) => {
 // lui-même, sans passer par le lien du double opt-in.
 router.post('/subscribe/validate', requireAuth, requireCsrf, (req, res) => {
   confirmByEmail(req.body.email);
-  res.redirect('/settings#subscribers');
+  res.redirect('/settings/subscribers');
 });
 
 // ── Admin : retirer un abonné depuis la page Système ──────
 router.post('/subscribe/remove', requireAuth, requireCsrf, (req, res) => {
   removeEmail(req.body.email);
-  res.redirect('/settings#subscribers');
+  res.redirect('/settings/subscribers');
 });
 
 module.exports = router;
