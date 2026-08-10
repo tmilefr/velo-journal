@@ -28,10 +28,10 @@ const SYSTEM_SECTIONS = [
     desc: 'Recalculer les distances depuis les traces GPX et détecter les pays et régions traversés.',
   },
   {
-    key: 'sys-panorama', href: '/panorama', icon: '🏔️',
-    label: 'Panorama',
-    title: 'Panorama du voyage',
-    desc: 'Tous les profils de dénivelé bout à bout, en pages A4 paysage à imprimer et recoller.',
+    key: 'sys-affiche', href: '/affiche', icon: '🖼️',
+    label: 'Affiche',
+    title: 'Affiche du voyage',
+    desc: 'La carte du voyage en A3 : traces GPX sur un fond de frontières et de relief, photos favorites tout autour.',
   },
   {
     key: 'sys-subscribers', href: '/settings/subscribers', icon: '🔔',

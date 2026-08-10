@@ -12,7 +12,8 @@ const { uploadBackup } = require('../middleware/upload');
 const { csrfToken, requireCsrf } = require('../middleware/csrf');
 const { requireAuth } = require('../middleware/auth');
 const { renderSystemHome, renderBackup, renderRecalc, renderSubscribers } = require('../views/settings');
-const { renderPanorama } = require('../views/panorama');
+const { renderAffiche } = require('../views/affiche');
+const { reliefGrid } = require('../services/relief');
 
 const router = express.Router();
 
@@ -90,13 +91,13 @@ router.get('/settings/subscribers', requireAuth, (req, res) => {
   ));
 });
 
-// ── Panorama : profils de dénivelé de toutes les étapes mis bout à bout ──
-// Génère (côté client, sur canvas) une série de pages A4 avec la coupe
-// altimétrique continue du voyage, un trait en biais vers chaque point
-// d'arrivée de GPX, et la photo favorite de chaque étape reliée à sa trace.
-router.get('/panorama', requireAuth, (req, res) => {
+// ── Affiche : la carte du voyage en A3, photos autour ────
+// Génère (côté client, sur canvas) une affiche A3 : les traces GPX sur un fond
+// épuré (frontières, littoraux, relief ombré) et la photo favorite des étapes
+// disposée en cadre, chacune reliée par un fil à son point d'arrivée.
+router.get('/affiche', requireAuth, (req, res) => {
   const stages = readPosts()
-    .filter(p => p.gpx && p.type !== 'preparation')
+    .filter(p => p.type !== 'preparation' && (p.gpx || (p.lat != null && p.lon != null)))
     .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
     .map(p => {
       // Photo mise en avant par l'auteur (⭐) ; on ignore les vidéos, non
@@ -104,16 +105,34 @@ router.get('/panorama', requireAuth, (req, res) => {
       const cover  = pickCover(p.photos, p.cover);
       const photos = p.photos || [];
       return {
-        gpx:   p.gpx,
-        title: p.title || p.location || '',
-        date:  p.date || '',
-        km:    parseInt(p.km) || 0,
+        gpx:      p.gpx || null,
+        title:    p.title || '',
+        location: p.location || '',
+        date:     p.date || '',
+        km:       parseFloat(p.km) || 0,
+        dplus:    parseInt(p.dplus, 10) || 0,
+        lat:      p.lat != null ? Number(p.lat) : null,
+        lon:      p.lon != null ? Number(p.lon) : null,
         photo: (cover && !isVideoUrl(cover))
           ? cover
           : (photos.find(ph => !isVideoUrl(ph)) || null),
       };
     });
-  res.send(renderPanorama(stages, !!req.session.auth));
+  res.send(renderAffiche(stages, !!req.session.auth));
+});
+
+// Grille d'altitudes de l'emprise de l'affiche, pour l'ombrage du relief.
+// Le calcul interroge Open-Meteo (quelques dizaines d'appels) puis reste en
+// cache sur le disque : seule la première composition d'une emprise attend.
+router.get('/api/affiche/relief', requireAuth, async (req, res) => {
+  try {
+    const grid = await reliefGrid(req.query);
+    if (!grid) return res.status(503).json({ error: 'Relief indisponible' });
+    res.json(grid);
+  } catch(e) {
+    console.warn('[relief] échec du calcul :', e.message || e);
+    res.status(503).json({ error: 'Relief indisponible' });
+  }
 });
 
 // Un fichier refusé par le filtre (autre chose qu'un .json) doit répondre un
