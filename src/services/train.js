@@ -4,6 +4,7 @@
 // existe, sinon des deux gares du trajet, sinon du saut entre la dernière
 // position connue et celle de l'étape.
 const { haversineKm } = require('../lib/distance');
+const { findCity } = require('./cities');
 
 // Sinuosité ferroviaire : une voie ferrée ne va jamais tout droit (vallées,
 // gares intermédiaires, contournements des massifs). Sur les grands trajets
@@ -39,36 +40,75 @@ function previousLocatedPost(posts, dateISO, excludeId) {
     .sort((a, b) => new Date(b.date) - new Date(a.date))[0] || null;
 }
 
+// Position d'une gare : celle posée par l'autocomplétion si l'auteur a cliqué
+// une suggestion, sinon celle de la ville du même nom. Taper « Halle » doit
+// suffire — exiger un clic dans une liste, c'est renvoyer silencieusement le
+// calcul sur les positions des étapes, qui ne sont pas les gares.
+function stationPoint(name, lat, lon, near) {
+  const picked = toPoint(lat, lon);
+  if (picked) return picked;
+  const city = findCity(name, near);
+  return city ? { lat: city.lat, lon: city.lon } : null;
+}
+
+// La trace jointe à un transfert est-elle celle du train ? Sur un carnet de
+// vélo, une trace enregistrée un jour de train est le plus souvent le trajet
+// roulé jusqu'à la gare : le GPS reste dans la poche pendant le train. On ne
+// la prend donc pour le trajet ferroviaire que si elle relie effectivement les
+// deux gares — un bout près de l'une, l'autre bout près de l'autre.
+function traceLinksStations(track, board, alight) {
+  const pts = (track && track.points) || [];
+  if (pts.length < 2 || !board || !alight) return false;
+  const first = pts[0], last = pts[pts.length - 1];
+  // Tolérance : de quoi couvrir l'écart entre la gare et le centre-ville,
+  // proportionnée à la longueur du trajet.
+  const near = Math.max(5, haversineKm(board.lat, board.lon, alight.lat, alight.lon) * 0.15);
+  return haversineKm(first.lat, first.lon, board.lat,  board.lon)  <= near
+      && haversineKm(last.lat,  last.lon,  alight.lat, alight.lon) <= near;
+}
+
 // Distance d'un transfert ferroviaire, de la source la plus fiable à la plus
 // approximative :
 //  'manual'   → valeur saisie (elle prime toujours)
-//  'gpx'      → longueur de la trace jointe à l'étape
-//  'stations' → estimation entre les deux gares choisies dans l'autocomplétion
+//  'gpx'      → longueur de la trace, quand elle relie bien les deux gares
+//  'stations' → estimation entre les deux gares du trajet
 //  'points'   → estimation entre la position précédente et l'arrivée
 // Les deux estimations mesurent un trajet ferroviaire, pas une ligne droite :
 // elles passent par railKmBetween (voir RAIL_DETOUR).
-// Renvoie { km, source, from } — `from` est l'étape de départ retenue, pour
-// pouvoir nommer le trajet.
-function computeTrainTrip({ isTransfer, manualKm, gpxKm, posts, dateISO, lat, lon, excludeId, stops }) {
+// Renvoie { km, source, from, traceIsRide } — `from` est l'étape de départ
+// retenue, pour pouvoir nommer le trajet ; `traceIsRide` dit que la trace
+// jointe mesure du vélo et non le train, et doit donc compter comme des
+// kilomètres roulés.
+function computeTrainTrip({ isTransfer, manualKm, gpxTrack, posts, dateISO, lat, lon, excludeId, stops }) {
+  const none = { km: 0, source: '', from: null, traceIsRide: false };
   // La case fait foi : les champs du bloc replié (kilométrage, gares) ne
   // comptent pas, sinon une saisie abandonnée créerait un trajet fantôme.
-  if (!isTransfer) return { km: 0, source: '', from: null };
+  if (!isTransfer) return none;
 
+  const gpxKm = gpxTrack ? gpxTrack.totalKm : 0;
   const typed = Math.max(0, parseFloat(manualKm) || 0);
-  if (typed > 0) return { km: typed, source: 'manual', from: null };
 
-  if (gpxKm > 0) return { km: Math.round(gpxKm * 10) / 10, source: 'gpx', from: null };
-
-  // Gares saisies : le trajet se mesure de quai à quai. C'est la seule mesure
+  // Gares du trajet : le train se mesure de quai à quai. C'est la seule mesure
   // juste dès que l'étape ne commence pas là où le train est pris (on a roulé
   // jusqu'à la gare) ou ne finit pas là où il est quitté (on a roulé, ou
-  // dormi, loin de la gare d'arrivée).
-  const board  = stops ? toPoint(stops.fromLat, stops.fromLon) : null;
-  const alight = (stops ? toPoint(stops.toLat, stops.toLon) : null) || toPoint(lat, lon);
+  // dormi, loin de la gare d'arrivée). Le point de l'étape sert de repère pour
+  // départager les homonymes, et de gare d'arrivée par défaut.
+  const here   = toPoint(lat, lon);
+  const board  = stops ? stationPoint(stops.from, stops.fromLat, stops.fromLon, here) : null;
+  const alight = (stops ? stationPoint(stops.to, stops.toLat, stops.toLon, here) : null) || here;
+
+  // Une trace qui relie les deux gares est le trajet lui-même : rien ne le
+  // mesure mieux. Sans gare de départ connue, on n'a rien pour en juger et on
+  // s'en remet à elle comme avant.
+  const traceIsTrip = gpxKm > 0 && (!board || traceLinksStations(gpxTrack, board, alight));
+  const traceIsRide = gpxKm > 0 && !traceIsTrip;
+
+  if (typed > 0)    return { km: typed, source: 'manual', from: null, traceIsRide };
+  if (traceIsTrip)  return { km: Math.round(gpxKm * 10) / 10, source: 'gpx', from: null, traceIsRide: false };
 
   if (board && alight) {
     const km = railKmBetween(board, alight);
-    if (km > 0) return { km, source: 'stations', from: null };
+    if (km > 0) return { km, source: 'stations', from: null, traceIsRide };
   }
 
   // Sinon on retombe sur les positions connues : dernière étape localisée →
@@ -76,9 +116,9 @@ function computeTrainTrip({ isTransfer, manualKm, gpxKm, posts, dateISO, lat, lo
   const from = previousLocatedPost(posts, dateISO, excludeId);
   if (from && alight) {
     const km = railKmBetween(toPoint(from.lat, from.lon), alight);
-    if (km > 0) return { km, source: 'points', from };
+    if (km > 0) return { km, source: 'points', from, traceIsRide };
   }
-  return { km: 0, source: '', from: null };
+  return { ...none, traceIsRide };
 }
 
 // On ne garde que la ville (« Turin, Piémont, Italie » → « Turin »).

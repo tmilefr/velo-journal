@@ -133,7 +133,7 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
               <input type="checkbox" name="trainTransfer" value="1" id="trainTransferEdit" ${post.trainTransfer ? 'checked' : ''}>
               🚆 Ce déplacement s'est fait en train
             </label>
-            <div class="field-hint">Distance calculée automatiquement : longueur de la trace GPX si l'étape en a une, sinon estimation entre les deux gares choisies ci-dessous (à défaut, depuis la position de l'étape précédente).${trainSourceNote}</div>
+            <div class="field-hint">Distance calculée automatiquement <strong>entre les deux gares ci-dessous</strong> (à défaut, depuis la position de l'étape précédente). Une trace GPX ne mesure le train que si elle relie justement ces deux gares.${trainSourceNote}</div>
             <div class="reveal-panel" id="trainStopsEdit"${post.trainTransfer ? '' : ' hidden'}>
               <div class="field">
                 <label>Km en train <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, calculé</span></label>
@@ -159,7 +159,7 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
                   <input type="hidden" name="trainToLon" id="trainToLon" value="${post.trainToLon ?? ''}">
                 </div>
               </div>
-              <div class="field-hint" style="margin-top:0">🚆 Tapez trois lettres et <strong>choisissez une suggestion</strong> : c'est elle qui donne la position de la gare, donc la distance du trajet. Laissez vide pour déduire le trajet de l'étape précédente et du lieu d'arrivée.</div>
+              <div class="field-hint" style="margin-top:0">🚆 Le nom d'une ville suffit (« Halle », « Berlin ») : la position est retrouvée toute seule. Tapez trois lettres pour choisir une suggestion et lever toute ambiguïté sur les homonymes. Laissez vide pour déduire le trajet de l'étape précédente et du lieu d'arrivée.</div>
             </div>
           </div>
           <details style="margin-bottom:16px"${(post.geoSource === 'manual') ? ' open' : ''}>
