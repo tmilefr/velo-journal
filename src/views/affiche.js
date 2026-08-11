@@ -4,13 +4,14 @@ const { CSS, renderHeader } = require('./layout');
 
 // ══════════════════════════════════════════════════════════
 // Génère (côté client, sur canvas) une affiche A3 : au centre une carte
-// épurée — littoraux, frontières et relief ombré — parcourue par les traces
-// GPX du voyage ; tout autour, en cadre, la photo favorite des étapes, chacune
-// reliée par un fil à son point d'arrivée sur la carte.
+// épurée — littoraux, frontières, villes et relief ombré — parcourue par les
+// traces GPX du voyage ; tout autour, en cadre, la photo favorite de chaque
+// étape, reliée par un fil à son point d'arrivée sur la carte.
 //
-// Trois sources, toutes locales sauf le relief :
-//   • les traces          → fichiers .gpx des étapes (/uploads)
+// Quatre sources, toutes locales sauf le relief :
+//   • les traces           → fichiers .gpx des étapes (/uploads)
 //   • frontières/littoraux → /public/geo/countries-50m.json (Natural Earth)
+//   • les villes           → /public/geo/cities.json (GeoNames)
 //   • le relief            → grille d'altitudes servie par /api/affiche/relief
 function renderAffiche(stages, isStrictAdmin = false) {
   // Embarquage sûr des données (évite la fermeture prématurée de </script>)
@@ -44,7 +45,7 @@ function renderAffiche(stages, isStrictAdmin = false) {
       <div class="form-card" style="margin-bottom:16px">
         <a href="/settings" class="sys-back">← Système</a>
         <h2 style="margin-bottom:6px">🖼️ Affiche du voyage</h2>
-        <p style="font-size:14px;color:var(--ink-light);line-height:1.6;margin:0">Une carte A3 du voyage : les traces GPX sur un fond épuré — frontières, littoraux et relief ombré — et la photo favorite des étapes disposée tout autour, reliée à son point d'arrivée. À imprimer et encadrer.</p>
+        <p style="font-size:14px;color:var(--ink-light);line-height:1.6;margin:0">Une carte A3 du voyage : les traces GPX sur un fond épuré — frontières, littoraux, villes et relief ombré — et la photo favorite de <strong>chaque étape</strong> disposée tout autour, reliée à son point d'arrivée. Les vignettes s'agrandissent ou se resserrent en anneaux selon le nombre d'étapes. À imprimer et encadrer.</p>
       </div>
       ${emptyState
         ? `<div class="form-card"><p style="font-size:14px;color:var(--ink-light);margin:0">Aucune étape localisée pour le moment. Ajoutez des étapes avec un fichier <code>.gpx</code> ou des coordonnées GPS pour composer l'affiche.</p></div>`
@@ -63,6 +64,7 @@ function renderAffiche(stages, isStrictAdmin = false) {
                  <option value="hi">détaillée</option>
                </select>
              </label>
+             <label class="aff-field"><input type="checkbox" id="affCities" checked> Villes</label>
              <label class="aff-field"><input type="checkbox" id="affProfile" checked> Profil altimétrique</label>
              <button class="aff-btn primary" id="affDownload" disabled>⬇️ PNG 300 dpi</button>
              <button class="aff-btn" id="affDownload150" disabled>⬇️ PNG 150 dpi</button>
@@ -75,7 +77,8 @@ function renderAffiche(stages, isStrictAdmin = false) {
     (function(){
       var STAGES = ${dataJson};
       var META   = ${metaJson};
-      var GEO_URL = '/public/geo/countries-50m.json';
+      var GEO_URL    = '/public/geo/countries-50m.json';
+      var CITIES_URL = '/public/geo/cities.json';
 
       // Feuille A3 (297 × 420 mm) à 150 dpi ; l'export 300 dpi redessine tout
       // dans le même repère, à l'échelle 2.
@@ -106,17 +109,18 @@ function renderAffiche(stages, isStrictAdmin = false) {
         relief:  document.getElementById('affRelief'),
         quality: document.getElementById('affQuality'),
         profile: document.getElementById('affProfile'),
+        cities:  document.getElementById('affCities'),
         dl300:   document.getElementById('affDownload'),
         dl150:   document.getElementById('affDownload150'),
         print:   document.getElementById('affPrint')
       };
 
       var world = null;   // frontières décodées
+      var cities = null;  // villes, de la plus peuplée à la moins peuplée
       var tracks = null;  // traces GPX + altitudes
       var relief = null;  // grille d'altitudes de l'emprise courante
       var reliefKey = ''; // emprise/finesse déjà demandées
-      var imgs = {};      // photos favorites déjà chargées
-      var lay  = null;    // géométrie de la feuille (dernier rendu)
+      var imgs = {};      // photos favorites, réduites à la taille des vignettes
       var drawing = false, pending = false;
 
       function setStatus(t){ el.status.textContent = t; }
@@ -125,7 +129,8 @@ function renderAffiche(stages, isStrictAdmin = false) {
           orient:  el.orient.value === 'l' ? 'l' : 'p',
           relief:  el.relief.checked,
           quality: el.quality.value,
-          profile: el.profile.checked
+          profile: el.profile.checked,
+          cities:  el.cities.checked
         };
       }
 
@@ -143,14 +148,51 @@ function renderAffiche(stages, isStrictAdmin = false) {
       function loadJson(url){ return fetch(url).then(function(r){ if(!r.ok) throw new Error('http '+r.status); return r.json(); }); }
       function loadText(url){ return fetch(url).then(function(r){ if(!r.ok) throw new Error('http '+r.status); return r.text(); }); }
       function loadImg(url){
-        if(!url) return Promise.resolve(null);
-        if(imgs[url] !== undefined) return Promise.resolve(imgs[url]);
         return new Promise(function(res){
           var im = new Image();
-          im.onload  = function(){ imgs[url]=im;   res(im); };
-          im.onerror = function(){ imgs[url]=null; res(null); };
+          im.onload  = function(){ res(im); };
+          im.onerror = function(){ res(null); };
           im.src = url;
         });
+      }
+      // Un carnet peut compter cent étapes : garder cent photos pleine
+      // définition en mémoire ferait tomber l'onglet. Chaque photo est donc
+      // réduite dès son chargement à la taille utile pour sa vignette (le
+      // double, pour rester net à l'export 300 dpi), et l'original est libéré.
+      function thumbFor(url, want){
+        if(!url) return Promise.resolve(null);
+        var have=imgs[url];
+        if(have===null) return Promise.resolve(null);
+        if(have && have.want >= want*0.98) return Promise.resolve(have.cv);
+        return loadImg(url).then(function(im){
+          if(!im || !im.width || !im.height){ imgs[url]=null; return null; }
+          var side=Math.min(im.width,im.height);
+          var k=Math.min(1, want/side);
+          var cv=document.createElement('canvas');
+          cv.width =Math.max(1,Math.round(im.width*k));
+          cv.height=Math.max(1,Math.round(im.height*k));
+          var g=cv.getContext('2d');
+          g.imageSmoothingEnabled=true;
+          if(g.imageSmoothingQuality) g.imageSmoothingQuality='high';
+          g.drawImage(im,0,0,cv.width,cv.height);
+          imgs[url]={ cv:cv, want:want };
+          return cv;
+        });
+      }
+      // Chargements en file : six photos à la fois, pas cent d'un coup.
+      function loadThumbs(list, want, onProgress){
+        var next=0, done=0;
+        function worker(){
+          if(next>=list.length) return Promise.resolve();
+          var url=list[next++];
+          return thumbFor(url,want).then(function(){
+            if(onProgress) onProgress(++done, list.length);
+            return worker();
+          });
+        }
+        var n=Math.min(6, list.length);
+        var runners=[]; for(var i=0;i<n;i++) runners.push(worker());
+        return Promise.all(runners);
       }
 
       // ── TopoJSON : arcs, anneaux, et partage des frontières ──
@@ -267,47 +309,134 @@ function renderAffiche(stages, isStrictAdmin = false) {
       }
 
       // ── Géométrie de la feuille ─────────────────────────
-      // Un cadre de vignettes photo fait le tour de la carte : rangée du haut,
-      // rangée du bas, colonnes de gauche et de droite.
-      function layout(o){
-        var S = SHEET[o.orient];
-        var M = 84, HEAD = 168, FOOT = o.profile ? 214 : 96;
-        var TW = 210, TH = 186, G = 18;
+      // Les vignettes font le tour de la carte, sur un ou plusieurs anneaux
+      // emboîtés. Chaque anneau est parcouru dans l'ordre du cadre — haut de
+      // gauche à droite, droite de haut en bas, bas de droite à gauche, gauche
+      // de bas en haut — pour que les photos se répartissent tout autour.
+      function buildRings(inner, TW, TH, G, R){
+        var rings=[], rect={ x:inner.x, y:inner.y, w:inner.w, h:inner.h }, r, cap=0;
+        for(r=0;r<R;r++){
+          var nH = Math.floor((rect.w+G)/(TW+G));
+          var freeH = rect.h-2*(TH+G);
+          var nV = freeH>0 ? Math.floor((freeH+G)/(TH+G)) : 0;
+          if(nH<1) break;
+          rings.push({ rect:{ x:rect.x, y:rect.y, w:rect.w, h:rect.h }, nH:nH, nV:nV, cap:2*nH+2*nV });
+          cap += 2*nH+2*nV;
+          rect={ x:rect.x+TW+G, y:rect.y+TH+G, w:rect.w-2*(TW+G), h:rect.h-2*(TH+G) };
+          if(rect.w<TW*1.2 || rect.h<TH*1.2){ r++; break; }
+        }
+        return { rings:rings, map:rect, count:r, cap:cap };
+      }
 
-        var inner = { x:M, y:M+HEAD, w:S.w-2*M, h:S.h-2*M-HEAD-FOOT };
-        var map = { x:inner.x+TW+G, y:inner.y+TH+G, w:inner.w-2*(TW+G), h:inner.h-2*(TH+G) };
-
-        // Les emplacements sont énumérés dans l'ordre du tour de cadre — haut de
-        // gauche à droite, droite de haut en bas, bas de droite à gauche, gauche
-        // de bas en haut : n'en garder qu'un sur deux répartit les photos tout
-        // autour de la carte au lieu de les entasser d'un côté.
-        var nH = Math.max(1, Math.floor((inner.w+G)/(TW+G)));
-        var offH = (inner.w - (nH*TW + (nH-1)*G))/2;
-        var nV = Math.max(0, Math.floor((map.h+G)/(TH+G)));
-        var offV = (map.h - (nV*TH + (nV-1)*G))/2;
-        var topY = inner.y, botY = inner.y+inner.h-TH;
-        var leftX = inner.x, rightX = inner.x+inner.w-TW;
-        var colY = function(i){ return map.y + offV + i*(TH+G); };
-
-        var slots=[], i;
-        for(i=0;i<nH;i++)   slots.push({ x:inner.x+offH+i*(TW+G), y:topY });
-        for(i=0;i<nV;i++)   slots.push({ x:rightX,                y:colY(i) });
-        for(i=nH-1;i>=0;i--)slots.push({ x:inner.x+offH+i*(TW+G), y:botY });
-        for(i=nV-1;i>=0;i--)slots.push({ x:leftX,                 y:colY(i) });
-        slots.forEach(function(s){ s.w=TW; s.h=TH; });
-
-        // Point d'accroche du fil : le milieu du bord tourné vers la carte
-        var cx = map.x+map.w/2;
-        slots.forEach(function(s){
-          var sx=s.x+s.w/2, sy=s.y+s.h/2;
-          if(sy+s.h/2 <= map.y+1)             { s.ax=sx;       s.ay=s.y+s.h; }
-          else if(sy-s.h/2 >= map.y+map.h-1)  { s.ax=sx;       s.ay=s.y; }
-          else if(sx < cx)                    { s.ax=s.x+s.w;  s.ay=sy; }
-          else                                { s.ax=s.x;      s.ay=sy; }
+      // Répartition des n vignettes sur les anneaux : proportionnelle à leur
+      // capacité, puis, sur chaque anneau, proportionnelle à la longueur des
+      // côtés — et régulièrement étalée le long de chaque côté, pour qu'un
+      // cadre à moitié rempli n'ait pas de trou au milieu d'une rangée.
+      function share(total, weights){
+        var sum=weights.reduce(function(a,b){ return a+b; },0) || 1;
+        var out=weights.map(function(w){ return Math.floor(total*w/sum); });
+        var rest=total-out.reduce(function(a,b){ return a+b; },0);
+        var order=weights.map(function(w,i){ return { i:i, frac:total*w/sum-Math.floor(total*w/sum) }; })
+                         .sort(function(a,b){ return b.frac-a.frac; });
+        for(var k=0;k<rest;k++) out[order[k%order.length].i]++;
+        return out;
+      }
+      function placeSlots(built, TW, TH, G, n){
+        var slots=[];
+        var perRing=share(Math.min(n, built.cap), built.rings.map(function(r){ return r.cap; }));
+        built.rings.forEach(function(ring, ri){
+          var take=Math.min(perRing[ri], ring.cap);
+          if(take<=0) return;
+          // Les côtés opposés reçoivent le même nombre de vignettes (à une
+          // près) : le cadre reste symétrique même à moitié rempli.
+          var pair=share(take, [2*ring.nH, 2*ring.nV]);
+          var sides=[Math.ceil(pair[0]/2), Math.ceil(pair[1]/2),
+                     Math.floor(pair[0]/2), Math.floor(pair[1]/2)];
+          var rect=ring.rect;
+          var freeY=rect.y+TH+G, freeH=rect.h-2*(TH+G);
+          var spread=function(count, start, span, size){
+            var out=[];
+            for(var i=0;i<count;i++) out.push(start + (i+0.5)*span/count - size/2);
+            return out;
+          };
+          var xs=spread(sides[0], rect.x, rect.w, TW);
+          var ysR=spread(sides[1], freeY, freeH, TH);
+          var xsB=spread(sides[2], rect.x, rect.w, TW);
+          var ysL=spread(sides[3], freeY, freeH, TH);
+          var i;
+          for(i=0;i<xs.length;i++)  slots.push({ x:xs[i],  y:rect.y,          side:'t' });
+          for(i=0;i<ysR.length;i++) slots.push({ x:rect.x+rect.w-TW, y:ysR[i],side:'r' });
+          for(i=xsB.length-1;i>=0;i--) slots.push({ x:xsB[i], y:rect.y+rect.h-TH, side:'b' });
+          for(i=ysL.length-1;i>=0;i--) slots.push({ x:rect.x, y:ysL[i],        side:'l' });
         });
+        slots.forEach(function(s){
+          s.w=TW; s.h=TH;
+          // Point d'accroche du fil : le milieu du bord tourné vers la carte
+          if(s.side==='t'){ s.ax=s.x+TW/2; s.ay=s.y+TH; }
+          else if(s.side==='b'){ s.ax=s.x+TW/2; s.ay=s.y; }
+          else if(s.side==='l'){ s.ax=s.x+TW; s.ay=s.y+TH/2; }
+          else { s.ax=s.x; s.ay=s.y+TH/2; }
+        });
+        return slots;
+      }
 
-        return { sheet:S, M:M, head:{ x:M, y:M, w:S.w-2*M, h:HEAD }, foot:{ x:M, y:S.h-M-FOOT, w:S.w-2*M, h:FOOT },
-                 inner:inner, map:map, slots:slots, tile:{ w:TW, h:TH } };
+      // Taille des vignettes et nombre d'anneaux : toutes les étapes doivent
+      // tenir autour de la carte, avec les plus grandes photos possibles et un
+      // cadre bien rempli. La carte prend ensuite sa place au centre — un
+      // tiers de la feuille, à la forme du voyage — sans forcément occuper
+      // tout l'espace laissé libre : c'est un cadre de photos, pas un atlas.
+      var TILE_SIZES=[380,340,300,268,240,214,192,172,154,138,124,112,100,90,82,74];
+      var MAP_AREA = 0.34;   // part de la surface intérieure laissée à la carte
+      function layout(o, count, ratio){
+        var S = SHEET[o.orient];
+        var M = 84, HEAD = 168, FOOT = o.profile ? 214 : 96, G = 14;
+        var inner = { x:M, y:M+HEAD, w:S.w-2*M, h:S.h-2*M-HEAD-FOOT };
+        var n = Math.max(1, count||1);
+
+        var pick=null;
+        for(var R=1; R<=4; R++){
+          for(var ti=0; ti<TILE_SIZES.length; ti++){
+            var TW=TILE_SIZES[ti], TH=Math.round(TW*0.9);
+            var built=buildRings(inner, TW, TH, G, R);
+            if(built.count<R || built.cap<n) continue;               // anneau incomplet ou trop juste
+            var nat=built.map;
+            if(nat.w < inner.w*0.24 || nat.h < inner.h*0.24) continue; // plus de place pour la carte
+            var gap=1-n/built.cap;
+            // Un cadre bien rempli d'abord, de grandes photos ensuite, et le
+            // moins d'anneaux possible à qualité égale.
+            var cost = 1.8*gap*gap - 0.5*(TW/TILE_SIZES[0]) + 0.35*(R-1);
+            if(!pick || cost<pick.cost) pick={ built:built, TW:TW, TH:TH, cost:cost };
+          }
+        }
+        if(!pick){
+          // Trop d'étapes pour une feuille : les plus petites vignettes, le
+          // plus d'anneaux possible — le cadre en accueillera autant qu'il peut.
+          var TWm=TILE_SIZES[TILE_SIZES.length-1], THm=Math.round(TWm*0.9);
+          pick={ built:buildRings(inner, TWm, THm, G, 4), TW:TWm, TH:THm };
+        }
+
+        // La carte : au centre de l'espace laissé par les photos, à la forme du
+        // voyage tant qu'il reste de la marge. Si une dimension bute sur le
+        // cadre, l'autre s'étire jusqu'à retrouver la surface visée plutôt que
+        // de laisser une bande de papier vide — la carte montre alors un peu
+        // plus de paysage autour du voyage, ce qui ne gâche rien.
+        var nat=pick.built.map;
+        var asp=Math.min(3, Math.max(0.5, ratio || (nat.w/nat.h)));
+        var area=Math.min(inner.w*inner.h*MAP_AREA, nat.w*nat.h);
+        var mw=Math.min(nat.w, Math.sqrt(area*asp)), mh=mw/asp;
+        if(mh>nat.h){ mh=nat.h; mw=Math.min(nat.w, mh*asp); }
+        if(mw*mh < area) mh=Math.min(nat.h, area/mw);
+        if(mw*mh < area) mw=Math.min(nat.w, area/mh);
+        var map={ x:nat.x+(nat.w-mw)/2, y:nat.y+(nat.h-mh)/2, w:mw, h:mh };
+
+        return {
+          sheet:S, M:M,
+          head:{ x:M, y:M, w:S.w-2*M, h:HEAD },
+          foot:{ x:M, y:S.h-M-FOOT, w:S.w-2*M, h:FOOT },
+          inner:inner, map:map,
+          slots:placeSlots(pick.built, pick.TW, pick.TH, G, n),
+          tile:{ w:pick.TW, h:pick.TH }
+        };
       }
 
       // ── Répartition des photos autour de la carte ───────
@@ -344,13 +473,13 @@ function renderAffiche(stages, isStrictAdmin = false) {
         }
         return perm;
       }
-      // Sélection régulière de k étapes parmi celles qui ont une photo,
-      // départ et arrivée toujours compris.
+      // Toutes les étapes ont leur vignette. Le prélèvement régulier ne sert
+      // que de filet de sécurité : un carnet trop long pour le cadre garde le
+      // départ, l'arrivée et un échantillon régulier entre les deux.
       function pickStages(k){
-        var withPhoto = STAGES.filter(function(s){ return !!s.photo; });
-        if(withPhoto.length <= k) return withPhoto;
+        if(STAGES.length <= k) return STAGES.slice();
         var out=[];
-        for(var i=0;i<k;i++) out.push(withPhoto[Math.round(i*(withPhoto.length-1)/(k-1))]);
+        for(var i=0;i<k;i++) out.push(STAGES[Math.round(i*(STAGES.length-1)/(k-1))]);
         return out;
       }
 
@@ -452,7 +581,7 @@ function renderAffiche(stages, isStrictAdmin = false) {
         g.fillStyle=C.paper; g.fillRect(0,0,S.w,S.h);
 
         drawHead(g,L);
-        drawMap(g,L,view,proj);
+        drawMap(g,L,view,proj,o);
         var placed=drawFrame(g,L,proj);
         drawFoot(g,L,o);
         return placed;
@@ -491,7 +620,7 @@ function renderAffiche(stages, isStrictAdmin = false) {
       }
 
       // ── La carte ────────────────────────────────────────
-      function drawMap(g,L,view,proj){
+      function drawMap(g,L,view,proj,o){
         var map=L.map;
         g.save();
         g.beginPath(); g.rect(map.x,map.y,map.w,map.h); g.clip();
@@ -577,7 +706,9 @@ function renderAffiche(stages, isStrictAdmin = false) {
           g.globalAlpha=1;
         });
 
-        // Points d'étape
+        // Villes, puis points d'étape par-dessus
+        if(o.cities) drawCities(g,L,view,proj);
+
         STAGES.forEach(function(s,i){
           if(s.lat==null||s.lon==null) return;
           var p=proj(s.lat,s.lon);
@@ -596,17 +727,79 @@ function renderAffiche(stages, isStrictAdmin = false) {
         g.strokeRect(map.x+0.5,map.y+0.5,map.w-1,map.h-1);
       }
 
+      // ── Villes ──────────────────────────────────────────
+      // Les villes sont triées de la plus peuplée à la moins peuplée : on les
+      // parcourt dans l'ordre et on ne pose une étiquette que si elle ne
+      // chevauche ni une autre étiquette, ni un point d'étape. Les grandes
+      // villes passent donc en premier, et la carte reste lisible quel que
+      // soit le zoom — au niveau d'une région, ce sont les bourgs qui restent.
+      function drawCities(g,L,view,proj){
+        if(!cities || !cities.length) return 0;
+        var map=L.map;
+        var FS=Math.max(11, Math.min(17, Math.round(map.w/62)));
+        var MAX=Math.max(10, Math.min(70, Math.round(map.w*map.h/26000)));
+        var boxes=[];
+        // Les points d'étape sont posés d'office : aucune ville ne viendra
+        // s'écrire dessus.
+        STAGES.forEach(function(s){
+          if(s.lat==null||s.lon==null) return;
+          var p=proj(s.lat,s.lon);
+          boxes.push([p[0]-13,p[1]-13,26,26]);
+        });
+        function hits(b){
+          for(var i=0;i<boxes.length;i++){
+            var a=boxes[i];
+            if(b[0]<a[0]+a[2] && b[0]+b[2]>a[0] && b[1]<a[1]+a[3] && b[1]+b[3]>a[1]) return true;
+          }
+          return false;
+        }
+
+        var placed=0;
+        g.textBaseline='middle'; g.lineJoin='round';
+        for(var i=0;i<cities.length && placed<MAX;i++){
+          var c=cities[i];               // [nom, lat, lon, milliers d'hab., capitale]
+          if(c[1]<view.south||c[1]>view.north||c[2]<view.west||c[2]>view.east) continue;
+          var p=proj(c[1],c[2]);
+          if(p[0]<map.x+10||p[0]>map.x+map.w-10||p[1]<map.y+10||p[1]>map.y+map.h-10) continue;
+
+          var cap=c[4]===1, r=cap?4:2.6;
+          g.font=(cap?'600 ':'500 ')+FS+'px "DM Sans", Helvetica, sans-serif';
+          var w=g.measureText(c[0]).width, gap=r+5;
+          g.textAlign='left';
+          var bx=p[0]+gap;
+          if(bx+w > map.x+map.w-8){ bx=p[0]-gap-w; g.textAlign='right'; }
+          var box=[bx-3, p[1]-FS*0.75, w+6, FS*1.5];
+          if(box[0]<map.x+6 || hits(box) || hits([p[0]-r-2,p[1]-r-2,2*r+4,2*r+4])) continue;
+          boxes.push(box); boxes.push([p[0]-r-2,p[1]-r-2,2*r+4,2*r+4]);
+
+          g.beginPath(); g.arc(p[0],p[1],r,0,Math.PI*2);
+          g.fillStyle=cap?C.ink:'#4a6a6a'; g.fill();
+          if(cap){ g.strokeStyle='#fff'; g.lineWidth=1.6; g.stroke(); }
+
+          var tx=g.textAlign==='left' ? bx : bx+w;
+          g.strokeStyle='rgba(255,255,255,0.85)'; g.lineWidth=Math.max(2.5,FS*0.28);
+          g.strokeText(c[0], tx, p[1]);
+          g.fillStyle=C.ink;
+          g.fillText(c[0], tx, p[1]);
+          placed++;
+        }
+        g.textBaseline='alphabetic'; g.textAlign='left';
+        return placed;
+      }
+
       // Échelle kilométrique + nuancier d'altitude, dans un coin de la carte
       function drawLegend(g,L,view){
         var map=L.map;
         var latC=(view.north+view.south)/2;
         var mPerPx=(view.east-view.west)*Math.PI/180*6378137*Math.cos(latC*Math.PI/180)/map.w;
+        if(map.w<300 || map.h<240) return;   // carte trop petite pour une légende
+        var want=Math.max(90, Math.min(170, map.w*0.22));
         var CANDS=[1,2,5,10,20,50,100,200,500,1000,2000,5000];
         var kmBar=CANDS[CANDS.length-1];
-        for(var i=0;i<CANDS.length;i++){ if(CANDS[i]*1000/mPerPx>=170){ kmBar=CANDS[i]; break; } }
+        for(var i=0;i<CANDS.length;i++){ if(CANDS[i]*1000/mPerPx>=want){ kmBar=CANDS[i]; break; } }
         var barPx=kmBar*1000/mPerPx;
 
-        var boxW=Math.max(230, barPx+40), boxH=relief?128:78;
+        var boxW=Math.max(200, barPx+40), boxH=relief?128:78;
         var x=map.x+22, y=map.y+map.h-boxH-22;
 
         g.save();
@@ -691,45 +884,58 @@ function renderAffiche(stages, isStrictAdmin = false) {
         return keep.length;
       }
 
+      // Tout est proportionnel à la vignette : selon le nombre d'étapes, elle
+      // va de la grande photo à la miniature, et sa légende suit.
       function drawTile(g,s,stage,num){
-        var pad=9, capH=34, imgH=s.h-2*pad-capH;
+        var k=s.w/212;
+        var pad=Math.max(4, Math.round(9*k));
+        var titleFS=Math.max(8, Math.min(20, Math.round(15*k)));
+        var dateFS=Math.max(7, Math.round(11*k));
+        var showDate=s.h>96;
+        var capH=Math.round(titleFS*1.5 + (showDate?dateFS*1.35:0) + 6);
+        var imgH=s.h-2*pad-capH;
+        var rad=Math.max(4, Math.round(10*k));
+
         g.save();
-        g.shadowColor='rgba(26,58,58,0.16)'; g.shadowBlur=12; g.shadowOffsetY=3;
-        roundRect(g,s.x,s.y,s.w,s.h,10);
+        g.shadowColor='rgba(26,58,58,0.16)'; g.shadowBlur=12*k; g.shadowOffsetY=3*k;
+        roundRect(g,s.x,s.y,s.w,s.h,rad);
         g.fillStyle=C.card; g.fill();
         g.restore();
-        roundRect(g,s.x+0.5,s.y+0.5,s.w-1,s.h-1,10);
+        roundRect(g,s.x+0.5,s.y+0.5,s.w-1,s.h-1,rad);
         g.strokeStyle=C.cardEdge; g.lineWidth=1; g.stroke();
 
         g.save();
-        roundRect(g,s.x+pad,s.y+pad,s.w-2*pad,imgH,6);
+        roundRect(g,s.x+pad,s.y+pad,s.w-2*pad,imgH,Math.max(3,rad*0.6));
         g.clip();
-        var img=imgs[stage.photo];
-        if(img) drawCover(g,img,s.x+pad,s.y+pad,s.w-2*pad,imgH);
+        var entry=imgs[stage.photo];
+        if(entry && entry.cv) drawCover(g,entry.cv,s.x+pad,s.y+pad,s.w-2*pad,imgH);
         else {
           g.fillStyle='#e8f7f4'; g.fillRect(s.x+pad,s.y+pad,s.w-2*pad,imgH);
-          g.fillStyle='#7ecece'; g.font='30px sans-serif';
+          g.fillStyle='#7ecece'; g.font=Math.round(imgH*0.4)+'px sans-serif';
           g.textAlign='center'; g.textBaseline='middle';
           g.fillText('🚴', s.x+s.w/2, s.y+pad+imgH/2);
         }
         g.restore();
 
         // Pastille du numéro d'étape
-        g.beginPath(); g.arc(s.x+pad+18,s.y+pad+18,15,0,Math.PI*2);
+        var br=Math.max(9, Math.round(15*k));
+        g.beginPath(); g.arc(s.x+pad+br,s.y+pad+br,br,0,Math.PI*2);
         g.fillStyle='rgba(26,58,58,0.72)'; g.fill();
-        g.fillStyle='#fff'; g.font='600 14px "DM Sans", Helvetica, sans-serif';
+        g.fillStyle='#fff'; g.font='600 '+Math.max(8,Math.round(14*k))+'px "DM Sans", Helvetica, sans-serif';
         g.textAlign='center'; g.textBaseline='middle';
-        g.fillText(String(num), s.x+pad+18, s.y+pad+19);
+        g.fillText(String(num), s.x+pad+br, s.y+pad+br+1);
 
         // Légende : lieu (ou titre) et date courte
         g.textBaseline='alphabetic';
-        g.fillStyle=C.ink; g.font='600 15px "DM Sans", Helvetica, sans-serif';
+        var baseY=s.y+s.h-pad-(showDate?dateFS*1.35:0)-2;
+        g.fillStyle=C.ink; g.font='600 '+titleFS+'px "DM Sans", Helvetica, sans-serif';
         var label=stage.location||stage.title||('Étape '+num);
-        g.fillText(fit(g,label,s.w-2*pad), s.x+s.w/2, s.y+s.h-19);
+        g.fillText(fit(g,label,s.w-2*pad), s.x+s.w/2, baseY);
         var d=stage.date?new Date(stage.date):null;
-        if(d && !isNaN(d.getTime())){
-          g.fillStyle=C.inkSoft; g.font='400 11px "DM Sans", Helvetica, sans-serif';
-          g.fillText(d.toLocaleDateString('fr-FR',{ day:'numeric', month:'short', year:'2-digit' }), s.x+s.w/2, s.y+s.h-6);
+        if(showDate && d && !isNaN(d.getTime())){
+          g.fillStyle=C.inkSoft; g.font='400 '+dateFS+'px "DM Sans", Helvetica, sans-serif';
+          g.fillText(d.toLocaleDateString('fr-FR',{ day:'numeric', month:'short', year:'2-digit' }),
+            s.x+s.w/2, s.y+s.h-pad-2);
         }
       }
 
@@ -783,15 +989,23 @@ function renderAffiche(stages, isStrictAdmin = false) {
 
         g.textAlign='center'; g.font='400 11px "DM Sans", Helvetica, sans-serif';
         g.fillStyle='#9fb2ad';
-        g.fillText('Frontières : Natural Earth  ·  Relief : Open-Meteo  ·  Traces : GPX du carnet',
+        g.fillText('Frontières : Natural Earth  ·  Villes : GeoNames  ·  Relief : Open-Meteo  ·  Traces : GPX du carnet',
           L.sheet.w/2, L.sheet.h-L.M+22);
       }
 
       // ══════════════════════════════════════════════════
       //  Rendu sur un canvas donné, à l'échelle voulue
       // ══════════════════════════════════════════════════
+      // Forme du voyage (largeur / hauteur en Mercator) : la carte s'y ajuste,
+      // ce qui évite les grandes plages de mer autour d'un périple tout en long.
+      function contentRatio(){
+        var b=contentBox();
+        var w=(b.xhi-b.xlo)||1e-6, h=(b.yhi-b.ylo)||1e-6;
+        return (w*1.14)/(h*1.14);
+      }
+
       function render(canvas, scale, o){
-        var L=layout(o);
+        var L=layout(o, STAGES.length, contentRatio());
         canvas.width  = Math.round(L.sheet.w*scale);
         canvas.height = Math.round(L.sheet.h*scale);
         var g=canvas.getContext('2d');
@@ -805,16 +1019,34 @@ function renderAffiche(stages, isStrictAdmin = false) {
       function refresh(){
         if(drawing){ pending=true; return; }
         drawing=true; pending=false;
+        // Pas d'export tant que la composition n'est pas terminée : la feuille
+        // exportée serait celle d'avant le réglage qu'on vient de changer.
+        [el.dl300,el.dl150,el.print].forEach(function(b){ b.disabled=true; });
         var o=opts();
-        var L=layout(o);
+        var L=layout(o, STAGES.length, contentRatio());
 
         var chain=Promise.resolve();
-        // Photos des étapes retenues pour ce format
+
+        // Villes : un seul chargement pour toute la session
+        if(o.cities && !cities){
+          chain=chain.then(function(){
+            setStatus('Chargement des villes…');
+            return loadJson(CITIES_URL).then(function(list){ cities=list; }, function(){ cities=[]; });
+          });
+        }
+
+        // Photos : réduites au double de la vignette, pour rester nettes à
+        // l'export 300 dpi sans garder les originaux en mémoire.
+        var want=Math.min(760, Math.round(L.tile.w*2));
         var need=pickStages(L.slots.length).map(function(s){ return s.photo; })
-                  .filter(function(u){ return u && imgs[u]===undefined; });
+                  .filter(function(u){ return u && !(imgs[u] && imgs[u].want>=want*0.98) && imgs[u]!==null; });
         if(need.length){
-          setStatus('Chargement des photos ('+need.length+')…');
-          chain=chain.then(function(){ return Promise.all(need.map(loadImg)); });
+          chain=chain.then(function(){
+            setStatus('Chargement des photos (0 / '+need.length+')…');
+            return loadThumbs(need, want, function(done,total){
+              if(done%3===0 || done===total) setStatus('Chargement des photos ('+done+' / '+total+')…');
+            });
+          });
         }
 
         // Relief de l'emprise courante
@@ -837,10 +1069,10 @@ function renderAffiche(stages, isStrictAdmin = false) {
 
         chain.then(function(){
           var res=render(el.canvas,1,o);
-          var msg=STAGES.length+' étape'+(STAGES.length>1?'s':'')+' · '
-                + tracks.filter(function(t){ return t.pts.length>1; }).length+' trace'+(tracks.length>1?'s':'')+' GPX · '
-                + res.placed+' photo'+(res.placed>1?'s':'')+' autour de la carte · A3 '
-                + (o.orient==='p'?'portrait':'paysage');
+          var msg=res.placed+' vignette'+(res.placed>1?'s':'')
+                + (res.placed<STAGES.length ? ' (sur '+STAGES.length+' étapes — trop pour une seule feuille)' : ' — toutes les étapes')
+                + ' · ' + tracks.filter(function(t){ return t.pts.length>1; }).length+' trace'+(tracks.length>1?'s':'')+' GPX'
+                + ' · A3 ' + (o.orient==='p'?'portrait':'paysage');
           if(o.relief && !relief) msg+=' · relief indisponible';
           setStatus(msg);
           [el.dl300,el.dl150,el.print].forEach(function(b){ b.disabled=false; });
@@ -896,7 +1128,7 @@ function renderAffiche(stages, isStrictAdmin = false) {
       });
 
       [el.orient,el.quality].forEach(function(s){ s.addEventListener('change', refresh); });
-      [el.relief,el.profile].forEach(function(c){ c.addEventListener('change', refresh); });
+      [el.relief,el.profile,el.cities].forEach(function(c){ c.addEventListener('change', refresh); });
 
       // ── Démarrage ───────────────────────────────────────
       setStatus('Chargement des traces et du fond de carte…');
@@ -914,7 +1146,9 @@ function renderAffiche(stages, isStrictAdmin = false) {
         // Orientation proposée : celle dont le cadre colle le mieux à la forme
         // du voyage (un périple est-ouest s'affiche mieux en paysage).
         var b=contentBox(), ratio=(b.xhi-b.xlo)/Math.max(b.yhi-b.ylo,1e-9), o=opts();
-        var rp=layout({ orient:'p', profile:o.profile }).map, rl=layout({ orient:'l', profile:o.profile }).map;
+        var rp=layout({ orient:'p', profile:o.profile }, STAGES.length).map;
+        var rl=layout({ orient:'l', profile:o.profile }, STAGES.length).map;
+        // (sans ratio ici : on compare la place disponible, pas la carte finale)
         var fitP=Math.abs(Math.log(ratio/(rp.w/rp.h))), fitL=Math.abs(Math.log(ratio/(rl.w/rl.h)));
         el.orient.value = fitL < fitP ? 'l' : 'p';
         refresh();
