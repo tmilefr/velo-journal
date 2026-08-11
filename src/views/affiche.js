@@ -8,11 +8,12 @@ const { CSS, renderHeader } = require('./layout');
 // traces GPX du voyage ; tout autour, en cadre, la photo favorite de chaque
 // étape, reliée par un fil à son point d'arrivée sur la carte.
 //
-// Quatre sources, toutes locales sauf le relief :
-//   • les traces           → fichiers .gpx des étapes (/uploads)
-//   • frontières/littoraux → /public/geo/countries-50m.json (Natural Earth)
-//   • les villes           → /public/geo/cities.json (GeoNames)
-//   • le relief            → grille d'altitudes servie par /api/affiche/relief
+// Deux fonds au choix :
+//   • épuré  → frontières/littoraux (/public/geo/countries-50m.json, Natural
+//              Earth), villes (/public/geo/cities.json, GeoNames) et relief
+//              ombré (grille d'altitudes servie par /api/affiche/relief)
+//   • OSM    → les tuiles d'OpenStreetMap, comme la page Carte
+// Les traces, elles, viennent toujours des fichiers .gpx des étapes.
 function renderAffiche(stages, isStrictAdmin = false) {
   // Embarquage sûr des données (évite la fermeture prématurée de </script>)
   const dataJson = JSON.stringify(stages).replace(/</g, '\\u003c');
@@ -45,7 +46,7 @@ function renderAffiche(stages, isStrictAdmin = false) {
       <div class="form-card" style="margin-bottom:16px">
         <a href="/settings" class="sys-back">← Système</a>
         <h2 style="margin-bottom:6px">🖼️ Affiche du voyage</h2>
-        <p style="font-size:14px;color:var(--ink-light);line-height:1.6;margin:0">Une carte A3 du voyage : les traces GPX sur un fond épuré — frontières, littoraux, villes et relief ombré — et la photo favorite de <strong>chaque étape</strong> disposée tout autour, reliée à son point d'arrivée. Les vignettes s'agrandissent ou se resserrent en anneaux selon le nombre d'étapes. À imprimer et encadrer.</p>
+        <p style="font-size:14px;color:var(--ink-light);line-height:1.6;margin:0">Une carte A3 du voyage : les traces GPX sur un fond au choix — épuré (frontières, littoraux, villes et relief ombré) ou la carte OpenStreetMap de la page Carte — et la photo favorite de <strong>chaque étape</strong> disposée tout autour, reliée à son point d'arrivée. Les vignettes s'agrandissent ou se resserrent en anneaux selon le nombre d'étapes. À imprimer et encadrer.</p>
       </div>
       ${emptyState
         ? `<div class="form-card"><p style="font-size:14px;color:var(--ink-light);margin:0">Aucune étape localisée pour le moment. Ajoutez des étapes avec un fichier <code>.gpx</code> ou des coordonnées GPS pour composer l'affiche.</p></div>`
@@ -54,6 +55,12 @@ function renderAffiche(stages, isStrictAdmin = false) {
                <select id="affOrient">
                  <option value="p">A3 portrait</option>
                  <option value="l">A3 paysage</option>
+               </select>
+             </label>
+             <label class="aff-field">Fond
+               <select id="affFond">
+                 <option value="clean">épuré (frontières + relief)</option>
+                 <option value="osm">carte OpenStreetMap</option>
                </select>
              </label>
              <label class="aff-field"><input type="checkbox" id="affRelief" checked> Relief</label>
@@ -106,6 +113,7 @@ function renderAffiche(stages, isStrictAdmin = false) {
         canvas:  document.getElementById('affCanvas'),
         status:  document.getElementById('affStatus'),
         orient:  document.getElementById('affOrient'),
+        fond:    document.getElementById('affFond'),
         relief:  document.getElementById('affRelief'),
         quality: document.getElementById('affQuality'),
         profile: document.getElementById('affProfile'),
@@ -116,6 +124,8 @@ function renderAffiche(stages, isStrictAdmin = false) {
       };
 
       var world = null;   // frontières décodées
+      var tiles = {};     // tuiles OSM déjà chargées, par z/x/y
+      var tileSet = null; // tuiles de l'emprise courante
       var cities = null;  // villes, de la plus peuplée à la moins peuplée
       var tracks = null;  // traces GPX + altitudes
       var relief = null;  // grille d'altitudes de l'emprise courante
@@ -127,6 +137,7 @@ function renderAffiche(stages, isStrictAdmin = false) {
       function opts(){
         return {
           orient:  el.orient.value === 'l' ? 'l' : 'p',
+          fond:    el.fond.value === 'osm' ? 'osm' : 'clean',
           relief:  el.relief.checked,
           quality: el.quality.value,
           profile: el.profile.checked,
@@ -484,6 +495,12 @@ function renderAffiche(stages, isStrictAdmin = false) {
       }
 
       // ── Relief ──────────────────────────────────────────
+      // Une emprise (et sa finesse) résumée en une clé : inutile de recharger
+      // le relief ou les tuiles tant qu'elle n'a pas bougé.
+      function reliefKeyOf(view, extra){
+        return [view.south.toFixed(3),view.north.toFixed(3),
+                view.west.toFixed(3),view.east.toFixed(3),extra].join('|');
+      }
       function reliefDims(map, quality){
         var target = TARGET_CELLS[quality] || TARGET_CELLS.std;
         var ratio  = map.w/map.h;
@@ -622,15 +639,26 @@ function renderAffiche(stages, isStrictAdmin = false) {
       // ── La carte ────────────────────────────────────────
       function drawMap(g,L,view,proj,o){
         var map=L.map;
+        var osm = o.fond==='osm' && tileSet && tileSet.ok;
         g.save();
         g.beginPath(); g.rect(map.x,map.y,map.w,map.h); g.clip();
 
         // Mer
         g.fillStyle=C.sea; g.fillRect(map.x,map.y,map.w,map.h);
 
+        // Fond OpenStreetMap : il porte déjà terres, frontières et villes,
+        // on lui laisse toute la place et on saute le fond vectoriel. Un voile
+        // de la couleur du papier l'apaise juste assez pour que la trace et
+        // les vignettes gardent le premier plan.
+        if(osm){
+          drawTiles(g, map, tileSet);
+          g.fillStyle='rgba(251,250,246,0.20)';
+          g.fillRect(map.x,map.y,map.w,map.h);
+        }
+
         // Terres : un seul chemin, règle pair-impair pour évider les lacs
         var land=new Path2D(), drawn=0;
-        if(world){
+        if(world && !osm){
           world.rings.forEach(function(ring){
             if(!boxHits(ring.box,view)) return;
             var pts=ring.pts;
@@ -643,7 +671,7 @@ function renderAffiche(stages, isStrictAdmin = false) {
         if(drawn){ g.fillStyle=C.land; g.fill(land,'evenodd'); }
 
         // Relief, contenu dans les terres pour ne pas déborder en mer
-        if(relief && drawn){
+        if(relief && !osm && drawn){
           g.save();
           g.clip(land,'evenodd');
           var bmp=reliefBitmap(relief);
@@ -654,14 +682,14 @@ function renderAffiche(stages, isStrictAdmin = false) {
           g.drawImage(bmp, a[0], a[1], b[0]-a[0], b[1]-a[1]);
           g.globalAlpha=1;
           g.restore();
-        } else if(relief && !drawn){
+        } else if(relief && !osm && !drawn){
           var bmp2=reliefBitmap(relief);
           var a2=proj(relief.north,relief.west), b2=proj(relief.south,relief.east);
           g.drawImage(bmp2, a2[0], a2[1], b2[0]-a2[0], b2[1]-a2[1]);
         }
 
         // Frontières puis littoraux (chaque arc une seule fois)
-        if(world){
+        if(world && !osm){
           [false,true].forEach(function(shared){
             g.strokeStyle = shared ? C.border : C.coast;
             g.lineWidth   = shared ? 1.3 : 1.9;
@@ -706,8 +734,9 @@ function renderAffiche(stages, isStrictAdmin = false) {
           g.globalAlpha=1;
         });
 
-        // Villes, puis points d'étape par-dessus
-        if(o.cities) drawCities(g,L,view,proj);
+        // Villes, puis points d'étape par-dessus. Le fond OSM porte déjà ses
+        // propres noms de lieux : en rajouter ferait double emploi.
+        if(o.cities && !osm) drawCities(g,L,view,proj);
 
         STAGES.forEach(function(s,i){
           if(s.lat==null||s.lon==null) return;
@@ -725,6 +754,81 @@ function renderAffiche(stages, isStrictAdmin = false) {
         g.restore();
         g.strokeStyle=C.rule; g.lineWidth=1.5;
         g.strokeRect(map.x+0.5,map.y+0.5,map.w-1,map.h-1);
+      }
+
+      // ── Fond OpenStreetMap ──────────────────────────────
+      // Le même fond que la page Carte. Les tuiles OSM sont en Mercator, comme
+      // la projection de l'affiche : elles se posent par simple mise à
+      // l'échelle, sans reprojection. Le zoom est choisi pour l'export 300 dpi
+      // (échelle 2) : l'aperçu réduit les mêmes tuiles, l'impression est nette
+      // et rien n'est téléchargé deux fois. L'attribut crossOrigin est
+      // indispensable : sans lui le canvas serait « teinté » par les tuiles et
+      // l'export PNG deviendrait impossible.
+      var TILE_HOSTS = ['a','b','c'];
+      var TILE_MAX   = 360;   // plafond de politesse pour les serveurs d'OpenStreetMap
+
+      function tileZoom(view, rect){
+        var span=Math.max(view.xright-view.xleft, 1e-9);
+        // On arrondit vers le haut : mieux vaut réduire des tuiles trop fines
+        // que d'en étirer de trop grosses, qui se verraient à l'impression.
+        var z=Math.ceil(Math.log(rect.w*2*(2*Math.PI/span)/256)/Math.LN2);
+        z=Math.max(0, Math.min(18, z));
+        // Trop de tuiles pour une seule affiche : on descend d'un cran.
+        while(z>0 && tileCount(view,z)>TILE_MAX) z--;
+        return z;
+      }
+      function tileFrame(view, z){
+        var n=Math.pow(2,z), K=2*Math.PI;
+        return {
+          n:n,
+          x0:(view.xleft+Math.PI)/K*n, x1:(view.xright+Math.PI)/K*n,
+          y0:(Math.PI-view.ytop)/K*n,  y1:(Math.PI-view.ybot)/K*n
+        };
+      }
+      function tileCount(view, z){
+        var f=tileFrame(view,z);
+        return (Math.floor(f.x1)-Math.floor(f.x0)+1)*(Math.floor(f.y1)-Math.floor(f.y0)+1);
+      }
+      function loadTiles(view, z, onProgress){
+        var f=tileFrame(view,z), list=[];
+        for(var tx=Math.floor(f.x0); tx<=Math.floor(f.x1); tx++){
+          for(var ty=Math.floor(f.y0); ty<=Math.floor(f.y1); ty++){
+            if(ty<0 || ty>=f.n) continue;
+            list.push({ x:((tx%f.n)+f.n)%f.n, y:ty, gx:tx, gy:ty });
+          }
+        }
+        var next=0, done=0;
+        function worker(){
+          if(next>=list.length) return Promise.resolve();
+          var t=list[next++];
+          var key=z+'/'+t.x+'/'+t.y;
+          if(tiles[key]!==undefined){ t.img=tiles[key]; done++; return worker(); }
+          return new Promise(function(res){
+            var im=new Image();
+            im.crossOrigin='anonymous';
+            im.onload =function(){ tiles[key]=im;   t.img=im;   res(); };
+            im.onerror=function(){ tiles[key]=null; t.img=null; res(); };
+            im.src='https://'+TILE_HOSTS[(t.x+t.y)%3]+'.tile.openstreetmap.org/'+z+'/'+t.x+'/'+t.y+'.png';
+          }).then(function(){
+            if(onProgress) onProgress(++done, list.length);
+            return worker();
+          });
+        }
+        var runners=[]; for(var i=0;i<Math.min(6,list.length);i++) runners.push(worker());
+        return Promise.all(runners).then(function(){
+          return { z:z, frame:f, list:list, ok:list.filter(function(t){ return t.img; }).length };
+        });
+      }
+      function drawTiles(g, map, set){
+        var f=set.frame, tw=map.w/(f.x1-f.x0), th=map.h/(f.y1-f.y0);
+        g.imageSmoothingEnabled=true;
+        if(g.imageSmoothingQuality) g.imageSmoothingQuality='high';
+        set.list.forEach(function(t){
+          if(!t.img) return;
+          // +1 px de recouvrement : sinon un liseré de fond apparaît entre
+          // deux tuiles posées à des coordonnées fractionnaires.
+          g.drawImage(t.img, map.x+(t.gx-f.x0)*tw, map.y+(t.gy-f.y0)*th, tw+1, th+1);
+        });
       }
 
       // ── Villes ──────────────────────────────────────────
@@ -989,8 +1093,11 @@ function renderAffiche(stages, isStrictAdmin = false) {
 
         g.textAlign='center'; g.font='400 11px "DM Sans", Helvetica, sans-serif';
         g.fillStyle='#9fb2ad';
-        g.fillText('Frontières : Natural Earth  ·  Villes : GeoNames  ·  Relief : Open-Meteo  ·  Traces : GPX du carnet',
-          L.sheet.w/2, L.sheet.h-L.M+22);
+        // OpenStreetMap demande que ses fonds soient crédités sur la carte.
+        var credit = (o.fond==='osm' && tileSet && tileSet.ok)
+          ? 'Fond de carte : © OpenStreetMap contributors  ·  Traces : GPX du carnet'
+          : 'Frontières : Natural Earth  ·  Villes : GeoNames  ·  Relief : Open-Meteo  ·  Traces : GPX du carnet';
+        g.fillText(credit, L.sheet.w/2, L.sheet.h-L.M+22);
       }
 
       // ══════════════════════════════════════════════════
@@ -1024,6 +1131,9 @@ function renderAffiche(stages, isStrictAdmin = false) {
         [el.dl300,el.dl150,el.print].forEach(function(b){ b.disabled=true; });
         var o=opts();
         var L=layout(o, STAGES.length, contentRatio());
+        // Sur fond OSM, relief et villes viennent des tuiles : les réglages
+        // du fond épuré n'ont plus de prise.
+        [el.relief,el.quality,el.cities].forEach(function(c){ c.disabled = o.fond==='osm'; });
 
         var chain=Promise.resolve();
 
@@ -1049,11 +1159,28 @@ function renderAffiche(stages, isStrictAdmin = false) {
           });
         }
 
-        // Relief de l'emprise courante
-        if(o.relief){
+        // Fond OpenStreetMap : les tuiles de l'emprise courante
+        if(o.fond==='osm'){
+          chain=chain.then(function(){
+            var view=fitView(L.map), z=tileZoom(view,L.map);
+            if(tileSet && tileSet.key===reliefKeyOf(view,z)) return;
+            setStatus('Chargement du fond OpenStreetMap (' + tileCount(view,z) + ' tuiles)…');
+            return loadTiles(view, z, function(done,total){
+              if(done%8===0 || done===total) setStatus('Chargement du fond OpenStreetMap ('+done+' / '+total+')…');
+            }).then(function(set){
+              set.key=reliefKeyOf(view,z);
+              tileSet = set.ok ? set : null;
+            }, function(){ tileSet=null; });
+          });
+        } else {
+          tileSet=null;
+        }
+
+        // Relief de l'emprise courante (fond épuré seulement)
+        if(o.relief && o.fond!=='osm'){
           chain=chain.then(function(){
             var view=fitView(L.map), dims=reliefDims(L.map,o.quality);
-            var key=[view.south.toFixed(3),view.north.toFixed(3),view.west.toFixed(3),view.east.toFixed(3),dims.cols,dims.rows].join('|');
+            var key=reliefKeyOf(view, dims.cols+'x'+dims.rows);
             if(relief && reliefKey===key) return;
             setStatus('Calcul du relief (' + (dims.cols*dims.rows).toLocaleString('fr-FR') + ' points) — quelques secondes la première fois…');
             return fetchRelief(view,dims).then(function(r){
@@ -1073,7 +1200,10 @@ function renderAffiche(stages, isStrictAdmin = false) {
                 + (res.placed<STAGES.length ? ' (sur '+STAGES.length+' étapes — trop pour une seule feuille)' : ' — toutes les étapes')
                 + ' · ' + tracks.filter(function(t){ return t.pts.length>1; }).length+' trace'+(tracks.length>1?'s':'')+' GPX'
                 + ' · A3 ' + (o.orient==='p'?'portrait':'paysage');
-          if(o.relief && !relief) msg+=' · relief indisponible';
+          if(o.fond==='osm') msg += tileSet
+            ? ' · fond OSM (zoom '+tileSet.z+', '+tileSet.ok+' tuiles)'
+            : ' · fond OSM injoignable — dessiné en épuré';
+          else if(o.relief && !relief) msg+=' · relief indisponible';
           setStatus(msg);
           [el.dl300,el.dl150,el.print].forEach(function(b){ b.disabled=false; });
         }).catch(function(e){
@@ -1127,7 +1257,7 @@ function renderAffiche(stages, isStrictAdmin = false) {
         });
       });
 
-      [el.orient,el.quality].forEach(function(s){ s.addEventListener('change', refresh); });
+      [el.orient,el.quality,el.fond].forEach(function(s){ s.addEventListener('change', refresh); });
       [el.relief,el.profile,el.cities].forEach(function(c){ c.addEventListener('change', refresh); });
 
       // ── Démarrage ───────────────────────────────────────
