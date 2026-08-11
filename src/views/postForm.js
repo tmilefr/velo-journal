@@ -86,7 +86,7 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
               <input type="checkbox" name="trainTransfer" value="1" id="trainTransferPost">
               🚆 Ce déplacement s'est fait en train
             </label>
-            <div class="field-hint">La distance se calcule toute seule : longueur de la trace GPX si vous en joignez une, sinon écart à vol d'oiseau depuis la position de l'étape précédente. Ces kilomètres n'entrent ni dans les km roulés ni dans les moyennes, mais s'ajoutent au <strong>trajet total parcouru</strong>.</div>
+            <div class="field-hint">La distance se calcule toute seule : longueur de la trace GPX si vous en joignez une, sinon estimation entre les deux gares choisies ci-dessous (à défaut, depuis la position de l'étape précédente). Ces kilomètres n'entrent ni dans les km roulés ni dans les moyennes, mais s'ajoutent au <strong>trajet total parcouru</strong>.</div>
             <div class="reveal-panel" id="trainStopsPost" hidden>
               <div class="field">
                 <label>Km en train <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, calculé</span></label>
@@ -99,6 +99,8 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
                     <input name="trainFrom" id="trainFromField" type="text" placeholder="Ex : Lyon" autocomplete="off" maxlength="120">
                     <div class="loc-suggestions" id="trainFromSuggestions"></div>
                   </div>
+                  <input type="hidden" name="trainFromLat" id="trainFromLat">
+                  <input type="hidden" name="trainFromLon" id="trainFromLon">
                 </div>
                 <div class="field">
                   <label>🚉 Arrivée <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, déduit</span></label>
@@ -106,9 +108,11 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
                     <input name="trainTo" id="trainToField" type="text" placeholder="Ex : Turin" autocomplete="off" maxlength="120">
                     <div class="loc-suggestions" id="trainToSuggestions"></div>
                   </div>
+                  <input type="hidden" name="trainToLat" id="trainToLat">
+                  <input type="hidden" name="trainToLon" id="trainToLon">
                 </div>
               </div>
-              <div class="field-hint" style="margin-top:0">🚆 Tapez trois lettres pour voir des suggestions de lieux. Laissez vide pour déduire le trajet de l'étape précédente et du lieu d'arrivée.</div>
+              <div class="field-hint" style="margin-top:0">🚆 Tapez trois lettres et <strong>choisissez une suggestion</strong> : c'est elle qui donne la position de la gare, donc la distance du trajet. Laissez vide pour déduire le trajet de l'étape précédente et du lieu d'arrivée.</div>
             </div>
           </div>
           <details style="margin-bottom:16px">
@@ -175,8 +179,8 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
         watchGeoOverride(geoFields);
         initLocAutocomplete('locationField', 'lat', 'lon', 'locSuggestions', { geo: geoFields });
         initRevealToggle('trainTransferPost', 'trainStopsPost', 'trainFromField');
-        initLocAutocomplete('trainFromField', null, null, 'trainFromSuggestions');
-        initLocAutocomplete('trainToField', null, null, 'trainToSuggestions');
+        initStationField('trainFromField', 'trainFromLat', 'trainFromLon', 'trainFromSuggestions');
+        initStationField('trainToField', 'trainToLat', 'trainToLon', 'trainToSuggestions');
         var btn = document.getElementById('gpsBtnPost');
         if (btn) btn.addEventListener('click', function() { getGPS('locationField', 'lat', 'lon', geoFields); });
 ${sleepFieldsInit('gpsBtnSleepPost')}

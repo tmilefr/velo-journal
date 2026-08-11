@@ -169,9 +169,13 @@ function renderMap(posts, isAdmin = false, isStrictAdmin = false, csrf = '') {
           if (s.plat && s.plon && ptDist([s.plat, s.plon], [s.lat, s.lon]) > 40) {
             L.polyline([[s.plat, s.plon], [s.lat, s.lon]], { color: '#7a4fb5', weight: 2, opacity: .65, dashArray: '4,6' }).addTo(map);
           }
+          // Même pastille que les étapes intermédiaires, à la couleur près :
+          // un couchage n'est pas plus important qu'une étape, il ne doit pas
+          // manger la carte. La légende dit ce que veut dire le violet.
+          const size = 14;
           const ic = L.divIcon({
-            html: '<div style="background:linear-gradient(135deg,#7a4fb5,#a67ee0);border:2.5px solid #fff;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.35)">🛏️</div>',
-            iconSize: [26,26], iconAnchor: [13,13], className: ''
+            html: '<div style="background:linear-gradient(135deg,#7a4fb5,#a67ee0);border:2px solid #fff;border-radius:50%;width:'+size+'px;height:'+size+'px;box-shadow:0 2px 8px rgba(0,0,0,.35)"></div>',
+            iconSize: [size,size], iconAnchor: [size/2,size/2], className: ''
           });
           const marker = L.marker([s.lat, s.lon], { icon: ic }).addTo(map);
           const dateStr = new Date(s.date).toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' });

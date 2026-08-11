@@ -124,7 +124,7 @@ function renderBackup(csrf = '', restored = false, isStrictAdmin = false) {
 //  Recalculs : /settings/recalc
 // ══════════════════════════════════════════════════════════
 
-function renderRecalc(csrf = '', recalc = null, geo = null, geoJob = null, isStrictAdmin = false) {
+function renderRecalc(csrf = '', recalc = null, geo = null, geoJob = null, isStrictAdmin = false, train = null) {
   // Bandeau de lancement (retour de POST /recalc-geo)
   let geoBanner = '';
   if (geo === 'running') {
@@ -157,10 +157,20 @@ function renderRecalc(csrf = '', recalc = null, geo = null, geoJob = null, isStr
     }
   }
 
+  let trainBanner = '';
+  if (train) {
+    if (train.scanned === 0) {
+      trainBanner = bannerWarn('ℹ️ Aucune étape n\'est marquée « déplacement en train » — rien à recalculer.');
+    } else {
+      const errPart = train.errors ? ` · ⚠️ ${train.errors} trace(s) illisible(s)` : '';
+      trainBanner = bannerOk(`✅ Trajets en train : ${train.updated} distance(s) mise(s) à jour sur ${train.scanned} trajet(s)${errPart}.`);
+    }
+  }
+
   return renderSystemPage({
     key: 'sys-recalc',
     isStrictAdmin,
-    banners: `${recalcBanner}${geoBanner}`,
+    banners: `${recalcBanner}${trainBanner}${geoBanner}`,
     body: `
       <div class="form-card" style="margin-bottom:16px">
         <h2>📐 Recalcul des distances</h2>
@@ -168,6 +178,14 @@ function renderRecalc(csrf = '', recalc = null, geo = null, geoJob = null, isStr
         <form method="POST" action="/recalc-distances" class="form-recalc">
           <input type="hidden" name="_csrf" value="${csrf}">
           <button class="btn-submit" type="submit" style="background:linear-gradient(135deg,var(--ocean),var(--teal))">📐 Recalculer toutes les distances</button>
+        </form>
+      </div>
+      <div class="form-card" style="margin-bottom:16px">
+        <h2>🚆 Distances des trajets en train</h2>
+        <p style="font-size:14px;color:var(--ink-light);margin-bottom:18px;line-height:1.6">Reprend chaque étape marquée <strong>« déplacement en train »</strong> avec le calcul courant : longueur de la trace GPX du trajet, à défaut estimation entre les <strong>deux gares</strong> saisies, à défaut depuis la position de l'étape précédente. Les distances <strong>saisies à la main</strong> ne sont jamais touchées. À lancer après avoir renseigné les gares d'anciens trajets.</p>
+        <form method="POST" action="/recalc-train" class="form-recalc-train">
+          <input type="hidden" name="_csrf" value="${csrf}">
+          <button class="btn-submit" type="submit" style="background:linear-gradient(135deg,var(--ocean),var(--teal))">🚆 Recalculer les distances de train</button>
         </form>
       </div>
       <div class="form-card">
@@ -189,6 +207,11 @@ function renderRecalc(csrf = '', recalc = null, geo = null, geoJob = null, isStr
       document.querySelectorAll('.form-recalc').forEach(function(f) {
         f.addEventListener('submit', function(e) {
           if (!window.confirm('Recalculer les distances de toutes les étapes avec une trace GPX ? Les valeurs de km actuelles seront remplacées.')) e.preventDefault();
+        });
+      });
+      document.querySelectorAll('.form-recalc-train').forEach(function(f) {
+        f.addEventListener('submit', function(e) {
+          if (!window.confirm('Recalculer la distance de tous les trajets en train ? Les distances saisies à la main sont conservées.')) e.preventDefault();
         });
       });
       document.querySelectorAll('.form-recalc-geo').forEach(function(f) {

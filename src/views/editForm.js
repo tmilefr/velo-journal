@@ -22,9 +22,10 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
   // sache s'il a besoin de corriger quoi que ce soit.
   const km1 = n => (Math.round(n * 10) / 10).toLocaleString('fr-FR');
   const TRAIN_SOURCES = {
-    gpx:    ' Distance actuelle : longueur de la trace GPX.',
-    points: ' Distance actuelle : écart à vol d\'oiseau depuis l\'étape précédente.',
-    manual: ' Distance actuelle : valeur saisie ci-dessous.',
+    gpx:      ' Distance actuelle : longueur de la trace GPX.',
+    stations: ' Distance actuelle : estimée entre les deux gares ci-dessous.',
+    points:   ' Distance actuelle : estimée depuis la position de l\'étape précédente.',
+    manual:   ' Distance actuelle : valeur saisie ci-dessous.',
   };
   const trainSourceNote = post.trainKm > 0 ? ` <strong>${km1(post.trainKm)} km</strong>.${TRAIN_SOURCES[post.trainKmSource] || ''}` : '';
 
@@ -132,7 +133,7 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
               <input type="checkbox" name="trainTransfer" value="1" id="trainTransferEdit" ${post.trainTransfer ? 'checked' : ''}>
               🚆 Ce déplacement s'est fait en train
             </label>
-            <div class="field-hint">Distance calculée automatiquement : longueur de la trace GPX si l'étape en a une, sinon écart à vol d'oiseau depuis la position de l'étape précédente.${trainSourceNote}</div>
+            <div class="field-hint">Distance calculée automatiquement : longueur de la trace GPX si l'étape en a une, sinon estimation entre les deux gares choisies ci-dessous (à défaut, depuis la position de l'étape précédente).${trainSourceNote}</div>
             <div class="reveal-panel" id="trainStopsEdit"${post.trainTransfer ? '' : ' hidden'}>
               <div class="field">
                 <label>Km en train <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, calculé</span></label>
@@ -145,6 +146,8 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
                     <input name="trainFrom" id="trainFromField" type="text" placeholder="Ex : Lyon" autocomplete="off" maxlength="120" value="${esc(stops.from)}">
                     <div class="loc-suggestions" id="trainFromSuggestions"></div>
                   </div>
+                  <input type="hidden" name="trainFromLat" id="trainFromLat" value="${post.trainFromLat ?? ''}">
+                  <input type="hidden" name="trainFromLon" id="trainFromLon" value="${post.trainFromLon ?? ''}">
                 </div>
                 <div class="field">
                   <label>🚉 Arrivée <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, déduit</span></label>
@@ -152,9 +155,11 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
                     <input name="trainTo" id="trainToField" type="text" placeholder="Ex : Turin" autocomplete="off" maxlength="120" value="${esc(stops.to)}">
                     <div class="loc-suggestions" id="trainToSuggestions"></div>
                   </div>
+                  <input type="hidden" name="trainToLat" id="trainToLat" value="${post.trainToLat ?? ''}">
+                  <input type="hidden" name="trainToLon" id="trainToLon" value="${post.trainToLon ?? ''}">
                 </div>
               </div>
-              <div class="field-hint" style="margin-top:0">🚆 Tapez trois lettres pour voir des suggestions de lieux. Laissez vide pour déduire le trajet de l'étape précédente et du lieu d'arrivée.</div>
+              <div class="field-hint" style="margin-top:0">🚆 Tapez trois lettres et <strong>choisissez une suggestion</strong> : c'est elle qui donne la position de la gare, donc la distance du trajet. Laissez vide pour déduire le trajet de l'étape précédente et du lieu d'arrivée.</div>
             </div>
           </div>
           <details style="margin-bottom:16px"${(post.geoSource === 'manual') ? ' open' : ''}>
@@ -253,8 +258,8 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
         watchGeoOverride(geoFields);
         initLocAutocomplete('locationField', 'lat', 'lon', 'locSuggestions', { geo: geoFields });
         initRevealToggle('trainTransferEdit', 'trainStopsEdit', 'trainFromField');
-        initLocAutocomplete('trainFromField', null, null, 'trainFromSuggestions');
-        initLocAutocomplete('trainToField', null, null, 'trainToSuggestions');
+        initStationField('trainFromField', 'trainFromLat', 'trainFromLon', 'trainFromSuggestions');
+        initStationField('trainToField', 'trainToLat', 'trainToLon', 'trainToSuggestions');
         var btn = document.getElementById('gpsBtnEdit');
         if (btn) btn.addEventListener('click', function() { getGPS('locationField', 'lat', 'lon', geoFields); });
 ${sleepFieldsInit('gpsBtnSleepEdit')}

@@ -76,11 +76,18 @@ router.get('/settings/recalc', requireAuth, (req, res) => {
         errors:  parseInt(req.query.errors, 10) || 0,
       }
     : null;
+  const train = req.query.train != null
+    ? {
+        updated: parseInt(req.query.train, 10) || 0,
+        scanned: parseInt(req.query.trainScanned, 10) || 0,
+        errors:  parseInt(req.query.trainErrors, 10) || 0,
+      }
+    : null;
   // Détection des pays : 'started' / 'running' au retour du POST, et l'état du
   // traitement de fond (avancement ou bilan de la dernière exécution).
   const geo = ['started', 'running'].includes(req.query.geo) ? req.query.geo : null;
   req.session.save(() => res.send(
-    renderRecalc(token, recalc, geo, geoJobStatus(), !!req.session.auth)
+    renderRecalc(token, recalc, geo, geoJobStatus(), !!req.session.auth, train)
   ));
 });
 
