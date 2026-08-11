@@ -8,10 +8,11 @@ const { CSS, renderHeader } = require('./layout');
 // traces GPX du voyage ; tout autour, en cadre, la photo favorite de chaque
 // étape, reliée par un fil à son point d'arrivée sur la carte.
 //
-// Les photos sont aussi grandes que la feuille le permet : elles se décalent
-// en quinconce quand il en faut plus sur un côté, et débordent sur la carte,
-// dont le fond passe dessous. Le tracé, lui, n'est jamais recouvert : il est
-// ajusté au rectangle central qu'aucune vignette n'atteint.
+// Les photos sont aussi grandes que la feuille le permet : elles partent du
+// tour du cadre, avancent sur la carte et grandissent tant qu'elles ne
+// s'approchent pas du tracé. Chacune s'arrête donc là où le voyage passe, ce
+// qui les décale naturellement en quinconce le long de la trace, et remplit
+// de grandes photos les contrées que le parcours ne traverse pas.
 //
 // Deux fonds au choix :
 //   • épuré  → frontières/littoraux (/public/geo/countries-50m.json, Natural
@@ -51,7 +52,7 @@ function renderAffiche(stages, isStrictAdmin = false) {
       <div class="form-card" style="margin-bottom:16px">
         <a href="/settings" class="sys-back">← Système</a>
         <h2 style="margin-bottom:6px">🖼️ Affiche du voyage</h2>
-        <p style="font-size:14px;color:var(--ink-light);line-height:1.6;margin:0">Une carte A3 du voyage : les traces GPX sur un fond au choix — épuré (frontières, littoraux, villes et relief ombré) ou la carte OpenStreetMap de la page Carte — et la photo favorite de <strong>chaque étape</strong> disposée tout autour, reliée à son point d'arrivée. Les vignettes sont aussi grandes que la feuille le permet : elles se décalent en quinconce si besoin et débordent sur la carte, sans jamais recouvrir le tracé. À imprimer et encadrer.</p>
+        <p style="font-size:14px;color:var(--ink-light);line-height:1.6;margin:0">Une carte A3 du voyage : les traces GPX sur un fond au choix — épuré (frontières, littoraux, villes et relief ombré) ou la carte OpenStreetMap de la page Carte — et la photo favorite de <strong>chaque étape</strong> disposée tout autour, reliée à son point d'arrivée. Les vignettes sont aussi grandes que la feuille le permet : elles avancent sur la carte et grandissent tant qu'elles ne s'approchent pas du tracé, ce qui les décale en quinconce le long de la trace et remplit les zones que le voyage ne traverse pas. À imprimer et encadrer.</p>
       </div>
       ${emptyState
         ? `<div class="form-card"><p style="font-size:14px;color:var(--ink-light);margin:0">Aucune étape localisée pour le moment. Ajoutez des étapes avec un fichier <code>.gpx</code> ou des coordonnées GPS pour composer l'affiche.</p></div>`
@@ -455,7 +456,7 @@ function renderAffiche(stages, isStrictAdmin = false) {
       // jusque sous les photos.
       var TILE_SIZES=[560,500,450,410,380,340,300,268,240,214,192,172,154,138,124,112,100,90,82,74];
       var OVERLAP = 0.78;      // part de la bande de vignettes posée sur la carte
-      var TRACE_MIN_W = 250, TRACE_MIN_H = 175, TRACE_MIN_AREA = 0.09;
+      var TRACE_MIN_W = 220, TRACE_MIN_H = 155, TRACE_MIN_AREA = 0.07;
       function layout(o, count, ratio){
         var S = SHEET[o.orient];
         var M = 84, HEAD = 168, FOOT = o.profile ? 214 : 96, G = 14;
@@ -487,7 +488,7 @@ function renderAffiche(stages, isStrictAdmin = false) {
               // De grandes photos d'abord, une carte encore lisible ensuite ; à
               // qualité égale, on préfère un cadre bien rempli, aligné plutôt
               // qu'en quinconce, et le moins d'anneaux possible.
-              var cost = -1.00*(TW/TILE_SIZES[0])
+              var cost = -1.25*(TW/TILE_SIZES[0])
                        -  0.85*(tb.w*tb.h/innerArea)
                        +  1.20*gap*gap
                        +  0.05*(sH+sV)
@@ -673,6 +674,13 @@ function renderAffiche(stages, isStrictAdmin = false) {
         var S=L.sheet, map=L.map;
         var view=viewOf(L), proj=projector(view,map);
 
+        // Les vignettes gagnent du terrain sur la carte avant qu'on dessine
+        // quoi que ce soit : la carte doit savoir où elles seront pour ne pas
+        // y écrire des noms de villes, et le fil de chaque photo part de sa
+        // position définitive.
+        L.legend=legendGeom(L,view);
+        settleTiles(L, proj);
+
         g.fillStyle=C.paper; g.fillRect(0,0,S.w,S.h);
 
         drawHead(g,L);
@@ -680,6 +688,122 @@ function renderAffiche(stages, isStrictAdmin = false) {
         var placed=drawFrame(g,L,proj);
         drawFoot(g,L,o);
         return placed;
+      }
+
+      // ── Vignettes : avancer sur la carte, puis grandir ──
+      // Les photos partent du tour du cadre et gagnent du terrain sur la carte
+      // tant qu'elles ne s'approchent ni du tracé, ni d'un point d'étape, ni
+      // d'une autre vignette. Les zones sans trace — coins, mers, contrées à
+      // l'écart du parcours — finissent donc occupées par de grandes photos,
+      // pendant que le couloir du voyage reste dégagé.
+      var TRACE_PAD = 20;    // distance gardée autour du tracé
+      var TILE_GAP  = 12;    // distance gardée entre deux vignettes
+      var GROW_MAX  = 1.6;   // agrandissement maximal d'une vignette
+      var SLIDE_STEP = 9, GROW_STEP = 1.05, SETTLE_ROUNDS = 26;
+
+      function settleTiles(L, proj){
+        var inner=L.inner, CELL=10;
+        var cols=Math.ceil(inner.w/CELL)+1, rows=Math.ceil(inner.h/CELL)+1;
+        var busy=new Uint8Array(cols*rows);
+
+        function markRect(x,y,w,h){
+          var c0=Math.floor((x-inner.x)/CELL), c1=Math.floor((x+w-inner.x)/CELL);
+          var r0=Math.floor((y-inner.y)/CELL), r1=Math.floor((y+h-inner.y)/CELL);
+          for(var r=Math.max(0,r0); r<=Math.min(rows-1,r1); r++)
+            for(var c=Math.max(0,c0); c<=Math.min(cols-1,c1); c++) busy[r*cols+c]=1;
+        }
+        function markPt(x,y,pad){ markRect(x-pad,y-pad,2*pad,2*pad); }
+
+        // Le tracé, échantillonné assez fin pour ne pas laisser de trou entre
+        // deux points projetés.
+        tracks.forEach(function(t){
+          var prev=null;
+          t.pts.forEach(function(p){
+            var q=proj(p.lat,p.lon);
+            if(prev){
+              var dx=q[0]-prev[0], dy=q[1]-prev[1], d=Math.sqrt(dx*dx+dy*dy);
+              var steps=Math.min(60, Math.ceil(d/(CELL*0.8)));
+              for(var i=1;i<steps;i++) markPt(prev[0]+dx*i/steps, prev[1]+dy*i/steps, TRACE_PAD);
+            }
+            markPt(q[0],q[1],TRACE_PAD);
+            prev=q;
+          });
+        });
+        // Les points d'étape et les raccords entre étapes sans trace
+        var prevPt=null;
+        STAGES.forEach(function(s,i){
+          if(s.lat==null||s.lon==null){ prevPt=null; return; }
+          var p=proj(s.lat,s.lon);
+          markPt(p[0],p[1],TRACE_PAD+10);
+          if(prevPt && !(tracks[i] && tracks[i].pts.length>1)){
+            var dx=p[0]-prevPt[0], dy=p[1]-prevPt[1], d=Math.sqrt(dx*dx+dy*dy);
+            var steps=Math.ceil(d/(CELL*0.8));
+            for(var k=1;k<steps;k++) markPt(prevPt[0]+dx*k/steps, prevPt[1]+dy*k/steps, TRACE_PAD);
+          }
+          prevPt=p;
+        });
+        if(L.legend) markRect(L.legend.x-8, L.legend.y-8, L.legend.w+16, L.legend.h+16);
+
+        function freeCells(x,y,w,h){
+          if(x<inner.x-0.5 || y<inner.y-0.5 ||
+             x+w>inner.x+inner.w+0.5 || y+h>inner.y+inner.h+0.5) return false;
+          var c0=Math.floor((x-inner.x)/CELL), c1=Math.floor((x+w-inner.x)/CELL);
+          var r0=Math.floor((y-inner.y)/CELL), r1=Math.floor((y+h-inner.y)/CELL);
+          for(var r=Math.max(0,r0); r<=Math.min(rows-1,r1); r++)
+            for(var c=Math.max(0,c0); c<=Math.min(cols-1,c1); c++) if(busy[r*cols+c]) return false;
+          return true;
+        }
+        var slots=L.slots;
+        function freeOfTiles(x,y,w,h,self){
+          for(var i=0;i<slots.length;i++){
+            var s=slots[i];
+            if(s===self) continue;
+            if(x < s.x+s.w+TILE_GAP && x+w+TILE_GAP > s.x &&
+               y < s.y+s.h+TILE_GAP && y+h+TILE_GAP > s.y) return false;
+          }
+          return true;
+        }
+        function fits(x,y,w,h,self){ return freeCells(x,y,w,h) && freeOfTiles(x,y,w,h,self); }
+
+        // 1) Avancer vers la carte, tour par tour pour que toutes progressent
+        //    ensemble plutôt qu'une seule très loin.
+        var dir={ t:[0,1], b:[0,-1], l:[1,0], r:[-1,0] };
+        var moved=true, round=0;
+        while(moved && round++<SETTLE_ROUNDS){
+          moved=false;
+          slots.forEach(function(s){
+            var d=dir[s.side]||[0,0];
+            var nx=s.x+d[0]*SLIDE_STEP, ny=s.y+d[1]*SLIDE_STEP;
+            if(fits(nx,ny,s.w,s.h,s)){ s.x=nx; s.y=ny; moved=true; }
+          });
+        }
+
+        // 2) Grandir, par petits pas et pour toutes à la fois : les vignettes
+        //    restent de tailles comparables au lieu qu'une seule dévore la place.
+        slots.forEach(function(s){ s.grow=1; });
+        var grew=true; round=0;
+        while(grew && round++<SETTLE_ROUNDS){
+          grew=false;
+          slots.forEach(function(s){
+            if(s.grow>=GROW_MAX) return;
+            var w=s.w*GROW_STEP, h=s.h*GROW_STEP;
+            // On garde le bord extérieur en place : la vignette grandit vers la
+            // carte et de part et d'autre, jamais vers le bord de la feuille.
+            var x=s.x-(w-s.w)/2, y=s.y-(h-s.h)/2;
+            if(s.side==='t') y=s.y; else if(s.side==='b') y=s.y-(h-s.h);
+            if(s.side==='l') x=s.x; else if(s.side==='r') x=s.x-(w-s.w);
+            if(!fits(x,y,w,h,s)) return;
+            s.x=x; s.y=y; s.w=w; s.h=h; s.grow*=GROW_STEP; grew=true;
+          });
+        }
+
+        // Le fil repart du bord tourné vers la carte, à la position définitive.
+        slots.forEach(function(s){
+          if(s.side==='t'){ s.ax=s.x+s.w/2; s.ay=s.y+s.h; }
+          else if(s.side==='b'){ s.ax=s.x+s.w/2; s.ay=s.y; }
+          else if(s.side==='l'){ s.ax=s.x+s.w; s.ay=s.y+s.h/2; }
+          else { s.ax=s.x; s.ay=s.y+s.h/2; }
+        });
       }
 
       function tripTotals(){
@@ -827,7 +951,7 @@ function renderAffiche(stages, isStrictAdmin = false) {
           g.strokeStyle='#fff'; g.lineWidth=first||last?3:2; g.stroke();
         });
 
-        drawLegend(g,L,view);
+        drawLegend(g,L);
 
         g.restore();
         g.strokeStyle=C.rule; g.lineWidth=1.5;
@@ -973,19 +1097,26 @@ function renderAffiche(stages, isStrictAdmin = false) {
       }
 
       // Échelle kilométrique + nuancier d'altitude, dans un coin de la carte
-      function drawLegend(g,L,view){
+      // Position et taille de la légende, calculées avant tout dessin : les
+      // vignettes doivent savoir où elle se trouve pour ne pas s'y poser.
+      function legendGeom(L, view){
         var map=L.map, safe=L.safe;
+        if(safe.w<300 || safe.h<200) return null;   // zone libre trop petite
         var latC=(view.north+view.south)/2;
         var mPerPx=(view.east-view.west)*Math.PI/180*6378137*Math.cos(latC*Math.PI/180)/map.w;
-        if(safe.w<300 || safe.h<200) return;   // zone libre trop petite pour une légende
         var want=Math.max(90, Math.min(170, safe.w*0.22));
         var CANDS=[1,2,5,10,20,50,100,200,500,1000,2000,5000];
         var kmBar=CANDS[CANDS.length-1];
         for(var i=0;i<CANDS.length;i++){ if(CANDS[i]*1000/mPerPx>=want){ kmBar=CANDS[i]; break; } }
         var barPx=kmBar*1000/mPerPx;
-
         var boxW=Math.max(200, barPx+40), boxH=relief?128:78;
-        var x=safe.x+14, y=safe.y+safe.h-boxH-14;
+        return { x:safe.x+14, y:safe.y+safe.h-boxH-14, w:boxW, h:boxH, kmBar:kmBar, barPx:barPx };
+      }
+
+      function drawLegend(g,L){
+        var box=L.legend;
+        if(!box) return;
+        var x=box.x, y=box.y, boxW=box.w, boxH=box.h, kmBar=box.kmBar, barPx=box.barPx;
 
         g.save();
         roundRect(g,x,y,boxW,boxH,12);
@@ -1228,7 +1359,7 @@ function renderAffiche(stages, isStrictAdmin = false) {
 
         // Photos : réduites au double de la vignette, pour rester nettes à
         // l'export 300 dpi sans garder les originaux en mémoire.
-        var want=Math.min(760, Math.round(L.tile.w*2));
+        var want=Math.min(860, Math.round(L.tile.w*2*GROW_MAX));
         var need=pickStages(L.slots.length).map(function(s){ return s.photo; })
                   .filter(function(u){ return u && !(imgs[u] && imgs[u].want>=want*0.98) && imgs[u]!==null; });
         if(need.length){
