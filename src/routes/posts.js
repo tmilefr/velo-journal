@@ -67,15 +67,16 @@ router.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', ma
 
   const posts = readPosts();
 
-  // Train : distance déduite de la trace, ou du saut depuis la position
-  // précédente. La valeur saisie, si elle existe, reste prioritaire.
+  // Train : distance mesurée sur la trace, à défaut entre les deux gares
+  // saisies, à défaut depuis la position précédente. La valeur saisie, si elle
+  // existe, reste prioritaire.
+  const stops = parseTrainStops(req.body, isTrainTransfer);
   const trip = computeTrainTrip({
     isTransfer: isTrainTransfer, manualKm: trainKm, gpxKm,
-    posts, dateISO: finalDate, lat: finalLat, lon: finalLon,
+    posts, dateISO: finalDate, lat: finalLat, lon: finalLon, stops,
   });
   // Gares saisies par l'auteur ; à défaut, on nomme le trajet avec l'étape
   // précédente et le lieu d'arrivée.
-  const stops = parseTrainStops(req.body, isTrainTransfer);
   const finalTrainLabel = trainLabelFromStops(stops.from || postPlace(trip.from), stops.to || location);
 
   // Pays / région : correction saisie à la main ou libellé du lieu. La
@@ -106,6 +107,12 @@ router.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', ma
     trainLabel:    finalTrainLabel,
     trainFrom:     stops.from,
     trainTo:       stops.to,
+    // Coordonnées des gares : elles servent à mesurer le trajet, et à le
+    // remesurer à l'identique quand l'étape est rouverte.
+    trainFromLat:  stops.fromLat,
+    trainFromLon:  stops.fromLon,
+    trainToLat:    stops.toLat,
+    trainToLon:    stops.toLon,
     country:     geo.country,
     region:      geo.region,
     countryCode: geo.countryCode,
@@ -224,13 +231,14 @@ router.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos'
     if (track) gpxKm = track.totalKm;
   }
 
-  // Train : distance déduite de la trace ou du saut depuis la position
-  // précédente, sauf si une valeur a été saisie.
+  // Train : distance mesurée sur la trace, à défaut entre les deux gares
+  // saisies, à défaut depuis la position précédente ; sauf si une valeur a
+  // été saisie.
+  const stops = parseTrainStops(req.body, isTrainTransfer);
   const trip = computeTrainTrip({
     isTransfer: isTrainTransfer, manualKm: trainKm, gpxKm,
-    posts, dateISO: finalDate, lat: finalLat, lon: finalLon, excludeId: req.params.id,
+    posts, dateISO: finalDate, lat: finalLat, lon: finalLon, excludeId: req.params.id, stops,
   });
-  const stops = parseTrainStops(req.body, isTrainTransfer);
   const finalTrainLabel = trainLabelFromStops(stops.from || postPlace(trip.from), stops.to || location);
 
   // Pays / région : correction saisie à la main ou libellé du lieu ; la
@@ -257,6 +265,12 @@ router.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos'
     trainLabel:    finalTrainLabel,
     trainFrom:     stops.from,
     trainTo:       stops.to,
+    // Coordonnées des gares : elles servent à mesurer le trajet, et à le
+    // remesurer à l'identique quand l'étape est rouverte.
+    trainFromLat:  stops.fromLat,
+    trainFromLon:  stops.fromLon,
+    trainToLat:    stops.toLat,
+    trainToLon:    stops.toLon,
     country:     geo.country,
     region:      geo.region,
     countryCode: geo.countryCode,
@@ -333,6 +347,70 @@ router.post('/recalc-distances', requireAuth, requireCsrf, async (req, res) => {
   }
   writePosts(posts);
   res.redirect(`/settings/recalc?recalc=${updated}&scanned=${scanned}&errors=${errors}`);
+});
+
+// Répartition par région d'un transfert dont la distance vient de changer :
+// les régions traversées, elles, n'ont pas bougé. On garde donc leurs
+// proportions pour le train, et on rattache les kilomètres roulés du jour à
+// l'arrivée — la même règle que computePostGeo, sans appel réseau.
+function rescaleTrainBreakdown(breakdown, newTrainKm, bikeKm) {
+  const parts = Array.isArray(breakdown) ? breakdown : [];
+  if (!parts.length) return breakdown;
+  const r1    = n => Math.round(n * 10) / 10;
+  const oldKm = parts.reduce((s, b) => s + (parseFloat(b.trainKm) || 0), 0);
+  return parts.map((b, i) => ({
+    ...b,
+    // Faute de répartition antérieure (trajet passé à 0 km), tout revient à
+    // l'arrivée : c'est le seul point dont on soit sûr.
+    trainKm: oldKm > 0
+      ? r1((parseFloat(b.trainKm) || 0) / oldKm * newTrainKm)
+      : (i === parts.length - 1 ? r1(newTrainKm) : 0),
+    km: i === parts.length - 1 ? r1(bikeKm) : 0,
+  }));
+}
+
+// ── Admin : recalculer les distances des trajets en train ──
+// Reprend chaque transfert ferroviaire avec le calcul courant : trace GPX du
+// trajet, à défaut estimation entre les deux gares, à défaut depuis l'étape
+// précédente. Les distances saisies à la main ne sont pas touchées — elles
+// font toujours foi. Aucun appel réseau : tout se lit dans le carnet.
+router.post('/recalc-train', requireAuth, requireCsrf, (req, res) => {
+  const posts = readPosts();
+  let scanned = 0, updated = 0, errors = 0;
+  for (let i = 0; i < posts.length; i++) {
+    const post = posts[i];
+    if (!post.trainTransfer) continue;
+    scanned++;
+    if (post.trainKmSource === 'manual') continue;
+
+    let gpxKm = 0;
+    if (post.gpx) {
+      const abs = path.join(PUBLIC_DIR, post.gpx);
+      if (fs.existsSync(abs)) {
+        const track = parseGpxTrack(abs);
+        if (track) gpxKm = track.totalKm; else errors++;
+      } else errors++;
+    }
+    const trip = computeTrainTrip({
+      isTransfer: true, manualKm: 0, gpxKm,
+      posts, dateISO: post.date, lat: post.lat, lon: post.lon, excludeId: post.id,
+      stops: {
+        fromLat: post.trainFromLat, fromLon: post.trainFromLon,
+        toLat:   post.trainToLat,   toLon:   post.trainToLon,
+      },
+    });
+    if (trip.km !== post.trainKm || trip.source !== post.trainKmSource) {
+      posts[i] = {
+        ...post,
+        trainKm: trip.km,
+        trainKmSource: trip.source,
+        geoBreakdown: rescaleTrainBreakdown(post.geoBreakdown, trip.km, parseFloat(post.km) || 0),
+      };
+      updated++;
+    }
+  }
+  writePosts(posts);
+  res.redirect(`/settings/recalc?train=${updated}&trainScanned=${scanned}&trainErrors=${errors}`);
 });
 
 // ── Admin : détecter les pays et régions traversés ──

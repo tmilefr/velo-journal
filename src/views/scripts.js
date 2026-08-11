@@ -64,8 +64,6 @@ function initLocAutocomplete(fieldId, latId, lonId, suggestId, opts) {
   function pick(i) {
     var item = items[i];
     field.value = item.display;
-    // Certains champs (gares de départ / d'arrivée) ne servent qu'à nommer un
-    // trajet : ils n'ont pas de coordonnées à renseigner.
     var latEl = latId && document.getElementById(latId), lonEl = lonId && document.getElementById(lonId);
     if (latEl && lonEl) {
       setCoord(latEl, parseFloat(item.lat).toFixed(6));
@@ -181,6 +179,23 @@ function initRevealToggle(checkboxId, panelId, focusId) {
   // Le focus ne suit que le clic de l'auteur, pas une restauration de brouillon.
   box.addEventListener('change', function(e) { sync(!!(e && e.isTrusted)); });
   sync(false);
+}
+// ── Gare de départ / d'arrivée d'un trajet en train ────────
+// Le nom nomme le trajet, la position choisie dans la liste en donne la
+// distance. Les deux vont ensemble : dès que l'auteur retouche le texte à la
+// main, les coordonnées ne correspondent plus à ce qui est écrit, on les
+// oublie (la suggestion suivante les repose). Le serveur retombe alors sur la
+// position de l'étape précédente.
+function initStationField(fieldId, latId, lonId, suggestId) {
+  initLocAutocomplete(fieldId, latId, lonId, suggestId);
+  var field = document.getElementById(fieldId);
+  if (!field) return;
+  // pick() écrit field.value directement : aucun événement « input » n'est
+  // émis, la sélection d'une suggestion ne se vide donc pas elle-même.
+  field.addEventListener('input', function() {
+    setCoord(document.getElementById(latId), '');
+    setCoord(document.getElementById(lonId), '');
+  });
 }
 // Puces de recherche rapide : remplissent le champ et lancent l'autocomplete.
 function initQuickChips(containerId, fieldId) {

@@ -231,18 +231,25 @@ async function computePostGeo(post) {
 
   // La trace peut différer du kilométrage retenu pour l'étape (valeur saisie,
   // trace partielle…) : on répartit la distance réelle au prorata des tronçons.
-  const trackKm  = segments.reduce((s, seg) => s + seg.km, 0) || 1;
-  const rideKm   = isTrain ? 0 : bikeKm;
-  const railKm   = isTrain ? (trainKm || bikeKm) : 0;
-  const breakdown = segments.map(seg => ({
-    country:     seg.country,
-    region:      seg.region || UNKNOWN_REGION,
-    countryCode: seg.countryCode || '',
-    km:      Math.round(rideKm * (seg.km / trackKm) * 10) / 10,
-    trainKm: Math.round(railKm * (seg.km / trackKm) * 10) / 10,
-  }));
-  // Un train pris en cours d'étape (sans trace dédiée) est rattaché à l'arrivée.
-  if (!isTrain && trainKm > 0) breakdown[breakdown.length - 1].trainKm += trainKm;
+  // Sur un transfert, la trace est celle du train : ce sont les kilomètres de
+  // train qui la suivent, et inversement. Les deux compteurs coexistent — un
+  // jour de train peut aussi avoir été roulé (rejoindre la gare, en repartir).
+  const trackKm = segments.reduce((s, seg) => s + seg.km, 0) || 1;
+  const breakdown = segments.map(seg => {
+    const share = seg.km / trackKm;
+    return {
+      country:     seg.country,
+      region:      seg.region || UNKNOWN_REGION,
+      countryCode: seg.countryCode || '',
+      km:      isTrain ? 0 : Math.round(bikeKm  * share * 10) / 10,
+      trainKm: isTrain ? Math.round(trainKm * share * 10) / 10 : 0,
+    };
+  });
+  // Ce que la trace ne mesure pas est rattaché à l'arrivée : le train pris en
+  // cours d'étape, ou les kilomètres roulés autour d'un transfert.
+  const arrival = breakdown[breakdown.length - 1];
+  if (isTrain && bikeKm  > 0) arrival.km      += bikeKm;
+  if (!isTrain && trainKm > 0) arrival.trainKm += trainKm;
 
   const main = breakdown.reduce((a, b) => ((b.km + b.trainKm) > (a.km + a.trainKm) ? b : a));
   return {

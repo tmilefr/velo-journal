@@ -3,7 +3,11 @@ const { formatDateShort, formatMonthLabel } = require('../lib/dates');
 const { esc } = require('../lib/html');
 const { totalKm, distanceByMonth, computeStats, trainStats, travelTotals, distanceByCountry } = require('../services/stats');
 const { flagEmoji } = require('../services/geo');
+const { RAIL_DETOUR } = require('../services/train');
 const { CSS, TOGGLE_SCRIPT, renderHeader } = require('./layout');
+
+// Majoration appliquée aux distances de train estimées, telle qu'on l'annonce.
+const RAIL_EXTRA_PCT = Math.round((RAIL_DETOUR - 1) * 100);
 
 // ══════════════════════════════════════════════════════════
 //  renderStats — distances, dénivelé, train, pays.
@@ -12,9 +16,10 @@ const { CSS, TOGGLE_SCRIPT, renderHeader } = require('./layout');
 
 // Comment la distance d'un trajet en train a été obtenue.
 const TRAIN_SOURCE_TAG = {
-  gpx:    ' <span class="geo-tag" title="Mesuré sur la trace GPX du trajet">trace</span>',
-  points: ' <span class="geo-tag" title="Distance à vol d\'oiseau entre le départ et l\'arrivée">↗ à vol d\'oiseau</span>',
-  manual: ' <span class="geo-tag" title="Distance saisie à la main">saisi</span>',
+  gpx:      ' <span class="geo-tag" title="Mesuré sur la trace GPX du trajet">trace</span>',
+  stations: ' <span class="geo-tag" title="Estimé entre les deux gares du trajet">≈ entre gares</span>',
+  points:   ' <span class="geo-tag" title="Estimé depuis la position de l\'étape précédente">≈ estimé</span>',
+  manual:   ' <span class="geo-tag" title="Distance saisie à la main">saisi</span>',
 };
 
 function renderStats(posts, isAdmin = false) {
@@ -43,7 +48,7 @@ function renderStats(posts, isAdmin = false) {
             <span class="train-row-km">${fr1(t.km)} km</span>
           </div>`;
         }).join('')}
-        <div class="geo-sub" style="margin:10px 0 0">🚆 Distances mesurées sur la trace GPX du trajet, ou à vol d'oiseau (↗) entre les positions de départ et d'arrivée. Elles ne comptent pas comme jours roulés : elles s'ajoutent seulement au trajet total parcouru.</div>
+        <div class="geo-sub" style="margin:10px 0 0">🚆 Distances mesurées sur la trace GPX du trajet, ou estimées (≈) entre les positions de départ et d'arrivée — une voie ferrée ne va pas tout droit, l'estimation majore donc le vol d'oiseau de ${RAIL_EXTRA_PCT} %. Elles ne comptent pas comme jours roulés : elles s'ajoutent seulement au trajet total parcouru.</div>
       </div>`;
 
   // ── Kilométrage par pays, puis par région ────────────────
