@@ -1,7 +1,7 @@
 const { nowDatetimeLocal } = require('../lib/dates');
 const { esc } = require('../lib/html');
 const { CSS, renderHeader } = require('./layout');
-const { FORM_SCRIPTS, richEditorHtml } = require('./scripts');
+const { FORM_SCRIPTS, richEditorHtml, sleepFieldsHtml, sleepFieldsInit } = require('./scripts');
 
 // ══════════════════════════════════════════════════════════
 //  renderPostForm
@@ -64,7 +64,7 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
           <div class="field">
             <label>Date de fin <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— étape sur plusieurs jours (optionnel)</span></label>
             <input type="date" name="endDate">
-            <div style="font-size:12px;color:var(--ink-light);margin-top:6px;line-height:1.5">📅 Laissez vide pour une étape d'un seul jour. Si vous ajoutez une trace GPX, les jours en plus sont comptés comme <strong>repos</strong> (non roulés).</div>
+            <div class="field-hint">📅 Laissez vide pour une étape d'un seul jour. Si vous ajoutez une trace GPX, les jours en plus sont comptés comme <strong>repos</strong> (non roulés).</div>
           </div>
           <div class="field">
             <label>Lieu d'arrivée</label>
@@ -76,54 +76,40 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
             <input type="hidden" name="lon" id="lon">
             <button type="button" class="loc-search-btn" id="gpsBtnPost">📍 GPS auto</button>
           </div>
-          <div class="field">
-            <label>🛏️ Où dort-on ce soir ?</label>
-            <div class="loc-wrap">
-              <input name="sleepLocation" id="sleepLocationField" type="text" placeholder="Cherchez un camping, un hôtel, un lieu..." autocomplete="off" maxlength="120">
-              <div class="loc-suggestions" id="sleepLocSuggestions"></div>
-            </div>
-            <input type="hidden" name="sleepLat" id="sleepLat">
-            <input type="hidden" name="sleepLon" id="sleepLon">
-            <button type="button" class="loc-search-btn" id="gpsBtnSleepPost">📍 GPS auto</button>
-            <div style="font-size:12px;color:var(--ink-light);margin-top:6px;line-height:1.5">🛏️ Choisissez un résultat de la recherche pour placer le couchage sur la carte avec son propre marqueur.</div>
-          </div>
-          <div class="field">
-            <label>Commentaire sur le couchage</label>
-            <textarea name="sleepComment" placeholder="Accueil, confort, prix, douche chaude, voisins bruyants…" maxlength="800" style="min-height:80px"></textarea>
-            <div style="font-size:12px;color:var(--ink-light);margin-top:6px;line-height:1.5">💬 Le commentaire s'ouvre dans une fenêtre au clic sur le couchage, en fin de post.</div>
-          </div>
+          ${sleepFieldsHtml(null, 'gpsBtnSleepPost')}
           <div class="field-row">
             <div class="field"><label>Km du jour</label><input name="km" type="number" min="0" max="500" step="0.1"></div>
             <div class="field"><label>D+ (mètres)</label><input name="dplus" type="number" min="0" max="10000"></div>
           </div>
           <div class="field">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;font-size:13px;font-weight:500;letter-spacing:0">
-              <input type="checkbox" name="trainTransfer" value="1" id="trainTransferPost" style="accent-color:var(--teal)">
+            <label class="check-line">
+              <input type="checkbox" name="trainTransfer" value="1" id="trainTransferPost">
               🚆 Ce déplacement s'est fait en train
             </label>
-            <div style="font-size:12px;color:var(--ink-light);margin-top:6px;line-height:1.5">La distance se calcule toute seule : longueur de la trace GPX si vous en joignez une, sinon écart à vol d'oiseau depuis la position de l'étape précédente. Ces kilomètres n'entrent ni dans les km roulés ni dans les moyennes, mais s'ajoutent au <strong>trajet total parcouru</strong>.</div>
-          </div>
-          <div class="field-row">
-            <div class="field"><label>Km en train <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, calculé</span></label><input name="trainKm" type="number" min="0" max="5000" step="0.1"></div>
-          </div>
-          <div id="trainStopsPost" style="display:none">
-            <div class="field-row">
+            <div class="field-hint">La distance se calcule toute seule : longueur de la trace GPX si vous en joignez une, sinon écart à vol d'oiseau depuis la position de l'étape précédente. Ces kilomètres n'entrent ni dans les km roulés ni dans les moyennes, mais s'ajoutent au <strong>trajet total parcouru</strong>.</div>
+            <div class="reveal-panel" id="trainStopsPost" hidden>
               <div class="field">
-                <label>🚉 Départ <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, déduit</span></label>
-                <div class="loc-wrap">
-                  <input name="trainFrom" id="trainFromField" type="text" placeholder="Ex : Lyon" autocomplete="off" maxlength="120">
-                  <div class="loc-suggestions" id="trainFromSuggestions"></div>
+                <label>Km en train <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, calculé</span></label>
+                <input name="trainKm" type="number" min="0" max="5000" step="0.1">
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>🚉 Départ <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, déduit</span></label>
+                  <div class="loc-wrap">
+                    <input name="trainFrom" id="trainFromField" type="text" placeholder="Ex : Lyon" autocomplete="off" maxlength="120">
+                    <div class="loc-suggestions" id="trainFromSuggestions"></div>
+                  </div>
+                </div>
+                <div class="field">
+                  <label>🚉 Arrivée <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, déduit</span></label>
+                  <div class="loc-wrap">
+                    <input name="trainTo" id="trainToField" type="text" placeholder="Ex : Turin" autocomplete="off" maxlength="120">
+                    <div class="loc-suggestions" id="trainToSuggestions"></div>
+                  </div>
                 </div>
               </div>
-              <div class="field">
-                <label>🚉 Arrivée <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, déduit</span></label>
-                <div class="loc-wrap">
-                  <input name="trainTo" id="trainToField" type="text" placeholder="Ex : Turin" autocomplete="off" maxlength="120">
-                  <div class="loc-suggestions" id="trainToSuggestions"></div>
-                </div>
-              </div>
+              <div class="field-hint" style="margin-top:0">🚆 Tapez trois lettres pour voir des suggestions de lieux. Laissez vide pour déduire le trajet de l'étape précédente et du lieu d'arrivée.</div>
             </div>
-            <div style="font-size:12px;color:var(--ink-light);margin-top:-8px;margin-bottom:16px;line-height:1.5">🚆 Tapez trois lettres pour voir des suggestions de lieux. Laissez vide pour déduire le trajet de l'étape précédente et du lieu d'arrivée.</div>
           </div>
           <details style="margin-bottom:16px">
             <summary style="font-size:12px;color:var(--ink-light);cursor:pointer">🌍 Pays et région — détectés automatiquement, cliquez pour corriger</summary>
@@ -133,7 +119,7 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
             </div>
             <input type="hidden" name="countryCode" id="countryCodeField">
             <input type="hidden" name="geoManual" id="geoManualField" value="0">
-            <div style="font-size:12px;color:var(--ink-light);line-height:1.5">Les pays et régions traversés sont déduits de la trace GPX (découpée frontière par frontière) ou des coordonnées de l'étape, juste après la publication. Ne remplissez ces champs que pour forcer une valeur : elle ne sera plus recalculée.</div>
+            <div class="field-hint">Les pays et régions traversés sont déduits de la trace GPX (découpée frontière par frontière) ou des coordonnées de l'étape, juste après la publication. Ne remplissez ces champs que pour forcer une valeur : elle ne sera plus recalculée.</div>
           </details>
           <div class="field">
             <label>Trace GPX (optionnel)</label>
@@ -188,14 +174,12 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
         var geoFields = { countryId: 'countryField', regionId: 'regionField', codeId: 'countryCodeField', manualId: 'geoManualField' };
         watchGeoOverride(geoFields);
         initLocAutocomplete('locationField', 'lat', 'lon', 'locSuggestions', { geo: geoFields });
-        initLocAutocomplete('sleepLocationField', 'sleepLat', 'sleepLon', 'sleepLocSuggestions', { poi: true });
-        initTrainToggle('trainTransferPost', 'trainStopsPost');
+        initRevealToggle('trainTransferPost', 'trainStopsPost', 'trainFromField');
         initLocAutocomplete('trainFromField', null, null, 'trainFromSuggestions');
         initLocAutocomplete('trainToField', null, null, 'trainToSuggestions');
         var btn = document.getElementById('gpsBtnPost');
         if (btn) btn.addEventListener('click', function() { getGPS('locationField', 'lat', 'lon', geoFields); });
-        var sleepBtn = document.getElementById('gpsBtnSleepPost');
-        if (sleepBtn) sleepBtn.addEventListener('click', function() { getGPS('sleepLocationField', 'sleepLat', 'sleepLon'); });
+${sleepFieldsInit('gpsBtnSleepPost')}
         initExpenses('expList', 'expAddBtn', 'expTotal', []);
         initUploadProgress('postForm', 'draft_post', 'bodyHidden');
         restoreDraft('draft_post', 'postForm', 'bodyEditor', 'bodyHidden');

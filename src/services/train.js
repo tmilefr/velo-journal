@@ -20,9 +20,12 @@ function previousLocatedPost(posts, dateISO, excludeId) {
 // Renvoie { km, source, from } — `from` est l'étape de départ retenue, pour
 // pouvoir nommer le trajet.
 function computeTrainTrip({ isTransfer, manualKm, gpxKm, posts, dateISO, lat, lon, excludeId }) {
+  // La case fait foi : les champs du bloc replié (kilométrage, gares) ne
+  // comptent pas, sinon une saisie abandonnée créerait un trajet fantôme.
+  if (!isTransfer) return { km: 0, source: '', from: null };
+
   const typed = Math.max(0, parseFloat(manualKm) || 0);
   if (typed > 0) return { km: typed, source: 'manual', from: null };
-  if (!isTransfer) return { km: 0, source: '', from: null };
 
   if (gpxKm > 0) return { km: Math.round(gpxKm * 10) / 10, source: 'gpx', from: null };
 
@@ -52,6 +55,16 @@ function postPlace(post) {
   return (post && (post.location || post.title) || '').trim();
 }
 
+// Gares saisies dans le bloc « déplacement en train ». Case décochée, le bloc
+// est replié : ce qui y traîne encore n'est pas repris.
+function parseTrainStops(body, isTransfer) {
+  if (!isTransfer) return { from: '', to: '' };
+  return {
+    from: (body.trainFrom || '').toString().trim().substring(0, 120),
+    to:   (body.trainTo   || '').toString().trim().substring(0, 120),
+  };
+}
+
 // Ancien format : le trajet était saisi d'un seul tenant (« Lyon → Turin »).
 // Sert à pré-remplir les champs départ / arrivée des étapes déjà publiées.
 function splitTrainLabel(label) {
@@ -59,4 +72,4 @@ function splitTrainLabel(label) {
   return { from: (parts[0] || '').trim(), to: (parts[1] || '').trim() };
 }
 
-module.exports = { previousLocatedPost, computeTrainTrip, trainLabelFromStops, postPlace, splitTrainLabel };
+module.exports = { previousLocatedPost, computeTrainTrip, trainLabelFromStops, parseTrainStops, postPlace, splitTrainLabel };

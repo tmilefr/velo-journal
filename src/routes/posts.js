@@ -11,7 +11,7 @@ const { parseExpenses } = require('../services/expenses');
 const { parseSleep } = require('../services/sleep');
 const { parseGpxStats, parseGpxTrack } = require('../services/gpx');
 const { initialPostGeo, enrichPostGeo, startGeoBackfill } = require('../services/geo');
-const { computeTrainTrip, trainLabelFromStops, postPlace } = require('../services/train');
+const { computeTrainTrip, trainLabelFromStops, parseTrainStops, postPlace } = require('../services/train');
 const { resizeUploadedImages, deletePostFiles, pickCover } = require('../services/media');
 const { maybeNotifyNewPost, siteBaseUrl } = require('../services/mailer');
 const { upload } = require('../middleware/upload');
@@ -30,7 +30,7 @@ router.get('/post', requireAuth, (req, res) => {
 });
 
 router.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', maxCount:10},{name:'gpx', maxCount:1}]), async (req, res) => {
-  const { title, body, location, lat, lon, km, dplus, trainKm, trainFrom, trainTo, country, region, countryCode,
+  const { title, body, location, lat, lon, km, dplus, trainKm, country, region, countryCode,
           author, visibility, postDate, endDate, type, privateNote } = req.body;
   if (!title?.trim() || !body?.trim()) {
     return res.send(renderPostForm('Titre et texte obligatoires.', '', !!req.session.margot, csrfToken(req)));
@@ -75,10 +75,7 @@ router.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', ma
   });
   // Gares saisies par l'auteur ; à défaut, on nomme le trajet avec l'étape
   // précédente et le lieu d'arrivée.
-  const stops = {
-    from: (trainFrom || '').toString().trim().substring(0, 120),
-    to:   (trainTo   || '').toString().trim().substring(0, 120),
-  };
+  const stops = parseTrainStops(req.body, isTrainTransfer);
   const finalTrainLabel = trainLabelFromStops(stops.from || postPlace(trip.from), stops.to || location);
 
   // Pays / région : correction saisie à la main ou libellé du lieu. La
@@ -153,7 +150,7 @@ router.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos'
   const posts = readPosts();
   const idx   = posts.findIndex(p => p.id === req.params.id);
   if (idx === -1) return res.status(404).send('Étape introuvable');
-  const { title, body, location, lat, lon, km, dplus, trainKm, trainFrom, trainTo, country, region, countryCode,
+  const { title, body, location, lat, lon, km, dplus, trainKm, country, region, countryCode,
           visibility, postDate, endDate, privateNote } = req.body;
   if (!title?.trim() || !body?.trim()) {
     return res.send(renderEditForm(posts[idx], 'Titre et texte obligatoires.', !!req.session.margot, csrfToken(req)));
@@ -233,10 +230,7 @@ router.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos'
     isTransfer: isTrainTransfer, manualKm: trainKm, gpxKm,
     posts, dateISO: finalDate, lat: finalLat, lon: finalLon, excludeId: req.params.id,
   });
-  const stops = {
-    from: (trainFrom || '').toString().trim().substring(0, 120),
-    to:   (trainTo   || '').toString().trim().substring(0, 120),
-  };
+  const stops = parseTrainStops(req.body, isTrainTransfer);
   const finalTrainLabel = trainLabelFromStops(stops.from || postPlace(trip.from), stops.to || location);
 
   // Pays / région : correction saisie à la main ou libellé du lieu ; la

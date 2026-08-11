@@ -3,7 +3,7 @@ const { esc } = require('../lib/html');
 const { isVideoUrl, pickCover } = require('../services/media');
 const { splitTrainLabel } = require('../services/train');
 const { CSS, renderHeader } = require('./layout');
-const { FORM_SCRIPTS, richEditorHtml } = require('./scripts');
+const { FORM_SCRIPTS, richEditorHtml, sleepFieldsHtml, sleepFieldsInit } = require('./scripts');
 
 // ══════════════════════════════════════════════════════════
 //  renderEditForm
@@ -110,7 +110,7 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
           <div class="field">
             <label>Date de fin <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— étape sur plusieurs jours (optionnel)</span></label>
             <input type="date" name="endDate" value="${isoToDateInput(post.endDate)}">
-            <div style="font-size:12px;color:var(--ink-light);margin-top:6px;line-height:1.5">📅 Laissez vide pour une étape d'un seul jour. Les jours en plus (au-delà de la trace GPX / du kilométrage) sont comptés comme <strong>repos</strong>.</div>
+            <div class="field-hint">📅 Laissez vide pour une étape d'un seul jour. Les jours en plus (au-delà de la trace GPX / du kilométrage) sont comptés comme <strong>repos</strong>.</div>
           </div>
           <div class="field">
             <label>Lieu</label>
@@ -122,54 +122,40 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
             <input type="hidden" name="lon" id="lon" value="${post.lon||''}">
             <button type="button" class="loc-search-btn" id="gpsBtnEdit">📍 GPS auto</button>
           </div>
-          <div class="field">
-            <label>🛏️ Où dort-on ce soir ?</label>
-            <div class="loc-wrap">
-              <input name="sleepLocation" id="sleepLocationField" type="text" value="${esc(sleep.label)}" placeholder="Cherchez un camping, un hôtel, un lieu..." autocomplete="off" maxlength="120">
-              <div class="loc-suggestions" id="sleepLocSuggestions"></div>
-            </div>
-            <input type="hidden" name="sleepLat" id="sleepLat" value="${sleep.lat != null ? sleep.lat : ''}">
-            <input type="hidden" name="sleepLon" id="sleepLon" value="${sleep.lon != null ? sleep.lon : ''}">
-            <button type="button" class="loc-search-btn" id="gpsBtnSleepEdit">📍 GPS auto</button>
-            <div style="font-size:12px;color:var(--ink-light);margin-top:6px;line-height:1.5">🛏️ Choisissez un résultat de la recherche pour placer le couchage sur la carte avec son propre marqueur. Videz le lieu et le commentaire pour retirer le couchage.</div>
-          </div>
-          <div class="field">
-            <label>Commentaire sur le couchage</label>
-            <textarea name="sleepComment" placeholder="Accueil, confort, prix, douche chaude, voisins bruyants…" maxlength="800" style="min-height:80px">${esc(sleep.comment)}</textarea>
-            <div style="font-size:12px;color:var(--ink-light);margin-top:6px;line-height:1.5">💬 Le commentaire s'ouvre dans une fenêtre au clic sur le couchage, en fin de post.</div>
-          </div>
+          ${sleepFieldsHtml(sleep, 'gpsBtnSleepEdit')}
           <div class="field-row">
             <div class="field"><label>Km du jour</label><input name="km" type="number" min="0" max="500" step="0.1" value="${post.km||''}"></div>
             <div class="field"><label>D+ (mètres)</label><input name="dplus" type="number" min="0" max="10000" value="${post.dplus||''}"></div>
           </div>
           <div class="field">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;font-size:13px;font-weight:500;letter-spacing:0">
-              <input type="checkbox" name="trainTransfer" value="1" id="trainTransferEdit" ${post.trainTransfer ? 'checked' : ''} style="accent-color:var(--teal)">
+            <label class="check-line">
+              <input type="checkbox" name="trainTransfer" value="1" id="trainTransferEdit" ${post.trainTransfer ? 'checked' : ''}>
               🚆 Ce déplacement s'est fait en train
             </label>
-            <div style="font-size:12px;color:var(--ink-light);margin-top:6px;line-height:1.5">Distance calculée automatiquement : longueur de la trace GPX si l'étape en a une, sinon écart à vol d'oiseau depuis la position de l'étape précédente.${trainSourceNote}</div>
-          </div>
-          <div class="field-row">
-            <div class="field"><label>Km en train <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, calculé</span></label><input name="trainKm" type="number" min="0" max="5000" step="0.1" value="${post.trainKmSource === 'manual' ? (post.trainKm || '') : ''}"></div>
-          </div>
-          <div id="trainStopsEdit" style="display:none">
-            <div class="field-row">
+            <div class="field-hint">Distance calculée automatiquement : longueur de la trace GPX si l'étape en a une, sinon écart à vol d'oiseau depuis la position de l'étape précédente.${trainSourceNote}</div>
+            <div class="reveal-panel" id="trainStopsEdit"${post.trainTransfer ? '' : ' hidden'}>
               <div class="field">
-                <label>🚉 Départ <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, déduit</span></label>
-                <div class="loc-wrap">
-                  <input name="trainFrom" id="trainFromField" type="text" placeholder="Ex : Lyon" autocomplete="off" maxlength="120" value="${esc(stops.from)}">
-                  <div class="loc-suggestions" id="trainFromSuggestions"></div>
+                <label>Km en train <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, calculé</span></label>
+                <input name="trainKm" type="number" min="0" max="5000" step="0.1" value="${post.trainKmSource === 'manual' ? (post.trainKm || '') : ''}">
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>🚉 Départ <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, déduit</span></label>
+                  <div class="loc-wrap">
+                    <input name="trainFrom" id="trainFromField" type="text" placeholder="Ex : Lyon" autocomplete="off" maxlength="120" value="${esc(stops.from)}">
+                    <div class="loc-suggestions" id="trainFromSuggestions"></div>
+                  </div>
+                </div>
+                <div class="field">
+                  <label>🚉 Arrivée <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, déduit</span></label>
+                  <div class="loc-wrap">
+                    <input name="trainTo" id="trainToField" type="text" placeholder="Ex : Turin" autocomplete="off" maxlength="120" value="${esc(stops.to)}">
+                    <div class="loc-suggestions" id="trainToSuggestions"></div>
+                  </div>
                 </div>
               </div>
-              <div class="field">
-                <label>🚉 Arrivée <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, déduit</span></label>
-                <div class="loc-wrap">
-                  <input name="trainTo" id="trainToField" type="text" placeholder="Ex : Turin" autocomplete="off" maxlength="120" value="${esc(stops.to)}">
-                  <div class="loc-suggestions" id="trainToSuggestions"></div>
-                </div>
-              </div>
+              <div class="field-hint" style="margin-top:0">🚆 Tapez trois lettres pour voir des suggestions de lieux. Laissez vide pour déduire le trajet de l'étape précédente et du lieu d'arrivée.</div>
             </div>
-            <div style="font-size:12px;color:var(--ink-light);margin-top:-8px;margin-bottom:16px;line-height:1.5">🚆 Tapez trois lettres pour voir des suggestions de lieux. Laissez vide pour déduire le trajet de l'étape précédente et du lieu d'arrivée.</div>
           </div>
           <details style="margin-bottom:16px"${(post.geoSource === 'manual') ? ' open' : ''}>
             <summary style="font-size:12px;color:var(--ink-light);cursor:pointer">🌍 Pays et région${geoDetected} — cliquez pour corriger</summary>
@@ -179,13 +165,13 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
             </div>
             <input type="hidden" name="countryCode" id="countryCodeField" value="${esc(post.countryCode||'')}">
             <input type="hidden" name="geoManual" id="geoManualField" value="${post.geoSource === 'manual' ? '1' : '0'}">
-            <div style="font-size:12px;color:var(--ink-light);line-height:1.5">${geoBreakdownNote}Videz ces champs pour laisser la détection reprendre la main ; toute valeur saisie ici est figée.</div>
+            <div class="field-hint">${geoBreakdownNote}Videz ces champs pour laisser la détection reprendre la main ; toute valeur saisie ici est figée.</div>
           </details>
           ${post.gpx ? `
           <div class="field">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;font-size:13px;font-weight:500;letter-spacing:0">
-              <input type="checkbox" name="keepGpx" value="1" checked style="accent-color:var(--teal)">
-              Conserver la trace GPX existante
+            <label class="check-line">
+              <input type="checkbox" name="keepGpx" value="1" checked>
+              🗺️ Conserver la trace GPX existante
             </label>
           </div>` : ''}
           <div class="field">
@@ -266,14 +252,12 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
         var geoFields = { countryId: 'countryField', regionId: 'regionField', codeId: 'countryCodeField', manualId: 'geoManualField' };
         watchGeoOverride(geoFields);
         initLocAutocomplete('locationField', 'lat', 'lon', 'locSuggestions', { geo: geoFields });
-        initLocAutocomplete('sleepLocationField', 'sleepLat', 'sleepLon', 'sleepLocSuggestions', { poi: true });
-        initTrainToggle('trainTransferEdit', 'trainStopsEdit');
+        initRevealToggle('trainTransferEdit', 'trainStopsEdit', 'trainFromField');
         initLocAutocomplete('trainFromField', null, null, 'trainFromSuggestions');
         initLocAutocomplete('trainToField', null, null, 'trainToSuggestions');
         var btn = document.getElementById('gpsBtnEdit');
         if (btn) btn.addEventListener('click', function() { getGPS('locationField', 'lat', 'lon', geoFields); });
-        var sleepBtn = document.getElementById('gpsBtnSleepEdit');
-        if (sleepBtn) sleepBtn.addEventListener('click', function() { getGPS('sleepLocationField', 'sleepLat', 'sleepLon'); });
+${sleepFieldsInit('gpsBtnSleepEdit')}
         initExpenses('expList', 'expAddBtn', 'expTotal', ${JSON.stringify(post.expenses || []).replace(/</g, '\\u003c')});
 
         // ── Réordonnancement des médias (drag & drop + tactile) ──
