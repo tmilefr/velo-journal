@@ -164,7 +164,7 @@ Rien à saisir : tout se déduit de la trace GPX et des points GPS.
 | Pas de trace | distance à vol d'oiseau entre la dernière position connue et celle de l'étape |
 | Un nombre est saisi dans « Km en train » | la valeur saisie, qui prime toujours |
 
-Le libellé du trajet (« Turin → Gênes ») est déduit des lieux de départ et d'arrivée. Ces kilomètres sont comptés **à part** : ils n'entrent ni dans les km roulés, ni dans les moyennes, ni dans les jours roulés, mais s'ajoutent au **trajet total parcouru** affiché en haut des statistiques. La page des statistiques indique pour chaque trajet d'où vient sa distance (trace, à vol d'oiseau, saisie).
+Cocher la case ouvre deux champs **Départ** et **Arrivée**, avec suggestions de lieux dès trois lettres tapées : ils forment le libellé du trajet (« Turin → Gênes »). Laissés vides, ils sont déduits du lieu de l'étape précédente et du lieu d'arrivée. Ces kilomètres sont comptés **à part** : ils n'entrent ni dans les km roulés, ni dans les moyennes, ni dans les jours roulés, mais s'ajoutent au **trajet total parcouru** affiché en haut des statistiques. La page des statistiques indique pour chaque trajet d'où vient sa distance (trace, à vol d'oiseau, saisie).
 
 **🌍 Pays et régions** — ils sont détectés après la publication, en tâche de fond :
 

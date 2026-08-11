@@ -64,10 +64,14 @@ function initLocAutocomplete(fieldId, latId, lonId, suggestId, opts) {
   function pick(i) {
     var item = items[i];
     field.value = item.display;
-    var latEl = document.getElementById(latId), lonEl = document.getElementById(lonId);
-    setCoord(latEl, parseFloat(item.lat).toFixed(6));
-    setCoord(lonEl, parseFloat(item.lon).toFixed(6));
-    latEl.dataset.manual = lonEl.dataset.manual = '1';
+    // Certains champs (gares de départ / d'arrivée) ne servent qu'à nommer un
+    // trajet : ils n'ont pas de coordonnées à renseigner.
+    var latEl = latId && document.getElementById(latId), lonEl = lonId && document.getElementById(lonId);
+    if (latEl && lonEl) {
+      setCoord(latEl, parseFloat(item.lat).toFixed(6));
+      setCoord(lonEl, parseFloat(item.lon).toFixed(6));
+      latEl.dataset.manual = lonEl.dataset.manual = '1';
+    }
     fillGeoFields(geo, item.address);
     list.classList.remove('open'); sel = -1;
   }
@@ -160,9 +164,9 @@ function setCoord(el, value) {
   el.dispatchEvent(new Event('change'));
 }
 // ── Bloc dépliable piloté par une case à cocher ────────────
-// La case gouverne le bloc : décochée, le serveur ignore les champs qu'il
-// contient (voir services/sleep.js) — inutile de les vider ici, l'auteur
-// retrouve sa saisie s'il recoche.
+// Sert au couchage et aux gares de départ / d'arrivée. La saisie n'est jamais
+// vidée au repli : l'auteur la retrouve s'il recoche, et le serveur sait quoi
+// ignorer d'après la case (voir services/sleep.js et services/train.js).
 function initRevealToggle(checkboxId, panelId, focusId) {
   var box   = document.getElementById(checkboxId);
   var panel = document.getElementById(panelId);

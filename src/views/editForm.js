@@ -1,6 +1,7 @@
 const { isoToDatetimeLocal, isoToDateInput } = require('../lib/dates');
 const { esc } = require('../lib/html');
 const { isVideoUrl, pickCover } = require('../services/media');
+const { splitTrainLabel } = require('../services/train');
 const { CSS, renderHeader } = require('./layout');
 const { FORM_SCRIPTS, richEditorHtml, sleepFieldsHtml, sleepFieldsInit } = require('./scripts');
 
@@ -11,6 +12,11 @@ const { FORM_SCRIPTS, richEditorHtml, sleepFieldsHtml, sleepFieldsInit } = requi
 function renderEditForm(post, err, isMargot = false, csrf = '') {
   const cover = pickCover(post.photos, post.cover);
   const sleep = post.sleep || { label: '', comment: '', lat: null, lon: null };
+  // Gares de départ / d'arrivée : celles saisies, ou relues du libellé pour les
+  // étapes publiées avant que le trajet ne soit découpé en deux champs.
+  const stops = (post.trainFrom || post.trainTo)
+    ? { from: post.trainFrom || '', to: post.trainTo || '' }
+    : splitTrainLabel(post.trainLabel);
 
   // Rappel de ce que la détection automatique a déjà trouvé, pour que l'auteur
   // sache s'il a besoin de corriger quoi que ce soit.
@@ -123,14 +129,33 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
           </div>
           <div class="field">
             <label class="check-line">
-              <input type="checkbox" name="trainTransfer" value="1" ${post.trainTransfer ? 'checked' : ''}>
+              <input type="checkbox" name="trainTransfer" value="1" id="trainTransferEdit" ${post.trainTransfer ? 'checked' : ''}>
               🚆 Ce déplacement s'est fait en train
             </label>
             <div class="field-hint">Distance calculée automatiquement : longueur de la trace GPX si l'étape en a une, sinon écart à vol d'oiseau depuis la position de l'étape précédente.${trainSourceNote}</div>
-          </div>
-          <div class="field-row">
-            <div class="field"><label>Km en train <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, calculé</span></label><input name="trainKm" type="number" min="0" max="5000" step="0.1" value="${post.trainKmSource === 'manual' ? (post.trainKm || '') : ''}"></div>
-            <div class="field"><label>Trajet <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, déduit</span></label><input name="trainLabel" type="text" placeholder="Ex : Lyon → Turin" maxlength="120" value="${esc(post.trainLabel||'')}"></div>
+            <div class="reveal-panel" id="trainStopsEdit"${post.trainTransfer ? '' : ' hidden'}>
+              <div class="field">
+                <label>Km en train <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, calculé</span></label>
+                <input name="trainKm" type="number" min="0" max="5000" step="0.1" value="${post.trainKmSource === 'manual' ? (post.trainKm || '') : ''}">
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>🚉 Départ <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, déduit</span></label>
+                  <div class="loc-wrap">
+                    <input name="trainFrom" id="trainFromField" type="text" placeholder="Ex : Lyon" autocomplete="off" maxlength="120" value="${esc(stops.from)}">
+                    <div class="loc-suggestions" id="trainFromSuggestions"></div>
+                  </div>
+                </div>
+                <div class="field">
+                  <label>🚉 Arrivée <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, déduit</span></label>
+                  <div class="loc-wrap">
+                    <input name="trainTo" id="trainToField" type="text" placeholder="Ex : Turin" autocomplete="off" maxlength="120" value="${esc(stops.to)}">
+                    <div class="loc-suggestions" id="trainToSuggestions"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="field-hint" style="margin-top:0">🚆 Tapez trois lettres pour voir des suggestions de lieux. Laissez vide pour déduire le trajet de l'étape précédente et du lieu d'arrivée.</div>
+            </div>
           </div>
           <details style="margin-bottom:16px"${(post.geoSource === 'manual') ? ' open' : ''}>
             <summary style="font-size:12px;color:var(--ink-light);cursor:pointer">🌍 Pays et région${geoDetected} — cliquez pour corriger</summary>
@@ -227,6 +252,9 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
         var geoFields = { countryId: 'countryField', regionId: 'regionField', codeId: 'countryCodeField', manualId: 'geoManualField' };
         watchGeoOverride(geoFields);
         initLocAutocomplete('locationField', 'lat', 'lon', 'locSuggestions', { geo: geoFields });
+        initRevealToggle('trainTransferEdit', 'trainStopsEdit', 'trainFromField');
+        initLocAutocomplete('trainFromField', null, null, 'trainFromSuggestions');
+        initLocAutocomplete('trainToField', null, null, 'trainToSuggestions');
         var btn = document.getElementById('gpsBtnEdit');
         if (btn) btn.addEventListener('click', function() { getGPS('locationField', 'lat', 'lon', geoFields); });
 ${sleepFieldsInit('gpsBtnSleepEdit')}

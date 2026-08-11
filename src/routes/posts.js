@@ -11,7 +11,7 @@ const { parseExpenses } = require('../services/expenses');
 const { parseSleep } = require('../services/sleep');
 const { parseGpxStats, parseGpxTrack } = require('../services/gpx');
 const { initialPostGeo, enrichPostGeo, startGeoBackfill } = require('../services/geo');
-const { computeTrainTrip, autoTrainLabel } = require('../services/train');
+const { computeTrainTrip, trainLabelFromStops, parseTrainStops, postPlace } = require('../services/train');
 const { resizeUploadedImages, deletePostFiles, pickCover } = require('../services/media');
 const { maybeNotifyNewPost, siteBaseUrl } = require('../services/mailer');
 const { upload } = require('../middleware/upload');
@@ -30,7 +30,7 @@ router.get('/post', requireAuth, (req, res) => {
 });
 
 router.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', maxCount:10},{name:'gpx', maxCount:1}]), async (req, res) => {
-  const { title, body, location, lat, lon, km, dplus, trainKm, trainLabel, country, region, countryCode,
+  const { title, body, location, lat, lon, km, dplus, trainKm, country, region, countryCode,
           author, visibility, postDate, endDate, type, privateNote } = req.body;
   if (!title?.trim() || !body?.trim()) {
     return res.send(renderPostForm('Titre et texte obligatoires.', '', !!req.session.margot, csrfToken(req)));
@@ -73,8 +73,10 @@ router.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', ma
     isTransfer: isTrainTransfer, manualKm: trainKm, gpxKm,
     posts, dateISO: finalDate, lat: finalLat, lon: finalLon,
   });
-  const finalTrainLabel = (trainLabel || '').toString().trim().substring(0, 120)
-    || autoTrainLabel(trip.from, location);
+  // Gares saisies par l'auteur ; à défaut, on nomme le trajet avec l'étape
+  // précédente et le lieu d'arrivée.
+  const stops = parseTrainStops(req.body, isTrainTransfer);
+  const finalTrainLabel = trainLabelFromStops(stops.from || postPlace(trip.from), stops.to || location);
 
   // Pays / région : correction saisie à la main ou libellé du lieu. La
   // détection réelle (trace GPX, coordonnées) est faite juste après en tâche
@@ -102,6 +104,8 @@ router.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', ma
     trainKm:       trip.km,
     trainKmSource: trip.source,
     trainLabel:    finalTrainLabel,
+    trainFrom:     stops.from,
+    trainTo:       stops.to,
     country:     geo.country,
     region:      geo.region,
     countryCode: geo.countryCode,
@@ -146,7 +150,7 @@ router.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos'
   const posts = readPosts();
   const idx   = posts.findIndex(p => p.id === req.params.id);
   if (idx === -1) return res.status(404).send('Étape introuvable');
-  const { title, body, location, lat, lon, km, dplus, trainKm, trainLabel, country, region, countryCode,
+  const { title, body, location, lat, lon, km, dplus, trainKm, country, region, countryCode,
           visibility, postDate, endDate, privateNote } = req.body;
   if (!title?.trim() || !body?.trim()) {
     return res.send(renderEditForm(posts[idx], 'Titre et texte obligatoires.', !!req.session.margot, csrfToken(req)));
@@ -226,8 +230,8 @@ router.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos'
     isTransfer: isTrainTransfer, manualKm: trainKm, gpxKm,
     posts, dateISO: finalDate, lat: finalLat, lon: finalLon, excludeId: req.params.id,
   });
-  const finalTrainLabel = (trainLabel || '').toString().trim().substring(0, 120)
-    || autoTrainLabel(trip.from, location);
+  const stops = parseTrainStops(req.body, isTrainTransfer);
+  const finalTrainLabel = trainLabelFromStops(stops.from || postPlace(trip.from), stops.to || location);
 
   // Pays / région : correction saisie à la main ou libellé du lieu ; la
   // détection depuis la trace / les coordonnées suit en tâche de fond.
@@ -251,6 +255,8 @@ router.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos'
     trainKm:       trip.km,
     trainKmSource: trip.source,
     trainLabel:    finalTrainLabel,
+    trainFrom:     stops.from,
+    trainTo:       stops.to,
     country:     geo.country,
     region:      geo.region,
     countryCode: geo.countryCode,
