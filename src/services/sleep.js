@@ -3,11 +3,22 @@
 const SLEEP_LABEL_MAX   = 120;
 const SLEEP_COMMENT_MAX = 800;
 
+// Une case à cocher a-t-elle été envoyée cochée ?
+function checked(v) {
+  const val = Array.isArray(v) ? v[v.length - 1] : v;
+  return val === '1' || val === 'on' || val === 'true' || val === true;
+}
+
 // Reconstruit l'objet couchage depuis le corps de formulaire.
-// Champs attendus : sleepLocation, sleepLat, sleepLon, sleepComment.
-// Renvoie null si ni lieu ni commentaire n'ont été saisis (pas de couchage
-// renseigné pour cette étape).
+// Champs attendus : sleepSet (case à cocher), sleepLocation, sleepLat,
+// sleepLon, sleepComment. Le formulaire envoie toujours sleepForm=1 : sur ces
+// envois, la case fait foi — décochée, le couchage est retiré même si les
+// champs cachés du bloc replié sont restés remplis. Sans ce marqueur (envoi
+// hors formulaire), on retombe sur l'ancien comportement : le couchage existe
+// dès qu'un lieu ou un commentaire est fourni.
 function parseSleep(body) {
+  if (checked(body.sleepForm) && !checked(body.sleepSet)) return null;
+
   const label   = (body.sleepLocation || '').toString().trim().substring(0, SLEEP_LABEL_MAX);
   const comment = (body.sleepComment  || '').toString().trim().substring(0, SLEEP_COMMENT_MAX);
   if (!label && !comment) return null;

@@ -660,10 +660,22 @@ const CSS = `
   .loc-suggestion-item{padding:10px 14px;font-size:13px;color:var(--ink);cursor:pointer;border-bottom:1px solid var(--sand);display:flex;flex-direction:column;gap:2px;transition:background .1s;}
   .loc-suggestion-item:last-child{border-bottom:none}
   .loc-suggestion-item:hover,.loc-suggestion-item.active{background:var(--sage)}
-  .loc-suggestion-name{font-weight:600;color:var(--ink)}
+  .loc-suggestion-name{font-weight:600;color:var(--ink);display:flex;align-items:baseline;justify-content:space-between;gap:10px}
   .loc-suggestion-detail{font-size:11px;color:var(--ink-light)}
+  .loc-suggestion-dist{font-size:11px;font-weight:500;color:var(--teal);white-space:nowrap;flex-shrink:0}
+  .loc-hint{font-size:12px;color:var(--ink-light);margin-top:6px;line-height:1.5}
   .loc-search-btn{background:var(--mist);color:var(--ocean-mid);border:1.5px solid var(--teal-light);border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer;margin-top:6px;margin-right:6px;font-family:inherit;font-weight:500;transition:background .15s;display:inline-flex;align-items:center;gap:5px;}
   .loc-search-btn:hover{background:var(--sage)}
+
+  /* ── CASE À COCHER QUI DÉPLIE UN BLOC ────────────── */
+  label.check-line{display:flex;align-items:center;gap:9px;cursor:pointer;text-transform:none;font-size:14px;font-weight:600;letter-spacing:0;color:var(--ink-mid);margin-bottom:0}
+  .check-line input[type=checkbox]{accent-color:var(--teal);width:17px;height:17px;margin:0;cursor:pointer;flex-shrink:0}
+  .check-hint{font-size:12px;color:var(--ink-light);margin-top:6px;line-height:1.5}
+  .reveal-panel{margin-top:12px;padding:14px;background:var(--mist);border:1.5px solid var(--sand);border-left:3px solid var(--teal);border-radius:10px;animation:tabfade .18s ease}
+  .reveal-panel[hidden]{display:none}
+  .quick-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+  .quick-chip{background:#fff;border:1.5px solid var(--teal-light);color:var(--ocean-mid);border-radius:999px;padding:5px 11px;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s}
+  .quick-chip:hover{background:var(--sage)}
 
   /* ── EMPTY STATE ─────────────────────────────────── */
   .empty{text-align:center;padding:60px 20px;color:var(--ink-light);}

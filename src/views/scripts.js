@@ -32,12 +32,17 @@ function watchGeoOverride(geo) {
 // de le remplacer par la ville — utile pour rechercher un point de couchage.
 // opts.geo : identifiants des champs pays / région / code pays à renseigner
 // quand une suggestion est choisie (kilométrage par pays et par région).
+// opts.near : { latId, lonId } — coordonnées d'un point de référence (en
+// général le lieu d'arrivée de l'étape). La recherche est alors centrée sur ce
+// point : « camping » remonte les campings du coin, triés par distance, et la
+// recherche mondiale ne sert que de repli s'il n'y a rien à proximité.
 function initLocAutocomplete(fieldId, latId, lonId, suggestId, opts) {
   var field = document.getElementById(fieldId);
   var list  = document.getElementById(suggestId);
   var poi   = !!(opts && opts.poi);
   var geo   = (opts && opts.geo) || null;
-  var timer = null, items = [], sel = -1;
+  var near  = (opts && opts.near) || null;
+  var timer = null, items = [], sel = -1, seq = 0;
   if (!field || !list) return;
   field.addEventListener('input', function() {
     clearTimeout(timer);
@@ -60,45 +65,148 @@ function initLocAutocomplete(fieldId, latId, lonId, suggestId, opts) {
     var item = items[i];
     field.value = item.display;
     var latEl = document.getElementById(latId), lonEl = document.getElementById(lonId);
-    latEl.value = parseFloat(item.lat).toFixed(6);
-    lonEl.value = parseFloat(item.lon).toFixed(6);
+    setCoord(latEl, parseFloat(item.lat).toFixed(6));
+    setCoord(lonEl, parseFloat(item.lon).toFixed(6));
     latEl.dataset.manual = lonEl.dataset.manual = '1';
     fillGeoFields(geo, item.address);
     list.classList.remove('open'); sel = -1;
   }
+  // Point de référence autour duquel chercher (lieu d'arrivée de l'étape).
+  function nearPoint() {
+    if (!near) return null;
+    var a = document.getElementById(near.latId), b = document.getElementById(near.lonId);
+    if (!a || !b) return null;
+    var la = parseFloat(a.value), lo = parseFloat(b.value);
+    if (!isFinite(la) || !isFinite(lo)) return null;
+    return { lat: la, lon: lo };
+  }
+  function searchUrl(q, pt, bounded) {
+    var u = 'https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(q) + '&format=json&limit=6&addressdetails=1';
+    if (pt) {
+      var dLat = 0.45;                                              // ~50 km
+      var dLon = dLat / Math.max(0.2, Math.cos(pt.lat * Math.PI / 180));
+      u += '&viewbox=' + (pt.lon - dLon).toFixed(4) + ',' + (pt.lat + dLat).toFixed(4)
+         + ',' + (pt.lon + dLon).toFixed(4) + ',' + (pt.lat - dLat).toFixed(4);
+      if (bounded) u += '&bounded=1';
+    }
+    return u;
+  }
   function doSearch(q) {
-    fetch('https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(q) + '&format=json&limit=6&addressdetails=1')
-      .then(function(r){ return r.json(); })
+    var pt = nearPoint(), my = ++seq;
+    fetchJson(searchUrl(q, pt, true))
       .then(function(data) {
-        items = data.map(function(r) {
-          var a = r.address || {};
-          var head = String(r.display_name || '').split(',')[0].trim();
-          var city = a.city || a.town || a.village || a.hamlet || a.county || '';
-          var name, detail;
-          if (poi) {
-            // On garde le nom propre du lieu et on situe avec la ville
-            name   = head || city;
-            detail = [city && city !== name ? city : '', a.state, a.country].filter(Boolean).join(', ');
-          } else {
-            name   = city || head;
-            detail = [a.state, a.country].filter(Boolean).join(', ');
-          }
-          return { name: name, detail: detail, display: name + (detail ? ', '+detail : ''), lat: r.lat, lon: r.lon, address: a };
-        });
-        if (!items.length) { list.classList.remove('open'); return; }
-        sel = -1;
-        list.innerHTML = items.map(function(it, i) {
-          return '<div class="loc-suggestion-item" data-idx="'+i+'">'
-            + '<span class="loc-suggestion-name">'+escHtml(it.name)+'</span>'
-            + '<span class="loc-suggestion-detail">'+escHtml(it.detail)+'</span>'
-            + '</div>';
-        }).join('');
-        list.classList.add('open');
-        Array.from(list.querySelectorAll('.loc-suggestion-item')).forEach(function(el) {
-          el.addEventListener('mousedown', function(e) { e.preventDefault(); pick(parseInt(el.dataset.idx)); });
-        });
+        if (my !== seq) return null;                    // frappe plus récente
+        // Rien autour de l'étape : on rouvre la recherche au monde entier.
+        if (pt && (!data || !data.length)) return fetchJson(searchUrl(q, null, false));
+        return data;
+      })
+      .then(function(data) {
+        if (my !== seq || !data) return;
+        render(data, pt);
       }).catch(function(){});
   }
+  function render(data, pt) {
+    items = data.map(function(r) {
+      var a = r.address || {};
+      var head = String(r.display_name || '').split(',')[0].trim();
+      var city = a.city || a.town || a.village || a.hamlet || a.county || '';
+      var name, detail;
+      if (poi) {
+        // On garde le nom propre du lieu et on situe avec la ville
+        name   = head || city;
+        detail = [city && city !== name ? city : '', a.state, a.country].filter(Boolean).join(', ');
+      } else {
+        name   = city || head;
+        detail = [a.state, a.country].filter(Boolean).join(', ');
+      }
+      var km = pt ? roughKm(pt.lat, pt.lon, parseFloat(r.lat), parseFloat(r.lon)) : null;
+      return { name: name, detail: detail, display: name + (detail ? ', '+detail : ''), lat: r.lat, lon: r.lon, address: a, km: km };
+    });
+    // Autour d'un point connu, le plus proche passe devant.
+    if (pt) items.sort(function(x, y) { return x.km - y.km; });
+    if (!items.length) { list.classList.remove('open'); return; }
+    sel = -1;
+    list.innerHTML = items.map(function(it, i) {
+      var dist = it.km == null ? '' : '<span class="loc-suggestion-dist">'+escHtml(fmtKm(it.km))+'</span>';
+      return '<div class="loc-suggestion-item" data-idx="'+i+'">'
+        + '<span class="loc-suggestion-name">'+escHtml(it.name)+dist+'</span>'
+        + '<span class="loc-suggestion-detail">'+escHtml(it.detail)+'</span>'
+        + '</div>';
+    }).join('');
+    list.classList.add('open');
+    Array.from(list.querySelectorAll('.loc-suggestion-item')).forEach(function(el) {
+      el.addEventListener('mousedown', function(e) { e.preventDefault(); pick(parseInt(el.dataset.idx)); });
+    });
+  }
+}
+function fetchJson(url) { return fetch(url).then(function(r){ return r.json(); }); }
+// Distance approchée en km (équirectangulaire) — suffisant pour trier et
+// afficher « à 3 km » sur des suggestions locales.
+function roughKm(lat1, lon1, lat2, lon2) {
+  if (!isFinite(lat2) || !isFinite(lon2)) return Infinity;
+  var x = (lon2 - lon1) * Math.cos((lat1 + lat2) * Math.PI / 360);
+  var y = (lat2 - lat1);
+  return Math.sqrt(x*x + y*y) * 111.32;
+}
+function fmtKm(km) {
+  if (!isFinite(km)) return '';
+  return km < 1 ? 'à ' + Math.round(km * 1000) + ' m' : 'à ' + (km < 10 ? km.toFixed(1) : Math.round(km)) + ' km';
+}
+// Pose une coordonnée dans un champ caché en prévenant les écouteurs : les
+// champs cachés ne déclenchent aucun événement quand du JS les remplit.
+function setCoord(el, value) {
+  if (!el) return;
+  el.value = value;
+  el.dispatchEvent(new Event('change'));
+}
+// ── Bloc dépliable piloté par une case à cocher ────────────
+// La case gouverne le bloc : décochée, le serveur ignore les champs qu'il
+// contient (voir services/sleep.js) — inutile de les vider ici, l'auteur
+// retrouve sa saisie s'il recoche.
+function initRevealToggle(checkboxId, panelId, focusId) {
+  var box   = document.getElementById(checkboxId);
+  var panel = document.getElementById(panelId);
+  if (!box || !panel) return;
+  function sync(focus) {
+    panel.hidden = !box.checked;
+    if (box.checked && focus) {
+      var el = focusId && document.getElementById(focusId);
+      if (el) el.focus();
+    }
+  }
+  // Le focus ne suit que le clic de l'auteur, pas une restauration de brouillon.
+  box.addEventListener('change', function(e) { sync(!!(e && e.isTrusted)); });
+  sync(false);
+}
+// Puces de recherche rapide : remplissent le champ et lancent l'autocomplete.
+function initQuickChips(containerId, fieldId) {
+  var box   = document.getElementById(containerId);
+  var field = document.getElementById(fieldId);
+  if (!box || !field) return;
+  box.addEventListener('click', function(e) {
+    var chip = e.target.closest('.quick-chip');
+    if (!chip) return;
+    field.value = chip.dataset.q || chip.textContent.trim();
+    field.focus();
+    field.dispatchEvent(new Event('input'));
+  });
+}
+// Indique sous le champ couchage autour de quel point la recherche est centrée.
+function initNearHint(hintId, locFieldId, latId, lonId) {
+  var hint  = document.getElementById(hintId);
+  var loc   = document.getElementById(locFieldId);
+  var latEl = document.getElementById(latId), lonEl = document.getElementById(lonId);
+  if (!hint || !latEl || !lonEl) return;
+  function refresh() {
+    var has  = isFinite(parseFloat(latEl.value)) && isFinite(parseFloat(lonEl.value));
+    var name = (loc && loc.value.trim()) || '';
+    hint.textContent = has
+      ? '🔎 Suggestions cherchées autour de ' + (name || "la position de l'étape") + ", les plus proches d'abord."
+      : "🔎 Renseignez le lieu d'arrivée (onglet Parcours) pour chercher les campings et hôtels autour de l'étape.";
+  }
+  [latEl, lonEl].forEach(function(el) { el.addEventListener('change', refresh); });
+  if (loc) loc.addEventListener('input', refresh);
+  refresh();
 }
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 // geo (optionnel) : { countryId, regionId, codeId } — champs pays / région
@@ -109,8 +217,8 @@ function getGPS(fieldId, latId, lonId, geo) {
   navigator.geolocation.getCurrentPosition(
     function(pos) {
       var latEl = document.getElementById(latId), lonEl = document.getElementById(lonId);
-      latEl.value = pos.coords.latitude.toFixed(6);
-      lonEl.value = pos.coords.longitude.toFixed(6);
+      setCoord(latEl, pos.coords.latitude.toFixed(6));
+      setCoord(lonEl, pos.coords.longitude.toFixed(6));
       latEl.dataset.manual = lonEl.dataset.manual = '1';
       var field = document.getElementById(fieldId);
       if (!field.value || geo) {
@@ -473,14 +581,16 @@ function renderNewCaptions(input, containerId) {
 }
 
 // ── Sauvegarde/restauration de brouillon (sessionStorage) ──
+var DRAFT_FIELDS = ['title','location','km','dplus','privateNote','postDate','endDate',
+  'sleepSet','sleepLocation','sleepLat','sleepLon','sleepComment'];
 function saveDraft(key, formId, bodyHiddenId) {
   try {
     var form = document.getElementById(formId);
     if (!form) return;
     var draft = {};
-    ['title','location','km','dplus','privateNote','postDate','endDate','sleepLocation','sleepLat','sleepLon','sleepComment'].forEach(function(n) {
+    DRAFT_FIELDS.forEach(function(n) {
       var el = form.querySelector('[name=' + n + ']');
-      if (el) draft[n] = el.value;
+      if (el) draft[n] = el.type === 'checkbox' ? el.checked : el.value;
     });
     if (bodyHiddenId) {
       var h = document.getElementById(bodyHiddenId);
@@ -500,9 +610,16 @@ function restoreDraft(key, formId, bodyEditorId, bodyHiddenId) {
     if (!draft) return;
     var form = document.getElementById(formId);
     if (!form) return;
-    ['title','location','km','dplus','privateNote','postDate','endDate','sleepLocation','sleepLat','sleepLon','sleepComment'].forEach(function(n) {
+    DRAFT_FIELDS.forEach(function(n) {
       var el = form.querySelector('[name=' + n + ']');
-      if (el && draft[n] != null) el.value = draft[n];
+      if (!el || draft[n] == null) return;
+      if (el.type === 'checkbox') {
+        // La case rouvre son bloc dépliable (déjà initialisé à ce stade).
+        el.checked = !!draft[n];
+        el.dispatchEvent(new Event('change'));
+      } else {
+        el.value = draft[n];
+      }
     });
     if (bodyHiddenId && draft.body != null) {
       var h = document.getElementById(bodyHiddenId);
@@ -661,6 +778,63 @@ function richEditorHtml(initialBody = '', maxLen = 4000) {
          data-placeholder="Décris ton étape, tes rencontres, la météo…"></div>
     <textarea name="body" id="bodyHidden" style="display:none" maxlength="${maxLen}">${esc(initialBody)}</textarea>
     <div class="rte-count" id="bodyCount"></div>`;
+}
+
+// Raccourcis de recherche du couchage : un clic remplit le champ et lance la
+// recherche autour du lieu d'arrivée.
+const SLEEP_CHIPS = ['🏕️ Camping', '🏨 Hôtel', '🛖 Auberge', '🏡 Gîte', '⛺ Refuge', '🚿 Aire camping-car'];
+
+// Génère le bloc « Où dort-on ce soir ? » : une case à cocher qui déplie les
+// champs (lieu géolocalisé + commentaire). Le bloc est ouvert d'entrée quand un
+// couchage est déjà enregistré. gpsBtnId distingue les deux formulaires.
+function sleepFieldsHtml(sleep, gpsBtnId) {
+  const s       = sleep || {};
+  const label   = s.label || '';
+  const comment = s.comment || '';
+  const lat     = s.lat != null ? s.lat : '';
+  const lon     = s.lon != null ? s.lon : '';
+  const on      = !!(label || comment);
+  return `
+    <div class="field">
+      <input type="hidden" name="sleepForm" value="1">
+      <label class="check-line">
+        <input type="checkbox" name="sleepSet" value="1" id="sleepToggle"${on ? ' checked' : ''}>
+        🛏️ On sait où on dort ce soir
+      </label>
+      <div class="check-hint">Cochez pour indiquer le lieu du couchage : il apparaît sur la carte avec son propre marqueur. Décochez pour retirer le couchage de l'étape.</div>
+      <div class="reveal-panel" id="sleepPanel"${on ? '' : ' hidden'}>
+        <div class="field">
+          <label>Lieu du couchage</label>
+          <div class="quick-chips" id="sleepChips">
+            ${SLEEP_CHIPS.map(c => `<button type="button" class="quick-chip" data-q="${esc(c.replace(/^\S+\s/, ''))}">${esc(c)}</button>`).join('')}
+          </div>
+          <div class="loc-wrap">
+            <input name="sleepLocation" id="sleepLocationField" type="text" value="${esc(label)}" placeholder="Camping, hôtel, chez l'habitant…" autocomplete="off" maxlength="120">
+            <div class="loc-suggestions" id="sleepLocSuggestions"></div>
+          </div>
+          <input type="hidden" name="sleepLat" id="sleepLat" value="${esc(String(lat))}">
+          <input type="hidden" name="sleepLon" id="sleepLon" value="${esc(String(lon))}">
+          <button type="button" class="loc-search-btn" id="${esc(gpsBtnId)}">📍 GPS auto</button>
+          <div class="loc-hint" id="sleepNearHint"></div>
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label>Commentaire sur le couchage</label>
+          <textarea name="sleepComment" placeholder="Accueil, confort, prix, douche chaude, voisins bruyants…" maxlength="800" style="min-height:80px">${esc(comment)}</textarea>
+          <div class="loc-hint">💬 Le commentaire s'ouvre dans une fenêtre au clic sur le couchage, en fin de post.</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// Câblage JS du bloc couchage, commun aux deux formulaires.
+function sleepFieldsInit(gpsBtnId) {
+  return `
+        initRevealToggle('sleepToggle', 'sleepPanel', 'sleepLocationField');
+        initQuickChips('sleepChips', 'sleepLocationField');
+        initLocAutocomplete('sleepLocationField', 'sleepLat', 'sleepLon', 'sleepLocSuggestions', { poi: true, near: { latId: 'lat', lonId: 'lon' } });
+        initNearHint('sleepNearHint', 'locationField', 'lat', 'lon');
+        var sleepBtn = document.getElementById('${gpsBtnId}');
+        if (sleepBtn) sleepBtn.addEventListener('click', function() { getGPS('sleepLocationField', 'sleepLat', 'sleepLon'); });`;
 }
 
 // ── Visionneuse (galerie photos + vidéos d'un post) ────────
@@ -1044,7 +1218,7 @@ const COMMENTS_JS = `
 </script>`;
 
 module.exports = {
-  FORM_SCRIPTS, richEditorHtml,
+  FORM_SCRIPTS, richEditorHtml, sleepFieldsHtml, sleepFieldsInit,
   LIGHTBOX_JS, LIGHTBOX_HTML, TRANSLATE_JS, SINGLE_VIDEO_JS,
   ELEV_MODAL_HTML, ELEV_MODAL_JS,
   DELETE_CONFIRM_JS, COMMENTS_JS,

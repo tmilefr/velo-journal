@@ -1,7 +1,7 @@
 const { nowDatetimeLocal } = require('../lib/dates');
 const { esc } = require('../lib/html');
 const { CSS, renderHeader } = require('./layout');
-const { FORM_SCRIPTS, richEditorHtml } = require('./scripts');
+const { FORM_SCRIPTS, richEditorHtml, sleepFieldsHtml, sleepFieldsInit } = require('./scripts');
 
 // ══════════════════════════════════════════════════════════
 //  renderPostForm
@@ -76,22 +76,7 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
             <input type="hidden" name="lon" id="lon">
             <button type="button" class="loc-search-btn" id="gpsBtnPost">📍 GPS auto</button>
           </div>
-          <div class="field">
-            <label>🛏️ Où dort-on ce soir ?</label>
-            <div class="loc-wrap">
-              <input name="sleepLocation" id="sleepLocationField" type="text" placeholder="Cherchez un camping, un hôtel, un lieu..." autocomplete="off" maxlength="120">
-              <div class="loc-suggestions" id="sleepLocSuggestions"></div>
-            </div>
-            <input type="hidden" name="sleepLat" id="sleepLat">
-            <input type="hidden" name="sleepLon" id="sleepLon">
-            <button type="button" class="loc-search-btn" id="gpsBtnSleepPost">📍 GPS auto</button>
-            <div style="font-size:12px;color:var(--ink-light);margin-top:6px;line-height:1.5">🛏️ Choisissez un résultat de la recherche pour placer le couchage sur la carte avec son propre marqueur.</div>
-          </div>
-          <div class="field">
-            <label>Commentaire sur le couchage</label>
-            <textarea name="sleepComment" placeholder="Accueil, confort, prix, douche chaude, voisins bruyants…" maxlength="800" style="min-height:80px"></textarea>
-            <div style="font-size:12px;color:var(--ink-light);margin-top:6px;line-height:1.5">💬 Le commentaire s'ouvre dans une fenêtre au clic sur le couchage, en fin de post.</div>
-          </div>
+          ${sleepFieldsHtml(null, 'gpsBtnSleepPost')}
           <div class="field-row">
             <div class="field"><label>Km du jour</label><input name="km" type="number" min="0" max="500" step="0.1"></div>
             <div class="field"><label>D+ (mètres)</label><input name="dplus" type="number" min="0" max="10000"></div>
@@ -170,11 +155,9 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
         var geoFields = { countryId: 'countryField', regionId: 'regionField', codeId: 'countryCodeField', manualId: 'geoManualField' };
         watchGeoOverride(geoFields);
         initLocAutocomplete('locationField', 'lat', 'lon', 'locSuggestions', { geo: geoFields });
-        initLocAutocomplete('sleepLocationField', 'sleepLat', 'sleepLon', 'sleepLocSuggestions', { poi: true });
         var btn = document.getElementById('gpsBtnPost');
         if (btn) btn.addEventListener('click', function() { getGPS('locationField', 'lat', 'lon', geoFields); });
-        var sleepBtn = document.getElementById('gpsBtnSleepPost');
-        if (sleepBtn) sleepBtn.addEventListener('click', function() { getGPS('sleepLocationField', 'sleepLat', 'sleepLon'); });
+${sleepFieldsInit('gpsBtnSleepPost')}
         initExpenses('expList', 'expAddBtn', 'expTotal', []);
         initUploadProgress('postForm', 'draft_post', 'bodyHidden');
         restoreDraft('draft_post', 'postForm', 'bodyEditor', 'bodyHidden');
