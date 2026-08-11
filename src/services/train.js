@@ -34,14 +34,29 @@ function computeTrainTrip({ isTransfer, manualKm, gpxKm, posts, dateISO, lat, lo
   return { km: 0, source: '', from: null };
 }
 
-// Libellé « Départ → Arrivée » déduit des lieux, quand l'auteur n'en donne pas.
-function autoTrainLabel(from, location) {
-  const start = (from && (from.location || from.title) || '').trim();
-  const end   = (location || '').trim();
+// On ne garde que la ville (« Turin, Piémont, Italie » → « Turin »).
+const cityOf = s => String(s || '').split(',')[0].trim();
+
+// Libellé « Départ → Arrivée ». Les deux gares sont saisies par l'auteur ; on
+// se rabat sur les lieux connus (étape précédente, lieu d'arrivée) pour celle
+// qui reste vide, et on n'affiche rien tant qu'il manque un bout du trajet.
+function trainLabelFromStops(from, to) {
+  const start = cityOf(from);
+  const end   = cityOf(to);
   if (!start || !end) return '';
-  // On ne garde que la ville (« Turin, Piémont, Italie » → « Turin »).
-  const city = s => s.split(',')[0].trim();
-  return `${city(start)} → ${city(end)}`.substring(0, 120);
+  return `${start} → ${end}`.substring(0, 120);
 }
 
-module.exports = { previousLocatedPost, computeTrainTrip, autoTrainLabel };
+// Lieu d'une étape, tel qu'on l'utilise comme gare de départ par défaut.
+function postPlace(post) {
+  return (post && (post.location || post.title) || '').trim();
+}
+
+// Ancien format : le trajet était saisi d'un seul tenant (« Lyon → Turin »).
+// Sert à pré-remplir les champs départ / arrivée des étapes déjà publiées.
+function splitTrainLabel(label) {
+  const parts = String(label || '').split('→');
+  return { from: (parts[0] || '').trim(), to: (parts[1] || '').trim() };
+}
+
+module.exports = { previousLocatedPost, computeTrainTrip, trainLabelFromStops, postPlace, splitTrainLabel };
