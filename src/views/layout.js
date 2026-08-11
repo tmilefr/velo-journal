@@ -575,6 +575,11 @@ const CSS = `
   .field textarea{height:130px;resize:vertical}
   .field-row{display:flex;gap:12px}
   .field-row .field{flex:1}
+  /* Explication sous un champ ou une case à cocher */
+  .field-hint{font-size:12px;color:var(--ink-light);margin-top:6px;line-height:1.5}
+  /* Case à cocher : l'étiquette redevient une phrase, pas un intitulé de champ */
+  label.check-line{display:flex;align-items:center;gap:9px;cursor:pointer;text-transform:none;font-size:14px;font-weight:600;letter-spacing:0;color:var(--ink-mid);margin-bottom:0}
+  .check-line input[type=checkbox]{accent-color:var(--teal);width:17px;height:17px;margin:0;cursor:pointer;flex-shrink:0}
   .btn-submit{width:100%;background:linear-gradient(135deg, var(--ocean-mid) 0%, var(--teal) 50%, var(--emerald) 100%);color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;margin-top:8px;box-shadow:0 4px 14px rgba(10,61,98,0.3);transition:opacity .15s, transform .15s;font-family:inherit;}
   .btn-submit:hover{opacity:.92;transform:translateY(-1px)}
   .btn-submit:active{transform:translateY(0)}
@@ -663,14 +668,10 @@ const CSS = `
   .loc-suggestion-name{font-weight:600;color:var(--ink);display:flex;align-items:baseline;justify-content:space-between;gap:10px}
   .loc-suggestion-detail{font-size:11px;color:var(--ink-light)}
   .loc-suggestion-dist{font-size:11px;font-weight:500;color:var(--teal);white-space:nowrap;flex-shrink:0}
-  .loc-hint{font-size:12px;color:var(--ink-light);margin-top:6px;line-height:1.5}
   .loc-search-btn{background:var(--mist);color:var(--ocean-mid);border:1.5px solid var(--teal-light);border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer;margin-top:6px;margin-right:6px;font-family:inherit;font-weight:500;transition:background .15s;display:inline-flex;align-items:center;gap:5px;}
   .loc-search-btn:hover{background:var(--sage)}
 
-  /* ── CASE À COCHER QUI DÉPLIE UN BLOC ────────────── */
-  label.check-line{display:flex;align-items:center;gap:9px;cursor:pointer;text-transform:none;font-size:14px;font-weight:600;letter-spacing:0;color:var(--ink-mid);margin-bottom:0}
-  .check-line input[type=checkbox]{accent-color:var(--teal);width:17px;height:17px;margin:0;cursor:pointer;flex-shrink:0}
-  .check-hint{font-size:12px;color:var(--ink-light);margin-top:6px;line-height:1.5}
+  /* ── BLOC DÉPLIÉ PAR UNE CASE À COCHER ───────────── */
   .reveal-panel{margin-top:12px;padding:14px;background:var(--mist);border:1.5px solid var(--sand);border-left:3px solid var(--teal);border-radius:10px;animation:tabfade .18s ease}
   .reveal-panel[hidden]{display:none}
   .quick-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}

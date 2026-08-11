@@ -64,7 +64,7 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
           <div class="field">
             <label>Date de fin <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— étape sur plusieurs jours (optionnel)</span></label>
             <input type="date" name="endDate">
-            <div style="font-size:12px;color:var(--ink-light);margin-top:6px;line-height:1.5">📅 Laissez vide pour une étape d'un seul jour. Si vous ajoutez une trace GPX, les jours en plus sont comptés comme <strong>repos</strong> (non roulés).</div>
+            <div class="field-hint">📅 Laissez vide pour une étape d'un seul jour. Si vous ajoutez une trace GPX, les jours en plus sont comptés comme <strong>repos</strong> (non roulés).</div>
           </div>
           <div class="field">
             <label>Lieu d'arrivée</label>
@@ -82,11 +82,11 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
             <div class="field"><label>D+ (mètres)</label><input name="dplus" type="number" min="0" max="10000"></div>
           </div>
           <div class="field">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;font-size:13px;font-weight:500;letter-spacing:0">
-              <input type="checkbox" name="trainTransfer" value="1" id="trainTransferPost" style="accent-color:var(--teal)">
+            <label class="check-line">
+              <input type="checkbox" name="trainTransfer" value="1" id="trainTransferPost">
               🚆 Ce déplacement s'est fait en train
             </label>
-            <div style="font-size:12px;color:var(--ink-light);margin-top:6px;line-height:1.5">La distance se calcule toute seule : longueur de la trace GPX si vous en joignez une, sinon écart à vol d'oiseau depuis la position de l'étape précédente. Ces kilomètres n'entrent ni dans les km roulés ni dans les moyennes, mais s'ajoutent au <strong>trajet total parcouru</strong>.</div>
+            <div class="field-hint">La distance se calcule toute seule : longueur de la trace GPX si vous en joignez une, sinon écart à vol d'oiseau depuis la position de l'étape précédente. Ces kilomètres n'entrent ni dans les km roulés ni dans les moyennes, mais s'ajoutent au <strong>trajet total parcouru</strong>.</div>
           </div>
           <div class="field-row">
             <div class="field"><label>Km en train <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, calculé</span></label><input name="trainKm" type="number" min="0" max="5000" step="0.1"></div>
@@ -100,7 +100,7 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
             </div>
             <input type="hidden" name="countryCode" id="countryCodeField">
             <input type="hidden" name="geoManual" id="geoManualField" value="0">
-            <div style="font-size:12px;color:var(--ink-light);line-height:1.5">Les pays et régions traversés sont déduits de la trace GPX (découpée frontière par frontière) ou des coordonnées de l'étape, juste après la publication. Ne remplissez ces champs que pour forcer une valeur : elle ne sera plus recalculée.</div>
+            <div class="field-hint">Les pays et régions traversés sont déduits de la trace GPX (découpée frontière par frontière) ou des coordonnées de l'étape, juste après la publication. Ne remplissez ces champs que pour forcer une valeur : elle ne sera plus recalculée.</div>
           </details>
           <div class="field">
             <label>Trace GPX (optionnel)</label>

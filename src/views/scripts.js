@@ -801,7 +801,7 @@ function sleepFieldsHtml(sleep, gpsBtnId) {
         <input type="checkbox" name="sleepSet" value="1" id="sleepToggle"${on ? ' checked' : ''}>
         🛏️ On sait où on dort ce soir
       </label>
-      <div class="check-hint">Cochez pour indiquer le lieu du couchage : il apparaît sur la carte avec son propre marqueur. Décochez pour retirer le couchage de l'étape.</div>
+      <div class="field-hint">Cochez pour indiquer le lieu du couchage : il apparaît sur la carte avec son propre marqueur. Décochez pour retirer le couchage de l'étape.</div>
       <div class="reveal-panel" id="sleepPanel"${on ? '' : ' hidden'}>
         <div class="field">
           <label>Lieu du couchage</label>
@@ -815,12 +815,12 @@ function sleepFieldsHtml(sleep, gpsBtnId) {
           <input type="hidden" name="sleepLat" id="sleepLat" value="${esc(String(lat))}">
           <input type="hidden" name="sleepLon" id="sleepLon" value="${esc(String(lon))}">
           <button type="button" class="loc-search-btn" id="${esc(gpsBtnId)}">📍 GPS auto</button>
-          <div class="loc-hint" id="sleepNearHint"></div>
+          <div class="field-hint" id="sleepNearHint"></div>
         </div>
         <div class="field" style="margin-bottom:0">
           <label>Commentaire sur le couchage</label>
           <textarea name="sleepComment" placeholder="Accueil, confort, prix, douche chaude, voisins bruyants…" maxlength="800" style="min-height:80px">${esc(comment)}</textarea>
-          <div class="loc-hint">💬 Le commentaire s'ouvre dans une fenêtre au clic sur le couchage, en fin de post.</div>
+          <div class="field-hint">💬 Le commentaire s'ouvre dans une fenêtre au clic sur le couchage, en fin de post.</div>
         </div>
       </div>
     </div>`;

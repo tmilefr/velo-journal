@@ -104,7 +104,7 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
           <div class="field">
             <label>Date de fin <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— étape sur plusieurs jours (optionnel)</span></label>
             <input type="date" name="endDate" value="${isoToDateInput(post.endDate)}">
-            <div style="font-size:12px;color:var(--ink-light);margin-top:6px;line-height:1.5">📅 Laissez vide pour une étape d'un seul jour. Les jours en plus (au-delà de la trace GPX / du kilométrage) sont comptés comme <strong>repos</strong>.</div>
+            <div class="field-hint">📅 Laissez vide pour une étape d'un seul jour. Les jours en plus (au-delà de la trace GPX / du kilométrage) sont comptés comme <strong>repos</strong>.</div>
           </div>
           <div class="field">
             <label>Lieu</label>
@@ -122,11 +122,11 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
             <div class="field"><label>D+ (mètres)</label><input name="dplus" type="number" min="0" max="10000" value="${post.dplus||''}"></div>
           </div>
           <div class="field">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;font-size:13px;font-weight:500;letter-spacing:0">
-              <input type="checkbox" name="trainTransfer" value="1" ${post.trainTransfer ? 'checked' : ''} style="accent-color:var(--teal)">
+            <label class="check-line">
+              <input type="checkbox" name="trainTransfer" value="1" ${post.trainTransfer ? 'checked' : ''}>
               🚆 Ce déplacement s'est fait en train
             </label>
-            <div style="font-size:12px;color:var(--ink-light);margin-top:6px;line-height:1.5">Distance calculée automatiquement : longueur de la trace GPX si l'étape en a une, sinon écart à vol d'oiseau depuis la position de l'étape précédente.${trainSourceNote}</div>
+            <div class="field-hint">Distance calculée automatiquement : longueur de la trace GPX si l'étape en a une, sinon écart à vol d'oiseau depuis la position de l'étape précédente.${trainSourceNote}</div>
           </div>
           <div class="field-row">
             <div class="field"><label>Km en train <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, calculé</span></label><input name="trainKm" type="number" min="0" max="5000" step="0.1" value="${post.trainKmSource === 'manual' ? (post.trainKm || '') : ''}"></div>
@@ -140,13 +140,13 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
             </div>
             <input type="hidden" name="countryCode" id="countryCodeField" value="${esc(post.countryCode||'')}">
             <input type="hidden" name="geoManual" id="geoManualField" value="${post.geoSource === 'manual' ? '1' : '0'}">
-            <div style="font-size:12px;color:var(--ink-light);line-height:1.5">${geoBreakdownNote}Videz ces champs pour laisser la détection reprendre la main ; toute valeur saisie ici est figée.</div>
+            <div class="field-hint">${geoBreakdownNote}Videz ces champs pour laisser la détection reprendre la main ; toute valeur saisie ici est figée.</div>
           </details>
           ${post.gpx ? `
           <div class="field">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;font-size:13px;font-weight:500;letter-spacing:0">
-              <input type="checkbox" name="keepGpx" value="1" checked style="accent-color:var(--teal)">
-              Conserver la trace GPX existante
+            <label class="check-line">
+              <input type="checkbox" name="keepGpx" value="1" checked>
+              🗺️ Conserver la trace GPX existante
             </label>
           </div>` : ''}
           <div class="field">
