@@ -59,10 +59,14 @@ function initLocAutocomplete(fieldId, latId, lonId, suggestId, opts) {
   function pick(i) {
     var item = items[i];
     field.value = item.display;
-    var latEl = document.getElementById(latId), lonEl = document.getElementById(lonId);
-    latEl.value = parseFloat(item.lat).toFixed(6);
-    lonEl.value = parseFloat(item.lon).toFixed(6);
-    latEl.dataset.manual = lonEl.dataset.manual = '1';
+    // Certains champs (gares de départ / d'arrivée) ne servent qu'à nommer un
+    // trajet : ils n'ont pas de coordonnées à renseigner.
+    var latEl = latId && document.getElementById(latId), lonEl = lonId && document.getElementById(lonId);
+    if (latEl && lonEl) {
+      latEl.value = parseFloat(item.lat).toFixed(6);
+      lonEl.value = parseFloat(item.lon).toFixed(6);
+      latEl.dataset.manual = lonEl.dataset.manual = '1';
+    }
     fillGeoFields(geo, item.address);
     list.classList.remove('open'); sel = -1;
   }
@@ -101,6 +105,15 @@ function initLocAutocomplete(fieldId, latId, lonId, suggestId, opts) {
   }
 }
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+// Les gares de départ et d'arrivée ne concernent que les transferts
+// ferroviaires : le bloc ne s'ouvre qu'une fois la case « train » cochée.
+function initTrainToggle(checkboxId, blockId) {
+  var box = document.getElementById(checkboxId), block = document.getElementById(blockId);
+  if (!box || !block) return;
+  var sync = function() { block.style.display = box.checked ? '' : 'none'; };
+  box.addEventListener('change', sync);
+  sync();
+}
 // geo (optionnel) : { countryId, regionId, codeId } — champs pays / région
 // renseignés par géocodage inverse de la position relevée.
 function getGPS(fieldId, latId, lonId, geo) {

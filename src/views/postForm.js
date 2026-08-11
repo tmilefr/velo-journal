@@ -105,7 +105,25 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
           </div>
           <div class="field-row">
             <div class="field"><label>Km en train <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, calculé</span></label><input name="trainKm" type="number" min="0" max="5000" step="0.1"></div>
-            <div class="field"><label>Trajet <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, déduit</span></label><input name="trainLabel" type="text" placeholder="Ex : Lyon → Turin" maxlength="120"></div>
+          </div>
+          <div id="trainStopsPost" style="display:none">
+            <div class="field-row">
+              <div class="field">
+                <label>🚉 Départ <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, déduit</span></label>
+                <div class="loc-wrap">
+                  <input name="trainFrom" id="trainFromField" type="text" placeholder="Ex : Lyon" autocomplete="off" maxlength="120">
+                  <div class="loc-suggestions" id="trainFromSuggestions"></div>
+                </div>
+              </div>
+              <div class="field">
+                <label>🚉 Arrivée <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, déduit</span></label>
+                <div class="loc-wrap">
+                  <input name="trainTo" id="trainToField" type="text" placeholder="Ex : Turin" autocomplete="off" maxlength="120">
+                  <div class="loc-suggestions" id="trainToSuggestions"></div>
+                </div>
+              </div>
+            </div>
+            <div style="font-size:12px;color:var(--ink-light);margin-top:-8px;margin-bottom:16px;line-height:1.5">🚆 Tapez trois lettres pour voir des suggestions de lieux. Laissez vide pour déduire le trajet de l'étape précédente et du lieu d'arrivée.</div>
           </div>
           <details style="margin-bottom:16px">
             <summary style="font-size:12px;color:var(--ink-light);cursor:pointer">🌍 Pays et région — détectés automatiquement, cliquez pour corriger</summary>
@@ -171,6 +189,9 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
         watchGeoOverride(geoFields);
         initLocAutocomplete('locationField', 'lat', 'lon', 'locSuggestions', { geo: geoFields });
         initLocAutocomplete('sleepLocationField', 'sleepLat', 'sleepLon', 'sleepLocSuggestions', { poi: true });
+        initTrainToggle('trainTransferPost', 'trainStopsPost');
+        initLocAutocomplete('trainFromField', null, null, 'trainFromSuggestions');
+        initLocAutocomplete('trainToField', null, null, 'trainToSuggestions');
         var btn = document.getElementById('gpsBtnPost');
         if (btn) btn.addEventListener('click', function() { getGPS('locationField', 'lat', 'lon', geoFields); });
         var sleepBtn = document.getElementById('gpsBtnSleepPost');
