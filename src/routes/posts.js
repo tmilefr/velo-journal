@@ -11,7 +11,7 @@ const { parseExpenses } = require('../services/expenses');
 const { parseSleep } = require('../services/sleep');
 const { parseGpxStats, parseGpxTrack } = require('../services/gpx');
 const { initialPostGeo, enrichPostGeo, startGeoBackfill } = require('../services/geo');
-const { computeTrainTrip, trainLabelFromStops, parseTrainStops, postPlace } = require('../services/train');
+const { computeTrainTrip, trainLabelFromStops, parseTrainStops, postPlace, splitTrainLabel } = require('../services/train');
 const { resizeUploadedImages, deletePostFiles, pickCover } = require('../services/media');
 const { maybeNotifyNewPost, siteBaseUrl } = require('../services/mailer');
 const { upload } = require('../middleware/upload');
@@ -51,30 +51,33 @@ router.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', ma
   let finalLon = parseFloat(lon) || null;
   let finalKm  = parseFloat(km) || 0;
   let finalDp  = parseInt(dplus) || 0;
-  let gpxKm    = 0;
+  let gpxTrack = null;
   if (gpxFile) {
-    const stats = await parseGpxStats(path.join(PUBLIC_DIR, gpxFile), true);
+    const abs = path.join(PUBLIC_DIR, gpxFile);
+    gpxTrack  = parseGpxTrack(abs);
+    const stats = await parseGpxStats(abs, true);
     if (stats) {
       // On ne dérive lat/lon du GPX que si aucun point n'a été fixé manuellement côté client.
       if (finalLat === null || finalLon === null) { finalLat = stats.lat; finalLon = stats.lon; }
-      gpxKm = stats.km;
-      // Sur un transfert en train, la trace mesure le trajet ferroviaire :
-      // elle ne doit pas être comptée comme des kilomètres roulés.
-      if (!finalKm && !isTrainTransfer) finalKm = stats.km;
       if (!finalDp) finalDp = stats.dplus;
     }
   }
 
   const posts = readPosts();
 
-  // Train : distance mesurée sur la trace, à défaut entre les deux gares
-  // saisies, à défaut depuis la position précédente. La valeur saisie, si elle
-  // existe, reste prioritaire.
+  // Train : distance mesurée sur la trace quand elle relie les deux gares, à
+  // défaut estimée entre ces gares, à défaut depuis la position précédente. La
+  // valeur saisie, si elle existe, reste prioritaire.
   const stops = parseTrainStops(req.body, isTrainTransfer);
   const trip = computeTrainTrip({
-    isTransfer: isTrainTransfer, manualKm: trainKm, gpxKm,
+    isTransfer: isTrainTransfer, manualKm: trainKm, gpxTrack,
     posts, dateISO: finalDate, lat: finalLat, lon: finalLon, stops,
   });
+  // La trace compte comme des kilomètres roulés, sauf quand c'est elle qui
+  // mesure le trajet en train (transfert sans autre repère).
+  if (!finalKm && gpxTrack && (!isTrainTransfer || trip.traceIsRide)) {
+    finalKm = Math.round(gpxTrack.totalKm * 10) / 10;
+  }
   // Gares saisies par l'auteur ; à défaut, on nomme le trajet avec l'étape
   // précédente et le lieu d'arrivée.
   const finalTrainLabel = trainLabelFromStops(stops.from || postPlace(trip.from), stops.to || location);
@@ -214,31 +217,31 @@ router.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos'
   let finalLon = parseFloat(lon) || null;
   let finalKm  = parseFloat(km) || 0;
   let finalDp  = parseInt(dplus) || 0;
-  let gpxKm    = 0;
+  const newGpx = !!(req.files?.gpx?.[0] && gpxFile);
+  const gpxTrack = gpxFile ? parseGpxTrack(path.join(PUBLIC_DIR, gpxFile)) : null;
   // Si un NOUVEAU GPX est fourni, on relit toutes ses stats côté serveur (fiable)
-  if (req.files?.gpx?.[0] && gpxFile) {
+  if (newGpx) {
     const stats = await parseGpxStats(path.join(PUBLIC_DIR, gpxFile), true);
     if (stats) {
       // On ne dérive lat/lon du GPX que si aucun point n'a été fixé manuellement côté client.
       if (finalLat === null || finalLon === null) { finalLat = stats.lat; finalLon = stats.lon; }
-      gpxKm    = stats.km;
-      // Transfert en train : la trace mesure le trajet ferroviaire, pas du roulage.
-      finalKm  = isTrainTransfer ? finalKm : stats.km;
-      finalDp  = stats.dplus;
+      finalDp = stats.dplus;
     }
-  } else if (gpxFile) {
-    const track = parseGpxTrack(path.join(PUBLIC_DIR, gpxFile));
-    if (track) gpxKm = track.totalKm;
   }
 
-  // Train : distance mesurée sur la trace, à défaut entre les deux gares
-  // saisies, à défaut depuis la position précédente ; sauf si une valeur a
-  // été saisie.
+  // Train : distance mesurée sur la trace quand elle relie les deux gares, à
+  // défaut estimée entre ces gares, à défaut depuis la position précédente ;
+  // sauf si une valeur a été saisie.
   const stops = parseTrainStops(req.body, isTrainTransfer);
   const trip = computeTrainTrip({
-    isTransfer: isTrainTransfer, manualKm: trainKm, gpxKm,
+    isTransfer: isTrainTransfer, manualKm: trainKm, gpxTrack,
     posts, dateISO: finalDate, lat: finalLat, lon: finalLon, excludeId: req.params.id, stops,
   });
+  // Une trace neuve fixe le kilométrage roulé, sauf quand c'est elle qui
+  // mesure le trajet en train.
+  if (newGpx && gpxTrack && (!isTrainTransfer || trip.traceIsRide)) {
+    finalKm = Math.round(gpxTrack.totalKm * 10) / 10;
+  }
   const finalTrainLabel = trainLabelFromStops(stops.from || postPlace(trip.from), stops.to || location);
 
   // Pays / région : correction saisie à la main ou libellé du lieu ; la
@@ -335,6 +338,9 @@ router.post('/recalc-distances', requireAuth, requireCsrf, async (req, res) => {
   for (let i = 0; i < posts.length; i++) {
     const post = posts[i];
     if (!post.gpx) continue;
+    // Trace qui mesure un trajet en train : elle ne dit rien des kilomètres
+    // roulés, la reprendre ici les doublerait.
+    if (post.trainTransfer && post.trainKmSource === 'gpx') continue;
     scanned++;
     const abs = path.join(PUBLIC_DIR, post.gpx);
     if (!fs.existsSync(abs)) { errors++; continue; }
@@ -383,28 +389,39 @@ router.post('/recalc-train', requireAuth, requireCsrf, (req, res) => {
     scanned++;
     if (post.trainKmSource === 'manual') continue;
 
-    let gpxKm = 0;
+    let gpxTrack = null;
     if (post.gpx) {
       const abs = path.join(PUBLIC_DIR, post.gpx);
       if (fs.existsSync(abs)) {
-        const track = parseGpxTrack(abs);
-        if (track) gpxKm = track.totalKm; else errors++;
+        gpxTrack = parseGpxTrack(abs);
+        if (!gpxTrack) errors++;
       } else errors++;
     }
+    // Étapes d'avant les deux champs de gare : le trajet était saisi d'un
+    // seul tenant (« Halle → Berlin »), on y relit les deux noms.
+    const label = splitTrainLabel(post.trainLabel);
     const trip = computeTrainTrip({
-      isTransfer: true, manualKm: 0, gpxKm,
+      isTransfer: true, manualKm: 0, gpxTrack,
       posts, dateISO: post.date, lat: post.lat, lon: post.lon, excludeId: post.id,
       stops: {
+        from: post.trainFrom || label.from, to: post.trainTo || label.to,
         fromLat: post.trainFromLat, fromLon: post.trainFromLon,
         toLat:   post.trainToLat,   toLon:   post.trainToLon,
       },
     });
-    if (trip.km !== post.trainKm || trip.source !== post.trainKmSource) {
+    // Kilomètres roulés que l'ancien calcul avait avalés : une trace prise
+    // pour celle du train laissait l'étape à 0 km roulé.
+    const bikeKm = (parseFloat(post.km) || 0) > 0
+      ? parseFloat(post.km)
+      : (trip.traceIsRide ? Math.round(gpxTrack.totalKm * 10) / 10 : 0);
+
+    if (trip.km !== post.trainKm || trip.source !== post.trainKmSource || bikeKm !== (parseFloat(post.km) || 0)) {
       posts[i] = {
         ...post,
+        km: bikeKm,
         trainKm: trip.km,
         trainKmSource: trip.source,
-        geoBreakdown: rescaleTrainBreakdown(post.geoBreakdown, trip.km, parseFloat(post.km) || 0),
+        geoBreakdown: rescaleTrainBreakdown(post.geoBreakdown, trip.km, bikeKm),
       };
       updated++;
     }

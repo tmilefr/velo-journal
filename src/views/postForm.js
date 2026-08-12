@@ -86,7 +86,7 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
               <input type="checkbox" name="trainTransfer" value="1" id="trainTransferPost">
               🚆 Ce déplacement s'est fait en train
             </label>
-            <div class="field-hint">La distance se calcule toute seule : longueur de la trace GPX si vous en joignez une, sinon estimation entre les deux gares choisies ci-dessous (à défaut, depuis la position de l'étape précédente). Ces kilomètres n'entrent ni dans les km roulés ni dans les moyennes, mais s'ajoutent au <strong>trajet total parcouru</strong>.</div>
+            <div class="field-hint">La distance se calcule toute seule, <strong>entre les deux gares ci-dessous</strong> (à défaut, depuis la position de l'étape précédente). Une trace GPX ne sert à mesurer le train que si elle relie justement ces deux gares : sinon elle compte, comme d'habitude, pour les kilomètres roulés. Les kilomètres de train n'entrent ni dans les km roulés ni dans les moyennes, mais s'ajoutent au <strong>trajet total parcouru</strong>.</div>
             <div class="reveal-panel" id="trainStopsPost" hidden>
               <div class="field">
                 <label>Km en train <span style="text-transform:none;font-weight:400;color:var(--ink-light);letter-spacing:0">— si vide, calculé</span></label>
@@ -112,7 +112,7 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
                   <input type="hidden" name="trainToLon" id="trainToLon">
                 </div>
               </div>
-              <div class="field-hint" style="margin-top:0">🚆 Tapez trois lettres et <strong>choisissez une suggestion</strong> : c'est elle qui donne la position de la gare, donc la distance du trajet. Laissez vide pour déduire le trajet de l'étape précédente et du lieu d'arrivée.</div>
+              <div class="field-hint" style="margin-top:0">🚆 Le nom d'une ville suffit (« Halle », « Berlin ») : la position est retrouvée toute seule. Tapez trois lettres pour choisir une suggestion et lever toute ambiguïté sur les homonymes. Laissez vide pour déduire le trajet de l'étape précédente et du lieu d'arrivée.</div>
             </div>
           </div>
           <details style="margin-bottom:16px">
