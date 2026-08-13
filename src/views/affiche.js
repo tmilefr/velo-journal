@@ -8,11 +8,12 @@ const { CSS, renderHeader } = require('./layout');
 // traces GPX du voyage ; tout autour, en cadre, la photo favorite de chaque
 // étape, reliée par un fil à son point d'arrivée sur la carte.
 //
-// Les photos sont aussi grandes que la feuille le permet : elles partent du
-// tour du cadre, avancent sur la carte et grandissent tant qu'elles ne
-// s'approchent pas du tracé. Chacune s'arrête donc là où le voyage passe, ce
-// qui les décale naturellement en quinconce le long de la trace, et remplit
-// de grandes photos les contrées que le parcours ne traverse pas.
+// Chaque photo se pose au plus près de son propre point d'arrivée : on part
+// tout contre le point et on s'en éloigne en spirale jusqu'à trouver une
+// place qui ne recouvre ni le tracé, ni un point d'étape, ni une autre photo.
+// Les fils sont donc courts, les vignettes suivent le voyage en quinconce, et
+// elles occupent les contrées que le parcours ne traverse pas. Leur taille est
+// la plus grande où tout le monde trouve encore sa place.
 //
 // Deux fonds au choix :
 //   • épuré  → frontières/littoraux (/public/geo/countries-50m.json, Natural
@@ -52,7 +53,7 @@ function renderAffiche(stages, isStrictAdmin = false) {
       <div class="form-card" style="margin-bottom:16px">
         <a href="/settings" class="sys-back">← Système</a>
         <h2 style="margin-bottom:6px">🖼️ Affiche du voyage</h2>
-        <p style="font-size:14px;color:var(--ink-light);line-height:1.6;margin:0">Une carte A3 du voyage : les traces GPX sur un fond au choix — épuré (frontières, littoraux, villes et relief ombré) ou la carte OpenStreetMap de la page Carte — et la photo favorite de <strong>chaque étape</strong> disposée tout autour, reliée à son point d'arrivée. Les vignettes sont aussi grandes que la feuille le permet : elles avancent sur la carte et grandissent tant qu'elles ne s'approchent pas du tracé, ce qui les décale en quinconce le long de la trace et remplit les zones que le voyage ne traverse pas. À imprimer et encadrer.</p>
+        <p style="font-size:14px;color:var(--ink-light);line-height:1.6;margin:0">Une carte A3 du voyage : les traces GPX sur un fond au choix — épuré (frontières, littoraux, villes et relief ombré) ou la carte OpenStreetMap de la page Carte — et la photo favorite de <strong>chaque étape</strong> posée au plus près de son point d'arrivée. Les vignettes sont aussi grandes que la feuille le permet : elles se serrent le long du voyage sans jamais recouvrir le tracé, et gagnent les contrées que le parcours ne traverse pas. À imprimer et encadrer.</p>
       </div>
       ${emptyState
         ? `<div class="form-card"><p style="font-size:14px;color:var(--ink-light);margin:0">Aucune étape localisée pour le moment. Ajoutez des étapes avec un fichier <code>.gpx</code> ou des coordonnées GPS pour composer l'affiche.</p></div>`
@@ -344,222 +345,40 @@ function renderAffiche(stages, isStrictAdmin = false) {
       }
 
       // ── Géométrie de la feuille ─────────────────────────
-      // Les vignettes font le tour de la carte, sur un ou plusieurs anneaux
-      // emboîtés. Chaque anneau est parcouru dans l'ordre du cadre — haut de
-      // gauche à droite, droite de haut en bas, bas de droite à gauche, gauche
-      // de bas en haut — pour que les photos se répartissent tout autour.
-      //
-      // Les indicateurs sH / sV mettent les rangées horizontales / les colonnes
-      // verticales en quinconce : les vignettes se chevauchent d'une demi-largeur et
-      // alternent en profondeur. Une rangée en accueille deux fois plus, donc
-      // les photos peuvent être deux fois plus larges — au prix d'une bande
-      // deux fois plus épaisse, qui mord d'autant sur la carte.
-      function buildRings(inner, TW, TH, G, R, sH, sV){
-        var rings=[], rect={ x:inner.x, y:inner.y, w:inner.w, h:inner.h }, r, cap=0;
-        var stepH = sH ? (TW+G)/2 : TW+G, stepV = sV ? (TH+G)/2 : TH+G;
-        var bandH = sH ? 2*TH+G : TH, bandV = sV ? 2*TW+G : TW;
-        for(r=0;r<R;r++){
-          var nH = rect.w>=TW ? Math.floor((rect.w-TW)/stepH)+1 : 0;
-          var freeH = rect.h-2*(bandH+G);
-          var nV = freeH>=TH ? Math.floor((freeH-TH)/stepV)+1 : 0;
-          if(nH<1) break;
-          rings.push({ rect:{ x:rect.x, y:rect.y, w:rect.w, h:rect.h }, nH:nH, nV:nV,
-                       cap:2*nH+2*nV, sH:sH, sV:sV, bandH:bandH, bandV:bandV });
-          cap += 2*nH+2*nV;
-          rect={ x:rect.x+bandV+G, y:rect.y+bandH+G, w:rect.w-2*(bandV+G), h:rect.h-2*(bandH+G) };
-          if(rect.w<TW*1.2 || rect.h<TH*1.2){ r++; break; }
-        }
-        // free : ce qui reste au centre, hors de portée de toute vignette.
-        return { rings:rings, free:rect, count:r, cap:cap };
-      }
-
-      // Répartition des n vignettes sur les anneaux : proportionnelle à leur
-      // capacité, puis, sur chaque anneau, proportionnelle à la longueur des
-      // côtés — et régulièrement étalée le long de chaque côté, pour qu'un
-      // cadre à moitié rempli n'ait pas de trou au milieu d'une rangée.
-      function share(total, weights){
-        var sum=weights.reduce(function(a,b){ return a+b; },0) || 1;
-        var out=weights.map(function(w){ return Math.floor(total*w/sum); });
-        var rest=total-out.reduce(function(a,b){ return a+b; },0);
-        var order=weights.map(function(w,i){ return { i:i, frac:total*w/sum-Math.floor(total*w/sum) }; })
-                         .sort(function(a,b){ return b.frac-a.frac; });
-        for(var k=0;k<rest;k++) out[order[k%order.length].i]++;
-        return out;
-      }
-      function placeSlots(built, TW, TH, G, n){
-        var slots=[];
-        var perRing=share(Math.min(n, built.cap), built.rings.map(function(r){ return r.cap; }));
-        built.rings.forEach(function(ring, ri){
-          var take=Math.min(perRing[ri], ring.cap);
-          if(take<=0) return;
-          // Les côtés opposés reçoivent le même nombre de vignettes (à une
-          // près) : le cadre reste symétrique même à moitié rempli.
-          var pair=share(take, [2*ring.nH, 2*ring.nV]);
-          var sides=[Math.ceil(pair[0]/2), Math.ceil(pair[1]/2),
-                     Math.floor(pair[0]/2), Math.floor(pair[1]/2)];
-          var rect=ring.rect;
-          var freeY=rect.y+ring.bandH+G, freeH=rect.h-2*(ring.bandH+G);
-          // Un côté clairsemé garde ses vignettes réparties régulièrement, sans
-          // les coller aux coins. Dès qu'elles se touchent, on passe d'un bout
-          // à l'autre du côté : c'est alors le pas qui a servi à calculer la
-          // capacité, donc deux vignettes de même profondeur ne peuvent pas se
-          // chevaucher et aucune ne dépasse du cadre.
-          var spread=function(count, start, span, size){
-            var out=[], i;
-            if(count<=0) return out;
-            if(count===1) return [start+(span-size)/2];
-            if(span/count < size+G){
-              for(i=0;i<count;i++) out.push(start + i*(span-size)/(count-1));
-            } else {
-              for(i=0;i<count;i++) out.push(start + (i+0.5)*span/count - size/2);
-            }
-            return out;
-          };
-          // Le quinconce ne sert que si les vignettes se chevauchent vraiment :
-          // une rangée clairsemée reste alignée, c'est plus net.
-          var offH=function(count, i){
-            return (ring.sH && count>1 && rect.w/count < TW+G && i%2) ? TH+G : 0;
-          };
-          var offV=function(count, i){
-            return (ring.sV && count>1 && freeH/count < TH+G && i%2) ? TW+G : 0;
-          };
-          var xs=spread(sides[0], rect.x, rect.w, TW);
-          var ysR=spread(sides[1], freeY, freeH, TH);
-          var xsB=spread(sides[2], rect.x, rect.w, TW);
-          var ysL=spread(sides[3], freeY, freeH, TH);
-          var i;
-          for(i=0;i<xs.length;i++)
-            slots.push({ x:xs[i], y:rect.y+offH(xs.length,i), side:'t' });
-          for(i=0;i<ysR.length;i++)
-            slots.push({ x:rect.x+rect.w-TW-offV(ysR.length,i), y:ysR[i], side:'r' });
-          for(i=xsB.length-1;i>=0;i--)
-            slots.push({ x:xsB[i], y:rect.y+rect.h-TH-offH(xsB.length,i), side:'b' });
-          for(i=ysL.length-1;i>=0;i--)
-            slots.push({ x:rect.x+offV(ysL.length,i), y:ysL[i], side:'l' });
-        });
-        slots.forEach(function(s){
-          s.w=TW; s.h=TH;
-          // Point d'accroche du fil : le milieu du bord tourné vers la carte
-          if(s.side==='t'){ s.ax=s.x+TW/2; s.ay=s.y+TH; }
-          else if(s.side==='b'){ s.ax=s.x+TW/2; s.ay=s.y; }
-          else if(s.side==='l'){ s.ax=s.x+TW; s.ay=s.y+TH/2; }
-          else { s.ax=s.x; s.ay=s.y+TH/2; }
-        });
-        return slots;
-      }
-
-      // Taille des vignettes, quinconce et nombre d'anneaux : toutes les étapes
-      // doivent tenir autour de la carte, avec les plus grandes photos
-      // possibles. Les vignettes mordent sur la carte — le fond passe dessous —
-      // mais jamais sur le tracé : la trace est ajustée au rectangle central
-      // qu'aucune vignette n'atteint (zone « safe »), le fond, lui, s'étend
-      // jusque sous les photos.
+      // La carte occupe toute la surface intérieure ; les vignettes se posent
+      // dessus, chacune au plus près de son étape (voir placeTiles). La zone
+      // « safe » sert seulement à ajuster le tracé : une marge tout autour,
+      // pour que le voyage ne colle pas aux bords de la feuille.
       var TILE_SIZES=[560,500,450,410,380,340,300,268,240,214,192,172,154,138,124,112,100,90,82,74];
-      var OVERLAP = 0.78;      // part de la bande de vignettes posée sur la carte
-      var TRACE_MIN_W = 220, TRACE_MIN_H = 155, TRACE_MIN_AREA = 0.07;
+      var TRACE_INSET = 0.06;   // marge laissée autour du tracé, en part du cadre
+
       function layout(o, count, ratio){
         var S = SHEET[o.orient];
-        var M = 84, HEAD = 168, FOOT = o.profile ? 214 : 96, G = 14;
+        var M = 84, HEAD = 168, FOOT = o.profile ? 214 : 96;
         var inner = { x:M, y:M+HEAD, w:S.w-2*M, h:S.h-2*M-HEAD-FOOT };
         var n = Math.max(1, count||1);
-        var asp = Math.min(3, Math.max(0.5, ratio || 1.4));
-        var innerArea = inner.w*inner.h;
+        var padX=inner.w*TRACE_INSET, padY=inner.h*TRACE_INSET;
 
-        // Plus grand rectangle à la forme du voyage tenant dans la zone libre :
-        // c'est lui qui portera la trace, et sa taille dit si la mise en page
-        // laisse encore une carte lisible.
-        function traceBox(free){
-          var w=Math.min(free.w, free.h*asp);
-          return { w:w, h:w/asp };
-        }
-
-        var pick=null;
-        [[0,0],[1,0],[0,1],[1,1]].forEach(function(st){
-          var sH=st[0], sV=st[1];
-          for(var R=1; R<=(sH||sV?1:4); R++){
-            for(var ti=0; ti<TILE_SIZES.length; ti++){
-              var TW=TILE_SIZES[ti], TH=Math.round(TW*0.9);
-              var built=buildRings(inner, TW, TH, G, R, sH, sV);
-              if(built.count<R || built.cap<n) continue;      // anneau incomplet ou trop juste
-              var tb=traceBox(built.free);
-              if(tb.w<TRACE_MIN_W || tb.h<TRACE_MIN_H) continue;
-              if(tb.w*tb.h < innerArea*TRACE_MIN_AREA) continue;
-              var gap=1-n/built.cap;
-              // De grandes photos d'abord, une carte encore lisible ensuite ; à
-              // qualité égale, on préfère un cadre bien rempli, aligné plutôt
-              // qu'en quinconce, et le moins d'anneaux possible.
-              var cost = -1.25*(TW/TILE_SIZES[0])
-                       -  0.85*(tb.w*tb.h/innerArea)
-                       +  1.20*gap*gap
-                       +  0.05*(sH+sV)
-                       +  0.30*(R-1);
-              if(!pick || cost<pick.cost) pick={ built:built, TW:TW, TH:TH, cost:cost };
-            }
-          }
-        });
-        if(!pick){
-          // Trop d'étapes pour une feuille : les plus petites vignettes, le
-          // plus d'anneaux possible — le cadre en accueillera autant qu'il peut.
-          var TWm=TILE_SIZES[TILE_SIZES.length-1], THm=Math.round(TWm*0.9);
-          pick={ built:buildRings(inner, TWm, THm, G, 4, 0, 0), TW:TWm, TH:THm };
-        }
-
-        // La carte s'étend sous les vignettes : son bord ne s'arrête qu'à 22 %
-        // de la profondeur de la bande, si bien que les photos la débordent
-        // largement et qu'il ne reste pas de bandeau de papier entre elles. La zone « safe » reste, elle, hors de portée des vignettes.
-        var safe=pick.built.free;
-        var padV=(safe.x-inner.x), padH=(safe.y-inner.y);
-        var map={
-          x:inner.x+padV*(1-OVERLAP), y:inner.y+padH*(1-OVERLAP),
-          w:inner.w-2*padV*(1-OVERLAP), h:inner.h-2*padH*(1-OVERLAP)
-        };
+        // Taille de départ : ce que n vignettes peuvent occuper si elles se
+        // partagent la moitié de la feuille. placeTiles part de là et essaie
+        // plus grand tant que tout le monde trouve sa place.
+        var est=Math.sqrt(inner.w*inner.h*0.5/(n*0.9));
+        var TW=TILE_SIZES[TILE_SIZES.length-1];
+        for(var i=0;i<TILE_SIZES.length;i++){ if(TILE_SIZES[i]<=est){ TW=TILE_SIZES[i]; break; } }
 
         return {
           sheet:S, M:M,
           head:{ x:M, y:M, w:S.w-2*M, h:HEAD },
           foot:{ x:M, y:S.h-M-FOOT, w:S.w-2*M, h:FOOT },
-          inner:inner, map:map, safe:safe,
-          slots:placeSlots(pick.built, pick.TW, pick.TH, G, n),
-          tile:{ w:pick.TW, h:pick.TH }
+          inner:inner,
+          map:{ x:inner.x, y:inner.y, w:inner.w, h:inner.h },
+          safe:{ x:inner.x+padX, y:inner.y+padY, w:inner.w-2*padX, h:inner.h-2*padY },
+          slots:[],                       // rempli par placeTiles, au moment du rendu
+          tile:{ w:TW, h:Math.round(TW*0.9) }
         };
       }
 
-      // ── Répartition des photos autour de la carte ───────
-      // Chaque étape rejoint une vignette de façon à ce que la longueur totale
-      // des fils soit la plus courte possible : on part du plus proche, puis on
-      // échange deux vignettes tant que ça raccourcit. À l'arrivée, plus aucun
-      // fil n'en croise un autre (deux fils qui se croisent sont toujours plus
-      // longs que les mêmes fils échangés).
-      function assignSlots(pts, slots){
-        var k=pts.length;
-        if(!k || slots.length<k) return [];
-        function cost(i,j){
-          var dx=pts[i][0]-slots[j].ax, dy=pts[i][1]-slots[j].ay;
-          return Math.sqrt(dx*dx+dy*dy);
-        }
-        var taken=new Array(slots.length), perm=new Array(k), i, j;
-        for(i=0;i<k;i++){
-          var best=-1, bestC=Infinity;
-          for(j=0;j<slots.length;j++){
-            if(taken[j]) continue;
-            var c=cost(i,j);
-            if(c<bestC){ bestC=c; best=j; }
-          }
-          perm[i]=best; taken[best]=true;
-        }
-        var improved=true, guard=0;
-        while(improved && guard++<40){
-          improved=false;
-          for(i=0;i<k;i++) for(j=i+1;j<k;j++){
-            if(cost(i,perm[j])+cost(j,perm[i]) < cost(i,perm[i])+cost(j,perm[j])-0.5){
-              var t=perm[i]; perm[i]=perm[j]; perm[j]=t; improved=true;
-            }
-          }
-        }
-        return perm;
-      }
-      // Toutes les étapes ont leur vignette. Le prélèvement régulier ne sert
-      // que de filet de sécurité : un carnet trop long pour le cadre garde le
+      // Filet de sécurité : un carnet trop fourni pour la feuille garde le
       // départ, l'arrivée et un échantillon régulier entre les deux.
       function pickStages(k){
         if(STAGES.length <= k) return STAGES.slice();
@@ -679,131 +498,201 @@ function renderAffiche(stages, isStrictAdmin = false) {
         // y écrire des noms de villes, et le fil de chaque photo part de sa
         // position définitive.
         L.legend=legendGeom(L,view);
-        settleTiles(L, proj);
+        placeTiles(L, proj);
 
         g.fillStyle=C.paper; g.fillRect(0,0,S.w,S.h);
 
         drawHead(g,L);
         drawMap(g,L,view,proj,o);
-        var placed=drawFrame(g,L,proj);
+        var placed=drawFrame(g,L);
         drawFoot(g,L,o);
         return placed;
       }
 
-      // ── Vignettes : avancer sur la carte, puis grandir ──
-      // Les photos partent du tour du cadre et gagnent du terrain sur la carte
-      // tant qu'elles ne s'approchent ni du tracé, ni d'un point d'étape, ni
-      // d'une autre vignette. Les zones sans trace — coins, mers, contrées à
-      // l'écart du parcours — finissent donc occupées par de grandes photos,
-      // pendant que le couloir du voyage reste dégagé.
-      var TRACE_PAD = 20;    // distance gardée autour du tracé
-      var TILE_GAP  = 12;    // distance gardée entre deux vignettes
-      var GROW_MAX  = 1.6;   // agrandissement maximal d'une vignette
-      var SLIDE_STEP = 9, GROW_STEP = 1.05, SETTLE_ROUNDS = 26;
+      // ── Vignettes : chacune au plus près de son étape ───
+      // Plutôt qu'un cadre autour de la carte, chaque photo cherche une place
+      // libre autour de son propre point d'arrivée : on part tout près du
+      // point et on s'en éloigne en spirale jusqu'à trouver un emplacement qui
+      // ne recouvre ni le tracé, ni un point d'étape, ni une autre photo, ni
+      // la légende. Les fils deviennent courts, et les contrées que le voyage
+      // ne traverse pas se remplissent de grandes photos.
+      var TRACE_PAD = 16;    // marge gardée autour du tracé
+      var DOT_PAD   = 26;    // ... et autour d'un point d'étape
+      var TILE_GAP  = 10;    // écart entre deux vignettes
+      var GROW_MAX  = 1.7;   // agrandissement maximal d'une vignette isolée
 
-      function settleTiles(L, proj){
+      // Masque des zones interdites, en cases de 10 px, avec somme cumulée :
+      // savoir si un rectangle est libre coûte alors quatre additions.
+      function buildMask(L, proj){
         var inner=L.inner, CELL=10;
-        var cols=Math.ceil(inner.w/CELL)+1, rows=Math.ceil(inner.h/CELL)+1;
-        var busy=new Uint8Array(cols*rows);
-
+        var cols=Math.ceil(inner.w/CELL)+2, rows=Math.ceil(inner.h/CELL)+2;
+        var grid=new Uint8Array(cols*rows);
         function markRect(x,y,w,h){
-          var c0=Math.floor((x-inner.x)/CELL), c1=Math.floor((x+w-inner.x)/CELL);
-          var r0=Math.floor((y-inner.y)/CELL), r1=Math.floor((y+h-inner.y)/CELL);
-          for(var r=Math.max(0,r0); r<=Math.min(rows-1,r1); r++)
-            for(var c=Math.max(0,c0); c<=Math.min(cols-1,c1); c++) busy[r*cols+c]=1;
+          var c0=Math.max(0,Math.floor((x-inner.x)/CELL)), c1=Math.min(cols-1,Math.floor((x+w-inner.x)/CELL));
+          var r0=Math.max(0,Math.floor((y-inner.y)/CELL)), r1=Math.min(rows-1,Math.floor((y+h-inner.y)/CELL));
+          for(var r=r0;r<=r1;r++) for(var c=c0;c<=c1;c++) grid[r*cols+c]=1;
         }
         function markPt(x,y,pad){ markRect(x-pad,y-pad,2*pad,2*pad); }
+        function markSeg(a,b,pad){
+          var dx=b[0]-a[0], dy=b[1]-a[1], d=Math.sqrt(dx*dx+dy*dy);
+          var steps=Math.min(200, Math.ceil(d/(CELL*0.7)));
+          for(var i=0;i<=steps;i++) markPt(a[0]+dx*i/steps, a[1]+dy*i/steps, pad);
+        }
 
-        // Le tracé, échantillonné assez fin pour ne pas laisser de trou entre
-        // deux points projetés.
         tracks.forEach(function(t){
           var prev=null;
           t.pts.forEach(function(p){
             var q=proj(p.lat,p.lon);
-            if(prev){
-              var dx=q[0]-prev[0], dy=q[1]-prev[1], d=Math.sqrt(dx*dx+dy*dy);
-              var steps=Math.min(60, Math.ceil(d/(CELL*0.8)));
-              for(var i=1;i<steps;i++) markPt(prev[0]+dx*i/steps, prev[1]+dy*i/steps, TRACE_PAD);
-            }
-            markPt(q[0],q[1],TRACE_PAD);
+            if(prev) markSeg(prev,q,TRACE_PAD); else markPt(q[0],q[1],TRACE_PAD);
             prev=q;
           });
         });
-        // Les points d'étape et les raccords entre étapes sans trace
         var prevPt=null;
-        STAGES.forEach(function(s,i){
-          if(s.lat==null||s.lon==null){ prevPt=null; return; }
-          var p=proj(s.lat,s.lon);
-          markPt(p[0],p[1],TRACE_PAD+10);
-          if(prevPt && !(tracks[i] && tracks[i].pts.length>1)){
-            var dx=p[0]-prevPt[0], dy=p[1]-prevPt[1], d=Math.sqrt(dx*dx+dy*dy);
-            var steps=Math.ceil(d/(CELL*0.8));
-            for(var k=1;k<steps;k++) markPt(prevPt[0]+dx*k/steps, prevPt[1]+dy*k/steps, TRACE_PAD);
-          }
+        STAGES.forEach(function(st,i){
+          if(st.lat==null||st.lon==null){ prevPt=null; return; }
+          var p=proj(st.lat,st.lon);
+          markPt(p[0],p[1],DOT_PAD);
+          // Raccord entre deux étapes quand la seconde n'a pas de trace
+          if(prevPt && !(tracks[i] && tracks[i].pts.length>1)) markSeg(prevPt,p,TRACE_PAD);
           prevPt=p;
         });
-        if(L.legend) markRect(L.legend.x-8, L.legend.y-8, L.legend.w+16, L.legend.h+16);
+        if(L.legend) markRect(L.legend.x-10, L.legend.y-10, L.legend.w+20, L.legend.h+20);
 
-        function freeCells(x,y,w,h){
-          if(x<inner.x-0.5 || y<inner.y-0.5 ||
-             x+w>inner.x+inner.w+0.5 || y+h>inner.y+inner.h+0.5) return false;
-          var c0=Math.floor((x-inner.x)/CELL), c1=Math.floor((x+w-inner.x)/CELL);
-          var r0=Math.floor((y-inner.y)/CELL), r1=Math.floor((y+h-inner.y)/CELL);
-          for(var r=Math.max(0,r0); r<=Math.min(rows-1,r1); r++)
-            for(var c=Math.max(0,c0); c<=Math.min(cols-1,c1); c++) if(busy[r*cols+c]) return false;
-          return true;
-        }
-        var slots=L.slots;
-        function freeOfTiles(x,y,w,h,self){
-          for(var i=0;i<slots.length;i++){
-            var s=slots[i];
-            if(s===self) continue;
-            if(x < s.x+s.w+TILE_GAP && x+w+TILE_GAP > s.x &&
-               y < s.y+s.h+TILE_GAP && y+h+TILE_GAP > s.y) return false;
+        // Somme cumulée : sum[r][c] = nombre de cases interdites au-dessus et
+        // à gauche. Un rectangle est libre si sa somme vaut zéro.
+        var sum=new Int32Array((cols+1)*(rows+1));
+        for(var r=0;r<rows;r++){
+          var acc=0;
+          for(var c=0;c<cols;c++){
+            acc+=grid[r*cols+c];
+            sum[(r+1)*(cols+1)+(c+1)] = sum[r*(cols+1)+(c+1)] + acc;
           }
-          return true;
         }
-        function fits(x,y,w,h,self){ return freeCells(x,y,w,h) && freeOfTiles(x,y,w,h,self); }
+        return {
+          free: function(x,y,w,h){
+            if(x<inner.x || y<inner.y || x+w>inner.x+inner.w || y+h>inner.y+inner.h) return false;
+            var c0=Math.max(0,Math.floor((x-inner.x)/CELL)), c1=Math.min(cols-1,Math.floor((x+w-inner.x)/CELL));
+            var r0=Math.max(0,Math.floor((y-inner.y)/CELL)), r1=Math.min(rows-1,Math.floor((y+h-inner.y)/CELL));
+            var W=cols+1;
+            var s= sum[(r1+1)*W+(c1+1)] - sum[r0*W+(c1+1)] - sum[(r1+1)*W+c0] + sum[r0*W+c0];
+            return s===0;
+          }
+        };
+      }
 
-        // 1) Avancer vers la carte, tour par tour pour que toutes progressent
-        //    ensemble plutôt qu'une seule très loin.
-        var dir={ t:[0,1], b:[0,-1], l:[1,0], r:[-1,0] };
-        var moved=true, round=0;
-        while(moved && round++<SETTLE_ROUNDS){
-          moved=false;
-          slots.forEach(function(s){
-            var d=dir[s.side]||[0,0];
-            var nx=s.x+d[0]*SLIDE_STEP, ny=s.y+d[1]*SLIDE_STEP;
-            if(fits(nx,ny,s.w,s.h,s)){ s.x=nx; s.y=ny; moved=true; }
-          });
-        }
-
-        // 2) Grandir, par petits pas et pour toutes à la fois : les vignettes
-        //    restent de tailles comparables au lieu qu'une seule dévore la place.
-        slots.forEach(function(s){ s.grow=1; });
-        var grew=true; round=0;
-        while(grew && round++<SETTLE_ROUNDS){
-          grew=false;
-          slots.forEach(function(s){
-            if(s.grow>=GROW_MAX) return;
-            var w=s.w*GROW_STEP, h=s.h*GROW_STEP;
-            // On garde le bord extérieur en place : la vignette grandit vers la
-            // carte et de part et d'autre, jamais vers le bord de la feuille.
-            var x=s.x-(w-s.w)/2, y=s.y-(h-s.h)/2;
-            if(s.side==='t') y=s.y; else if(s.side==='b') y=s.y-(h-s.h);
-            if(s.side==='l') x=s.x; else if(s.side==='r') x=s.x-(w-s.w);
-            if(!fits(x,y,w,h,s)) return;
-            s.x=x; s.y=y; s.w=w; s.h=h; s.grow*=GROW_STEP; grew=true;
-          });
-        }
-
-        // Le fil repart du bord tourné vers la carte, à la position définitive.
-        slots.forEach(function(s){
-          if(s.side==='t'){ s.ax=s.x+s.w/2; s.ay=s.y+s.h; }
-          else if(s.side==='b'){ s.ax=s.x+s.w/2; s.ay=s.y; }
-          else if(s.side==='l'){ s.ax=s.x+s.w; s.ay=s.y+s.h/2; }
-          else { s.ax=s.x; s.ay=s.y+s.h/2; }
+      // Place les vignettes : on essaie la plus grande taille possible, et pour
+      // chacune on cherche en spirale autour de son point d'étape.
+      function placeTiles(L, proj){
+        var mask=buildMask(L, proj);
+        var pts=STAGES.map(function(s,i){
+          var lat=s.lat, lon=s.lon, t=tracks[i];
+          if((lat==null||lon==null) && t && t.pts.length){
+            lat=t.pts[t.pts.length-1].lat; lon=t.pts[t.pts.length-1].lon;
+          }
+          return (lat==null||lon==null) ? null : proj(lat,lon);
         });
+        var live=[];
+        STAGES.forEach(function(s,i){ if(pts[i]) live.push({ stage:s, num:i+1, pt:pts[i] }); });
+        // Les étapes serrées les unes contre les autres passent en premier :
+        // ce sont elles qui manquent de place, autant qu'elles choisissent
+        // pendant que la feuille est encore vide.
+        var order=live.map(function(it,i){
+          var near=0;
+          live.forEach(function(o){
+            var dx=o.pt[0]-it.pt[0], dy=o.pt[1]-it.pt[1];
+            if(dx*dx+dy*dy < 260*260) near++;
+          });
+          return { it:it, near:near, i:i };
+        }).sort(function(a,b){ return b.near-a.near || a.i-b.i; }).map(function(e){ return e.it; });
+
+        function overlaps(placed, x, y, w, h){
+          for(var i=0;i<placed.length;i++){
+            var s=placed[i];
+            if(x < s.x+s.w+TILE_GAP && x+w+TILE_GAP > s.x &&
+               y < s.y+s.h+TILE_GAP && y+h+TILE_GAP > s.y) return true;
+          }
+          return false;
+        }
+        // Recherche en spirale : anneaux de plus en plus larges autour du point,
+        // seize directions par anneau, décalées d'un anneau à l'autre pour ne
+        // pas aligner toutes les photos sur les mêmes axes.
+        function spot(placed, p, w, h, reach){
+          var r0=Math.max(w,h)*0.55+DOT_PAD, step=14, NA=16;
+          for(var r=r0; r<=reach; r+=step){
+            for(var a=0; a<NA; a++){
+              var ang=(a/NA)*2*Math.PI + (r/step)*0.31;
+              var x=p[0]+Math.cos(ang)*r-w/2, y=p[1]+Math.sin(ang)*r-h/2;
+              if(!mask.free(x,y,w,h)) continue;
+              if(overlaps(placed,x,y,w,h)) continue;
+              return { x:x, y:y };
+            }
+          }
+          return null;
+        }
+
+        // La plus grande taille où tout le monde trouve sa place
+        var reach=Math.max(L.inner.w, L.inner.h)*0.75;
+        var best=null;
+        for(var ti=0; ti<TILE_SIZES.length; ti++){
+          var TW=TILE_SIZES[ti], TH=Math.round(TW*0.9);
+          if(TW*TH*live.length > L.inner.w*L.inner.h*0.62) continue;   // manifestement trop
+          var placed=[], ok=true;
+          for(var i=0;i<order.length;i++){
+            var pos=spot(placed, order[i].pt, TW, TH, reach);
+            if(!pos){ ok=false; break; }
+            placed.push({ x:pos.x, y:pos.y, w:TW, h:TH, stage:order[i].stage, num:order[i].num, pt:order[i].pt });
+          }
+          if(ok){ best={ tiles:placed, TW:TW, TH:TH }; break; }
+        }
+        if(!best){
+          // Feuille saturée : on garde ce qui rentre, à la plus petite taille.
+          var TWm=TILE_SIZES[TILE_SIZES.length-1], THm=Math.round(TWm*0.9), kept=[];
+          order.forEach(function(it){
+            var pos=spot(kept, it.pt, TWm, THm, reach);
+            if(pos) kept.push({ x:pos.x, y:pos.y, w:TWm, h:THm, stage:it.stage, num:it.num, pt:it.pt });
+          });
+          best={ tiles:kept, TW:TWm, TH:THm };
+        }
+
+        // Rapprochement : chaque photo retente sa chance sans elle-même dans le
+        // décor. Les premières posées se sont éloignées pour rien lorsque leurs
+        // voisines n'étaient pas encore là — ce tour de rattrapage raccourcit
+        // les fils sans jamais empiéter sur le tracé.
+        var tiles0=best.tiles;
+        function reach2(s){
+          var ax=Math.max(s.x, Math.min(s.pt[0], s.x+s.w));
+          var ay=Math.max(s.y, Math.min(s.pt[1], s.y+s.h));
+          return Math.sqrt((s.pt[0]-ax)*(s.pt[0]-ax)+(s.pt[1]-ay)*(s.pt[1]-ay));
+        }
+        for(var pass=0; pass<2; pass++){
+          tiles0.forEach(function(s){
+            var before=reach2(s);
+            if(before<=1) return;
+            var others=tiles0.filter(function(t){ return t!==s; });
+            var pos=spot(others, s.pt, s.w, s.h, before+s.w);
+            if(!pos) return;
+            var old={ x:s.x, y:s.y }; s.x=pos.x; s.y=pos.y;
+            if(reach2(s) >= before-1){ s.x=old.x; s.y=old.y; }
+          });
+        }
+
+        // Une photo au large peut encore grandir : par petits pas et pour
+        // toutes à la fois, pour qu'elles restent de tailles comparables.
+        var tiles=best.tiles, grew=true, round=0;
+        while(grew && round++<20){
+          grew=false;
+          tiles.forEach(function(s){
+            if(s.w >= best.TW*GROW_MAX) return;
+            var w=s.w*1.06, h=s.h*1.06, x=s.x-(w-s.w)/2, y=s.y-(h-s.h)/2;
+            if(!mask.free(x,y,w,h)) return;
+            if(overlaps(tiles.filter(function(t){ return t!==s; }), x,y,w,h)) return;
+            s.x=x; s.y=y; s.w=w; s.h=h; grew=true;
+          });
+        }
+
+        L.slots=tiles;
+        L.tile={ w:best.TW, h:best.TH };
+        return tiles;
       }
 
       function tripTotals(){
@@ -1033,6 +922,81 @@ function renderAffiche(stages, isStrictAdmin = false) {
         });
       }
 
+      // ── Fond OpenStreetMap ──────────────────────────────
+      // Le même fond que la page Carte. Les tuiles OSM sont en Mercator, comme
+      // la projection de l'affiche : elles se posent par simple mise à
+      // l'échelle, sans reprojection. Le zoom est choisi pour l'export 300 dpi
+      // (échelle 2) : l'aperçu réduit les mêmes tuiles, l'impression est nette
+      // et rien n'est téléchargé deux fois. L'attribut crossOrigin est
+      // indispensable : sans lui le canvas serait « teinté » par les tuiles et
+      // l'export PNG deviendrait impossible.
+      var TILE_HOSTS = ['a','b','c'];
+      var TILE_MAX   = 360;   // plafond de politesse pour les serveurs d'OpenStreetMap
+
+      function tileZoom(view, rect){
+        var span=Math.max(view.xright-view.xleft, 1e-9);
+        // On arrondit vers le haut : mieux vaut réduire des tuiles trop fines
+        // que d'en étirer de trop grosses, qui se verraient à l'impression.
+        var z=Math.ceil(Math.log(rect.w*2*(2*Math.PI/span)/256)/Math.LN2);
+        z=Math.max(0, Math.min(18, z));
+        // Trop de tuiles pour une seule affiche : on descend d'un cran.
+        while(z>0 && tileCount(view,z)>TILE_MAX) z--;
+        return z;
+      }
+      function tileFrame(view, z){
+        var n=Math.pow(2,z), K=2*Math.PI;
+        return {
+          n:n,
+          x0:(view.xleft+Math.PI)/K*n, x1:(view.xright+Math.PI)/K*n,
+          y0:(Math.PI-view.ytop)/K*n,  y1:(Math.PI-view.ybot)/K*n
+        };
+      }
+      function tileCount(view, z){
+        var f=tileFrame(view,z);
+        return (Math.floor(f.x1)-Math.floor(f.x0)+1)*(Math.floor(f.y1)-Math.floor(f.y0)+1);
+      }
+      function loadTiles(view, z, onProgress){
+        var f=tileFrame(view,z), list=[];
+        for(var tx=Math.floor(f.x0); tx<=Math.floor(f.x1); tx++){
+          for(var ty=Math.floor(f.y0); ty<=Math.floor(f.y1); ty++){
+            if(ty<0 || ty>=f.n) continue;
+            list.push({ x:((tx%f.n)+f.n)%f.n, y:ty, gx:tx, gy:ty });
+          }
+        }
+        var next=0, done=0;
+        function worker(){
+          if(next>=list.length) return Promise.resolve();
+          var t=list[next++];
+          var key=z+'/'+t.x+'/'+t.y;
+          if(tiles[key]!==undefined){ t.img=tiles[key]; done++; return worker(); }
+          return new Promise(function(res){
+            var im=new Image();
+            im.crossOrigin='anonymous';
+            im.onload =function(){ tiles[key]=im;   t.img=im;   res(); };
+            im.onerror=function(){ tiles[key]=null; t.img=null; res(); };
+            im.src='https://'+TILE_HOSTS[(t.x+t.y)%3]+'.tile.openstreetmap.org/'+z+'/'+t.x+'/'+t.y+'.png';
+          }).then(function(){
+            if(onProgress) onProgress(++done, list.length);
+            return worker();
+          });
+        }
+        var runners=[]; for(var i=0;i<Math.min(6,list.length);i++) runners.push(worker());
+        return Promise.all(runners).then(function(){
+          return { z:z, frame:f, list:list, ok:list.filter(function(t){ return t.img; }).length };
+        });
+      }
+      function drawTiles(g, map, set){
+        var f=set.frame, tw=map.w/(f.x1-f.x0), th=map.h/(f.y1-f.y0);
+        g.imageSmoothingEnabled=true;
+        if(g.imageSmoothingQuality) g.imageSmoothingQuality='high';
+        set.list.forEach(function(t){
+          if(!t.img) return;
+          // +1 px de recouvrement : sinon un liseré de fond apparaît entre
+          // deux tuiles posées à des coordonnées fractionnaires.
+          g.drawImage(t.img, map.x+(t.gx-f.x0)*tw, map.y+(t.gy-f.y0)*th, tw+1, th+1);
+        });
+      }
+
       // ── Villes ──────────────────────────────────────────
       // Les villes sont triées de la plus peuplée à la moins peuplée : on les
       // parcourt dans l'ordre et on ne pose une étiquette que si elle ne
@@ -1159,45 +1123,32 @@ function renderAffiche(stages, isStrictAdmin = false) {
         g.restore();
       }
 
-      // Emplacements retenus quand il y a moins de photos que de cases :
-      // un prélèvement régulier sur le tour du cadre, pour un cadre équilibré.
-      function spreadSlots(slots, k){
-        if(k>=slots.length) return slots.slice();
-        var out=[];
-        for(var i=0;i<k;i++) out.push(slots[Math.round(i*slots.length/k)%slots.length]);
-        return out;
-      }
+      // ── Les photos ──────────────────────────────────────
+      // Chaque vignette est déjà posée près de son étape : il reste à tirer le
+      // fil entre elle et son point, puis à la dessiner par-dessus.
+      function drawFrame(g,L){
+        var tiles=L.slots;
 
-      // ── Le cadre de photos ──────────────────────────────
-      function drawFrame(g,L,proj){
-        var chosen=pickStages(L.slots.length);
-        var pts=chosen.map(function(s){
-          var t=tracks[STAGES.indexOf(s)];
-          var lat=s.lat, lon=s.lon;
-          if((lat==null||lon==null) && t && t.pts.length){ lat=t.pts[t.pts.length-1].lat; lon=t.pts[t.pts.length-1].lon; }
-          return (lat==null||lon==null) ? null : proj(lat,lon);
-        });
-        var keep=[];
-        chosen.forEach(function(s,i){ if(pts[i]) keep.push({ stage:s, pt:pts[i], idx:STAGES.indexOf(s) }); });
-        var used=spreadSlots(L.slots, keep.length);
-        var pairing=assignSlots(keep.map(function(k){ return k.pt; }), used);
-
-        // Les fils d'abord : ils passent sous les vignettes
-        g.strokeStyle=C.lead; g.lineWidth=1.4;
-        keep.forEach(function(k,i){
-          var s=used[pairing[i]]; if(!s) return;
-          g.beginPath(); g.moveTo(s.ax,s.ay); g.lineTo(k.pt[0],k.pt[1]); g.stroke();
-          g.beginPath(); g.arc(k.pt[0],k.pt[1],5.5,0,Math.PI*2);
+        g.strokeStyle=C.lead; g.lineWidth=1.5;
+        tiles.forEach(function(s){
+          // Le fil part du bord de la vignette le plus proche du point : quand
+          // la photo est juste à côté, il se réduit à un trait discret.
+          var ax=Math.max(s.x, Math.min(s.pt[0], s.x+s.w));
+          var ay=Math.max(s.y, Math.min(s.pt[1], s.y+s.h));
+          var dx=s.pt[0]-ax, dy=s.pt[1]-ay, d=Math.sqrt(dx*dx+dy*dy);
+          if(d>7){
+            g.beginPath(); g.moveTo(ax,ay);
+            g.lineTo(s.pt[0]-dx/d*6, s.pt[1]-dy/d*6);
+            g.stroke();
+          }
+          g.beginPath(); g.arc(s.pt[0],s.pt[1],5.5,0,Math.PI*2);
           g.fillStyle=C.track; g.fill();
           g.strokeStyle='#fff'; g.lineWidth=2; g.stroke();
-          g.strokeStyle=C.lead; g.lineWidth=1.4;
+          g.strokeStyle=C.lead; g.lineWidth=1.5;
         });
 
-        keep.forEach(function(k,i){
-          var s=used[pairing[i]]; if(!s) return;
-          drawTile(g,s,k.stage,k.idx+1);
-        });
-        return keep.length;
+        tiles.forEach(function(s){ drawTile(g,s,s.stage,s.num); });
+        return tiles.length;
       }
 
       // Tout est proportionnel à la vignette : selon le nombre d'étapes, elle
@@ -1358,9 +1309,10 @@ function renderAffiche(stages, isStrictAdmin = false) {
         }
 
         // Photos : réduites au double de la vignette, pour rester nettes à
-        // l'export 300 dpi sans garder les originaux en mémoire.
+        // l'export 300 dpi sans garder les originaux en mémoire. Chaque étape a
+        // la sienne — les emplacements, eux, ne sont connus qu'au dessin.
         var want=Math.min(860, Math.round(L.tile.w*2*GROW_MAX));
-        var need=pickStages(L.slots.length).map(function(s){ return s.photo; })
+        var need=STAGES.map(function(s){ return s.photo; })
                   .filter(function(u){ return u && !(imgs[u] && imgs[u].want>=want*0.98) && imgs[u]!==null; });
         if(need.length){
           chain=chain.then(function(){
