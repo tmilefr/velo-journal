@@ -8,7 +8,7 @@ Journal de voyage vélo auto-hébergé. Postez vos étapes depuis votre téléph
 - **Interface mobile** — poster une étape depuis le téléphone (titre, texte, photos, GPS auto)
 - **Carte Leaflet** — tracé automatique de votre itinéraire
 - **Statistiques** — menu à deux entrées réservé aux administrateurs : **📏 Distances** (km cumulés, D+ total, nombre d'étapes, trajet total vélo + train, kilométrage par pays et par région) et **💶 Finances** (total dépensé, moyenne mensuelle, répartition par catégorie et par personne)
-- **Système** — menu d'entretien du carnet (admin) : **💾 Sauvegarde**, **📐 Recalculs**, **🖼️ Affiche**, **🔔 Abonnés**
+- **Système** — menu d'entretien du carnet (admin) : **💾 Sauvegarde**, **📐 Recalculs**, **🖼️ Affiche**, **📖 Livre photo**, **🔔 Abonnés**
 - **Flux RSS** — pour les proches qui utilisent un lecteur RSS
 - **Notifications e-mail** — vos proches s'abonnent avec leur e-mail (double opt-in) et sont prévenus à chaque nouvelle étape publiée
 - **Mot de passe** — page de post protégée, page famille publique
@@ -192,7 +192,8 @@ L'entretien du carnet est regroupé sous l'entrée de menu **⚙️ Système**, 
 
 - **💾 Sauvegarde** (`/settings/backup`) — archive complète en ZIP (étapes + médias), export léger des données seules en JSON, et restauration depuis un fichier JSON
 - **📐 Recalculs** (`/settings/recalc`) — recalcul des distances depuis les traces GPX, et détection des pays et régions traversés (avancement affiché en direct)
-- **🖼️ Affiche** (`/affiche`) — la carte du voyage au format **A3**, à imprimer et encadrer : les traces GPX sur un fond au choix — **épuré** (littoraux, frontières, villes, relief ombré) ou les **tuiles OpenStreetMap** de la page Carte — et la photo favorite de **chaque étape** disposée tout autour du cadre, chacune reliée par un fil à son point d'arrivée. Chaque photo se pose au plus près de son propre point d'arrivée : on part tout contre le point et on s'en éloigne en spirale jusqu'à trouver une place libre du tracé, des points d'étape et des autres photos. Les fils restent courts, les vignettes suivent le voyage en quinconce et occupent les contrées que le parcours ne traverse pas ; leur taille est la plus grande où tout le monde trouve encore sa place. Portrait ou paysage, export PNG 150 / 300 dpi, impression A3 directe. Le relief est échantillonné via [Open-Meteo](https://open-meteo.com/) puis mis en cache dans `tmp/relief/` ; sans réseau, l'affiche se dessine simplement sans ombrage
+- **🖼️ Affiche** (`/affiche`) — la carte du voyage au format **A3**, à imprimer et encadrer : les traces GPX sur un fond au choix — **épuré** (littoraux, frontières, villes, relief ombré) ou les **tuiles OpenStreetMap** de la page Carte — et la photo favorite de **chaque étape** disposée tout autour du cadre, chacune reliée par un fil à son point d'arrivée. Chaque photo se pose au plus près de son propre point d'arrivée : on part tout contre le point et on s'en éloigne en spirale jusqu'à trouver une place libre du tracé, des points d'étape et des autres photos. Les fils restent courts, les vignettes suivent le voyage en quinconce et occupent les contrées que le parcours ne traverse pas ; leur taille est la plus grande où tout le monde trouve encore sa place. Portrait ou paysage, photos affichées ou non, statistiques détaillées en option (durée, moyennes, records, pays), export PNG 150 / 300 dpi, impression A3 directe. Le relief est échantillonné via [Open-Meteo](https://open-meteo.com/) puis mis en cache dans `tmp/relief/` ; sans réseau, l'affiche se dessine simplement sans ombrage
+- **📖 Livre photo** (`/livre`) — une page **A4** (ou carrée 21 × 21 cm) par étape : titre, date, chiffres du jour, récit et collage des photos, façon carnet de voyage. Le tracé du voyage fait la couverture, le profil altimétrique la quatrième. Impression d'un bloc ou export PNG page par page
 - **🔔 Abonnés** (`/settings/subscribers`) — liste des abonnés e-mail, validation manuelle et retrait
 
 Le sommaire est accessible aux comptes admin et Margot ; les Statistiques restent réservées à l'admin.
@@ -243,7 +244,7 @@ velo-journal/
 │   ├── middleware/    ← auth, CSRF, upload (multer)
 │   ├── services/      ← logique métier (posts, GPX, dépenses, stats…)
 │   ├── routes/        ← routeurs Express par domaine
-│   └── views/         ← templates HTML (layout, pages, scripts client)
+│   └── views/         ← templates HTML (layout, pages, scripts client, outils canvas)
 ├── data/
 │   ├── posts.json     ← vos étapes (auto-créé)
 │   └── subscribers.json ← abonnés e-mail (auto-créé)
