@@ -34,6 +34,12 @@ const SYSTEM_SECTIONS = [
     desc: 'La carte du voyage en A3 : traces GPX sur un fond de frontières et de relief, photos favorites tout autour.',
   },
   {
+    key: 'sys-livre', href: '/livre', icon: '📖',
+    label: 'Livre photo',
+    title: 'Livre photo du voyage',
+    desc: 'Une page A4 par étape — récit et collage de photos — avec le tracé en couverture et le profil en quatrième.',
+  },
+  {
     key: 'sys-subscribers', href: '/settings/subscribers', icon: '🔔',
     label: 'Abonnés',
     title: 'Abonnés aux notifications',

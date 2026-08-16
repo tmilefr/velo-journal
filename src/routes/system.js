@@ -13,6 +13,7 @@ const { csrfToken, requireCsrf } = require('../middleware/csrf');
 const { requireAuth } = require('../middleware/auth');
 const { renderSystemHome, renderBackup, renderRecalc, renderSubscribers } = require('../views/settings');
 const { renderAffiche } = require('../views/affiche');
+const { renderLivre } = require('../views/livre');
 const { reliefGrid } = require('../services/relief');
 
 const router = express.Router();
@@ -118,6 +119,8 @@ router.get('/affiche', requireAuth, (req, res) => {
         date:     p.date || '',
         km:       parseFloat(p.km) || 0,
         dplus:    parseInt(p.dplus, 10) || 0,
+        trainKm:  parseFloat(p.trainKm) || 0,
+        country:  (p.country || '').trim(),
         lat:      p.lat != null ? Number(p.lat) : null,
         lon:      p.lon != null ? Number(p.lon) : null,
         photo: (cover && !isVideoUrl(cover))
@@ -127,6 +130,43 @@ router.get('/affiche', requireAuth, (req, res) => {
     });
   res.send(renderAffiche(stages, !!req.session.auth));
 });
+
+// ── Livre photo : une page par étape ─────────────────────
+// Génère (côté client, sur canvas) un livre A4 : le tracé en couverture, une
+// page par étape — récit et collage de ses photos — et le profil altimétrique
+// en quatrième de couverture.
+router.get('/livre', requireAuth, (req, res) => {
+  const stages = readPosts()
+    .filter(p => p.type !== 'preparation')
+    .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
+    .map(p => ({
+      gpx:      p.gpx || null,
+      title:    p.title || '',
+      location: p.location || '',
+      date:     p.date || '',
+      km:       parseFloat(p.km) || 0,
+      dplus:    parseInt(p.dplus, 10) || 0,
+      trainKm:  parseFloat(p.trainKm) || 0,
+      lat:      p.lat != null ? Number(p.lat) : null,
+      lon:      p.lon != null ? Number(p.lon) : null,
+      body:     p.body || '',
+      // Les vidéos ne se dessinent pas sur un canvas ; la photo mise en avant
+      // par l'auteur ouvre le collage.
+      photos:   orderPhotos(p),
+    }));
+  res.send(renderLivre(stages, !!req.session.auth));
+});
+
+// Photos d'une étape, sans les vidéos, la préférée en tête.
+function orderPhotos(p) {
+  const photos = (p.photos || []).filter(u => !isVideoUrl(u));
+  const cover  = pickCover(p.photos, p.cover);
+  if (cover && !isVideoUrl(cover)) {
+    const rest = photos.filter(u => u !== cover);
+    return [cover].concat(rest);
+  }
+  return photos;
+}
 
 // Grille d'altitudes de l'emprise de l'affiche, pour l'ombrage du relief.
 // Le calcul interroge Open-Meteo (quelques dizaines d'appels) puis reste en

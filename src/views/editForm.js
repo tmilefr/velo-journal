@@ -45,7 +45,7 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
     <div class="form-wrap"><div class="form-card">
       <h2>✏️ Modifier l'étape</h2>
       ${err ? `<div class="error-msg">${esc(err || '')}</div>` : ''}
-      <form method="POST" action="/edit/${post.id}?_csrf=${csrf}" enctype="multipart/form-data" id="editForm">
+      <form method="POST" action="/edit/${post.id}?_csrf=${csrf}" enctype="multipart/form-data" id="editForm" novalidate>
         <input type="hidden" name="_csrf" value="${csrf}">
 
         <div class="tabs-nav" id="editTabs">

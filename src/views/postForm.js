@@ -17,7 +17,7 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
       <h2>✏️ Poster une étape</h2>
       ${err ? `<div class="error-msg">${esc(err || '')}</div>` : ''}
       ${lastLocation ? `<div class="prev-location-hint">📍 Dernière position connue : <strong>${esc(lastLocation)}</strong></div>` : ''}
-      <form method="POST" action="/post?_csrf=${csrf}" enctype="multipart/form-data" id="postForm">
+      <form method="POST" action="/post?_csrf=${csrf}" enctype="multipart/form-data" id="postForm" novalidate>
         <input type="hidden" name="_csrf" value="${csrf}">
 
         <div class="tabs-nav" id="postTabs">

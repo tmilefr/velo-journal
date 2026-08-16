@@ -419,6 +419,61 @@ function renderPhotoGrid(input, containerId, state) {
 }
 
 // ── Barre de progression d'envoi (post + édition) ──────────
+// ── Contrôle des champs obligatoires ───────────────────────
+// Le formulaire porte « novalidate » : la validation native refuse en silence
+// un champ obligatoire posé sur un onglet replié (elle ne sait pas l'y
+// montrer), et le bouton semblait alors sans effet. On la refait donc à la
+// main : on ouvre l'onglet fautif, on affiche un message et on pointe le champ.
+function showFormError(form, text) {
+  var box = form.parentNode.querySelector('.error-msg');
+  if (!box) {
+    box = document.createElement('div');
+    box.className = 'error-msg';
+    form.parentNode.insertBefore(box, form);
+  }
+  box.textContent = text;
+  box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+function revealField(el) {
+  var panel = el.closest ? el.closest('.tab-panel') : null;
+  if (panel && !panel.classList.contains('active')) {
+    var nav = document.querySelector('.tabs-nav');
+    if (nav && nav.showPanel) nav.showPanel(panel);
+  }
+  var open = el.closest ? el.closest('details') : null;
+  if (open) open.open = true;
+}
+function checkFormBeforeSend(form, bodyHiddenId) {
+  var els = form.querySelectorAll('input, select, textarea');
+  for (var i = 0; i < els.length; i++) {
+    var el = els[i];
+    if (!el.willValidate || el.checkValidity()) continue;
+    revealField(el);
+    showFormError(form, 'Il manque « ' + fieldLabel(el) + ' » pour publier.');
+    setTimeout(function(){ el.focus(); if (el.reportValidity) el.reportValidity(); }, 60);
+    return false;
+  }
+  // Le texte de l'étape vit dans un éditeur riche : sa valeur part d'un champ
+  // caché, que la validation native ne regarde jamais.
+  if (bodyHiddenId) {
+    var hidden = document.getElementById(bodyHiddenId);
+    if (hidden && !hidden.value.replace(/<[^>]*>/g, '').trim()) {
+      var ed = document.getElementById(bodyHiddenId.replace('Hidden', 'Editor'));
+      if (ed) revealField(ed);
+      showFormError(form, 'Il manque le récit de la journée pour publier.');
+      if (ed) setTimeout(function(){ ed.focus(); }, 60);
+      return false;
+    }
+  }
+  return true;
+}
+function fieldLabel(el) {
+  var field = el.closest ? el.closest('.field') : null;
+  var lab = field ? field.querySelector('label') : null;
+  var txt = lab ? lab.textContent.replace('*', '').trim() : (el.name || 'un champ');
+  return txt.split('—')[0].trim();
+}
+
 function initUploadProgress(formId, draftKey, bodyHiddenId) {
   var form    = document.getElementById(formId);
   var overlay = document.getElementById('uploadOverlay');
@@ -453,6 +508,7 @@ function initUploadProgress(formId, draftKey, bodyHiddenId) {
 
   form.addEventListener('submit', function(e) {
     e.preventDefault();
+    if (!checkFormBeforeSend(form, bodyHiddenId)) return;
     // Sauvegarde brouillon avant envoi (restauré si le serveur renvoie une erreur)
     if (draftKey) saveDraft(draftKey, formId, bodyHiddenId);
     var fd  = new FormData(form);
@@ -601,7 +657,9 @@ function renderNewCaptions(input, containerId) {
 
 // ── Sauvegarde/restauration de brouillon (sessionStorage) ──
 var DRAFT_FIELDS = ['title','location','km','dplus','privateNote','postDate','endDate',
-  'sleepSet','sleepLocation','sleepLat','sleepLon','sleepComment'];
+  'sleepSet','sleepLocation','sleepLat','sleepLon','sleepComment',
+  'visibility','type','country','region','lat','lon',
+  'trainTransfer','trainKm','trainFrom','trainTo'];
 function saveDraft(key, formId, bodyHiddenId) {
   try {
     var form = document.getElementById(formId);
@@ -758,6 +816,12 @@ function initFormTabs(navId) {
     if (nextBtn) nextBtn.textContent = (idx === btns.length - 1) ? '✓ Dernier onglet' : 'Suivant →';
   }
   btns.forEach(function(b, k){ b.addEventListener('click', function(){ activate(k); }); });
+  // Un champ obligatoire vide peut se trouver sur un onglet replié : la
+  // validation a besoin de pouvoir l'ouvrir pour le montrer.
+  nav.showPanel = function(panel){
+    var k = panels.indexOf(panel);
+    if (k >= 0) activate(k);
+  };
   if (prevBtn) prevBtn.addEventListener('click', function(){ activate(idx - 1); });
   if (nextBtn) nextBtn.addEventListener('click', function(){ activate(idx + 1); });
   activate(0);

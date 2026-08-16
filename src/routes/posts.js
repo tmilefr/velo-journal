@@ -33,7 +33,10 @@ router.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', ma
   const { title, body, location, lat, lon, km, dplus, trainKm, country, region, countryCode,
           author, visibility, postDate, endDate, type, privateNote } = req.body;
   if (!title?.trim() || !body?.trim()) {
-    return res.send(renderPostForm('Titre et texte obligatoires.', '', !!req.session.margot, csrfToken(req)));
+    // 422 et non 200 : l'envoi se fait en XHR, et c'est le code qui lui dit
+    // s'il doit réafficher la page (avec le message et le brouillon) ou suivre
+    // la redirection. Un 200 ici faisait disparaître message et saisie.
+    return res.status(422).send(renderPostForm('Titre et texte obligatoires.', '', !!req.session.margot, csrfToken(req)));
   }
   const isTrainTransfer = req.body.trainTransfer === '1';
   await resizeUploadedImages(req.files?.photos || []);
@@ -163,7 +166,7 @@ router.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos'
   const { title, body, location, lat, lon, km, dplus, trainKm, country, region, countryCode,
           visibility, postDate, endDate, privateNote } = req.body;
   if (!title?.trim() || !body?.trim()) {
-    return res.send(renderEditForm(posts[idx], 'Titre et texte obligatoires.', !!req.session.margot, csrfToken(req)));
+    return res.status(422).send(renderEditForm(posts[idx], 'Titre et texte obligatoires.', !!req.session.margot, csrfToken(req)));
   }
   const isTrainTransfer = req.body.trainTransfer === '1';
   const existing = posts[idx];
