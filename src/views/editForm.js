@@ -11,6 +11,9 @@ const { FORM_SCRIPTS, richEditorHtml, sleepFieldsHtml, sleepFieldsInit } = requi
 
 function renderEditForm(post, err, isMargot = false, csrf = '') {
   const cover = pickCover(post.photos, post.cover);
+  // Médias retenus pour le livre photo (📖) — vide = le livre prendra les
+  // photos de l'étape dans leur ordre.
+  const bookSet = new Set(post.bookPhotos || []);
   const sleep = post.sleep || { label: '', comment: '', lat: null, lon: null };
   // Gares de départ / d'arrivée : celles saisies, ou relues du libellé pour les
   // étapes publiées avant que le trajet ne soit découpé en deux champs.
@@ -78,17 +81,20 @@ function renderEditForm(post, err, isMargot = false, csrf = '') {
                     : `<img src="${ph}" style="width:90px;height:90px;object-fit:cover;border-radius:8px;border:2px solid var(--teal-light);pointer-events:none">`}
                   <button type="button" class="media-cover-btn${ph === cover ? ' is-cover' : ''}" title="Afficher ce média sur la carte du post">⭐</button>
                   <button type="button" class="media-caption-btn${(post.captions && post.captions[i]) ? ' has-caption' : ''}" title="${(post.captions && post.captions[i]) ? 'Modifier la légende' : 'Ajouter une légende'}">💬</button>
+                  <button type="button" class="media-book-btn${bookSet.has(ph) ? ' is-book' : ''}" title="Retenir ce média pour le livre photo">📖</button>
                   <input type="hidden" name="caption_keep_${ph}" class="media-caption-input" value="${esc((post.captions && post.captions[i]) || '')}">
                 </div>`).join('')}
             </div>
             <div id="photoOrderInputs"></div>
             <input type="hidden" name="cover" id="coverInput" value="${cover || ''}">
-            <p style="font-size:11px;color:var(--ink-light);margin-top:6px">↕️ Maintenez et glissez une vignette pour changer l'ordre. 💬 pour ajouter une légende. ⭐ pour choisir le média affiché sur la carte (les autres s'ouvrent au clic).</p>
+            <input type="hidden" name="bookPhotos" id="bookInput" value="${esc((post.bookPhotos || []).join(','))}">
+            <p style="font-size:11px;color:var(--ink-light);margin-top:6px">↕️ Maintenez et glissez une vignette pour changer l'ordre. 💬 pour ajouter une légende. ⭐ pour choisir le média affiché sur la carte (les autres s'ouvrent au clic). 📖 pour retenir un média dans le <a href="/livre" style="color:var(--ocean-mid)">livre photo</a> — si vous n'en cochez aucun, le livre prend les photos dans l'ordre ci-dessus.</p>
           </div>` : ''}
           <div class="field">
             <label>Ajouter des photos ou vidéos</label>
-            <input type="file" name="photos" multiple accept="image/*,video/*" data-photo-grid="newCaptionsEdit">
+            <input type="file" name="photos" multiple accept="image/*,video/*" data-photo-grid="newCaptionsEdit" data-book-input="bookNewEdit">
             <div id="newCaptionsEdit"></div>
+            <input type="hidden" name="book_new" id="bookNewEdit" value="">
           </div>
           <div class="field">
             <label>Visibilité</label>
@@ -330,6 +336,24 @@ ${sleepFieldsInit('gpsBtnSleepEdit')}
               sortable.querySelectorAll('.media-cover-btn').forEach(function(b) {
                 b.classList.toggle('is-cover', b === btn);
               });
+            });
+          });
+        }
+
+        // ── Choix des médias retenus pour le livre photo (📖) ──
+        var bookInput = document.getElementById('bookInput');
+        if (sortable && bookInput) {
+          function refreshBook() {
+            var kept = [];
+            sortable.querySelectorAll('.media-item').forEach(function(item) {
+              if (item.querySelector('.media-book-btn.is-book')) kept.push(item.dataset.url);
+            });
+            bookInput.value = kept.join(',');
+          }
+          sortable.querySelectorAll('.media-book-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+              btn.classList.toggle('is-book');
+              refreshBook();
             });
           });
         }

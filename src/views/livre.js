@@ -45,6 +45,7 @@ function renderLivre(stages, isStrictAdmin = false) {
         <a href="/settings" class="sys-back">← Système</a>
         <h2 style="margin-bottom:6px">📖 Livre photo du voyage</h2>
         <p style="font-size:14px;color:var(--ink-light);line-height:1.6;margin:0">Une page A4 par étape : le titre, la date, les chiffres du jour, le récit, et les photos assemblées en collage. La carte du voyage fait la couverture, le profil altimétrique la quatrième. À imprimer recto pour relier, ou à envoyer tel quel à un imprimeur.</p>
+        <p style="font-size:13px;color:var(--ink-light);line-height:1.6;margin:10px 0 0;background:var(--mist);border:1px solid var(--sand);border-radius:10px;padding:10px 12px">📷 <strong>Quelles photos ?</strong> Celles que vous avez cochées <strong>📖</strong> en modifiant l'étape. Sans aucune coche, le livre prend les photos de l'étape dans leur ordre, la photo mise en avant (⭐) en premier. Le réglage ci-dessous plafonne le nombre par page. Les vidéos sont écartées, et chaque photo garde sa forme : rien n'est rogné.</p>
       </div>
       ${emptyState
         ? `<div class="form-card"><p style="font-size:14px;color:var(--ink-light);margin:0">Aucune étape à mettre en livre pour le moment.</p></div>`
@@ -60,6 +61,15 @@ function renderLivre(stages, isStrictAdmin = false) {
                <select id="livFond">
                  <option value="clean">épurée</option>
                  <option value="osm">OpenStreetMap</option>
+               </select>
+             </label>
+             <label class="liv-field">Photos par étape
+               <select id="livPhotos">
+                 <option value="1">la préférée</option>
+                 <option value="2">2</option>
+                 <option value="4">4</option>
+                 <option value="6" selected>6</option>
+                 <option value="99">toutes celles retenues</option>
                </select>
              </label>
              <label class="liv-field"><input type="checkbox" id="livText" checked> Récit des étapes</label>
@@ -84,8 +94,7 @@ ${CANVAS_KIT}
         sea:'#dceaef', land:'#eef0e4', border:'#9fb2ad', coast:'#4c7a80',
         track:'#e07a3a', card:'#ffffff', shadow:'rgba(26,58,58,0.20)'
       };
-      var MAX_PHOTOS = 6;      // au-delà, le collage devient illisible
-      var THUMB = 520;
+      var THUMB = 520;         // les photos sont réduites à cette taille
 
       var el = {
         pages:  document.getElementById('livPages'),
@@ -94,6 +103,7 @@ ${CANVAS_KIT}
         cover:  document.getElementById('livCover'),
         fond:   document.getElementById('livFond'),
         text:   document.getElementById('livText'),
+        photos: document.getElementById('livPhotos'),
         print:  document.getElementById('livPrint'),
         png:    document.getElementById('livPng')
       };
@@ -106,7 +116,8 @@ ${CANVAS_KIT}
           sheet: SHEETS[el.format.value] || SHEETS.a4,
           cover: el.cover.checked,
           fond:  el.fond.value === 'osm' ? 'osm' : 'clean',
-          text:  el.text.checked
+          text:  el.text.checked,
+          maxPhotos: Math.max(1, parseInt(el.photos.value, 10) || 6)
         };
       }
 
@@ -361,7 +372,7 @@ ${CANVAS_KIT}
 
         // Collage de photos sur tout l'espace restant
         var bottom=S.h-Math.round(S.h*0.055);
-        collage(g, stage, num, { x:x, y:y, w:w, h:bottom-y });
+        collage(g, stage, num, { x:x, y:y, w:w, h:bottom-y }, o);
 
         // Pied de page
         g.textAlign='center'; g.fillStyle='#a8bcb8';
@@ -372,14 +383,14 @@ ${CANVAS_KIT}
       // Montage à la manière d'un carnet de collage : des photos posées de
       // travers, débordant légèrement les unes sur les autres, chacune avec sa
       // marge blanche et son ombre portée.
-      function collage(g, stage, num, box){
-        var list=(stage.photos||[]).slice(0, MAX_PHOTOS);
+      function collage(g, stage, num, box, o){
+        var list=(stage.photos||[]).slice(0, o.maxPhotos);
         if(!list.length || box.h<80) return;
         var n=list.length;
         var cols = n===1?1 : (n<=2? (box.w>box.h?2:1) : (n<=6?2:3));
         var rows = Math.ceil(n/cols);
         if(box.h/rows < 120 && cols<3){ cols++; rows=Math.ceil(n/cols); }
-        var cw=box.w/cols, ch=box.h/rows;
+        var ch=box.h/rows;
         var rand=rng(num*97+n);
 
         for(var i=0;i<n;i++){
@@ -387,13 +398,31 @@ ${CANVAS_KIT}
           // Dernière rangée incomplète : on la centre
           var inRow=Math.min(cols, n-r*cols);
           var rowW=box.w/inRow;
-          var cx=box.x+rowW*(c+0.5)+(inRow===cols?0:0);
-          if(inRow!==cols) cx=box.x+box.w/2+(c-(inRow-1)/2)*rowW;
+          var cx=(inRow===cols) ? box.x+rowW*(c+0.5) : box.x+box.w/2+(c-(inRow-1)/2)*rowW;
           var cy=box.y+ch*(r+0.5);
-          var scale=(i===0?1.14:1.02)+rand()*0.10;    // la préférée en avant, débordant un peu
-          var tw=Math.min(rowW, cw)*scale*0.94, th=ch*scale*0.90;
-          var ang=(rand()-0.5)*0.19;                  // ± 5,5°
-          var pad=Math.max(6, Math.round(tw*0.035));
+
+          // Le cadre prend la forme de la photo : une verticale de téléphone
+          // reste verticale, une panoramique reste large. Rien n'est rogné —
+          // c'est la case qui s'adapte, pas l'image.
+          var entry=imgs[list[i]];
+          var ar=(entry && entry.cv && entry.cv.height) ? entry.cv.width/entry.cv.height : 4/3;
+          var availW=rowW*0.92, availH=ch*0.92;
+          var iw=Math.min(availW, availH*ar), ih=iw/ar;
+          // Une photo seule occupe sa page bien droite ; à plusieurs, la
+          // préférée passe devant et chacune déborde un peu sur sa voisine.
+          var grow=(n===1) ? 1 : (i===0?1.12:1.0)+rand()*0.08;
+          var ang=(n===1 ? 0.35 : 1)*(rand()-0.5)*0.19;   // ± 5,5°
+          iw*=grow; ih*=grow;
+          var pad=Math.max(5, Math.round(Math.min(iw,ih)*0.045));
+          // Le cadre penché prend plus de place que le cadre droit : on mesure
+          // son encombrement réel et on le ramène dans sa case, sans quoi une
+          // photo verticale déborderait sur le texte ou hors de la page.
+          var cos=Math.abs(Math.cos(ang)), sin=Math.abs(Math.sin(ang));
+          var tol=(n===1?0.98:1.06);
+          var over=Math.max(((iw+2*pad)*cos+(ih+2*pad)*sin)/(rowW*tol),
+                            ((iw+2*pad)*sin+(ih+2*pad)*cos)/(ch*tol), 1);
+          if(over>1){ iw/=over; ih/=over; pad=Math.max(4, Math.round(Math.min(iw,ih)*0.045)); }
+          var tw=iw+2*pad, th=ih+2*pad;
 
           g.save();
           g.translate(cx+(rand()-0.5)*10, cy+(rand()-0.5)*10);
@@ -402,11 +431,12 @@ ${CANVAS_KIT}
           g.fillStyle=C.card;
           g.fillRect(-tw/2, -th/2, tw, th);
           g.shadowColor='transparent';
-          var entry=imgs[list[i]];
           if(entry && entry.cv){
-            drawCover(g, entry.cv, -tw/2+pad, -th/2+pad, tw-2*pad, th-2*pad-Math.round(pad*0.4));
+            g.imageSmoothingEnabled=true;
+            if(g.imageSmoothingQuality) g.imageSmoothingQuality='high';
+            g.drawImage(entry.cv, -iw/2, -ih/2, iw, ih);
           } else {
-            g.fillStyle='#e8f7f4'; g.fillRect(-tw/2+pad, -th/2+pad, tw-2*pad, th-2*pad);
+            g.fillStyle='#e8f7f4'; g.fillRect(-iw/2, -ih/2, iw, ih);
           }
           g.restore();
         }
@@ -454,7 +484,7 @@ ${CANVAS_KIT}
         var o=opts();
         var need=[];
         STAGES.forEach(function(s){
-          (s.photos||[]).slice(0,MAX_PHOTOS).forEach(function(u){
+          (s.photos||[]).slice(0,o.maxPhotos).forEach(function(u){
             if(u && imgs[u]===undefined) need.push(u);
           });
         });
@@ -491,7 +521,10 @@ ${CANVAS_KIT}
         }
         chain.then(function(){
           var n=render();
+          var shown=0;
+          STAGES.forEach(function(s){ shown+=Math.min((s.photos||[]).length, o.maxPhotos); });
           setStatus(n+' page'+(n>1?'s':'')+' · '+STAGES.length+' étape'+(STAGES.length>1?'s':'')
+            +' · '+shown+' photo'+(shown>1?'s':'')
             +' · '+(el.format.value==='carre'?'21 × 21 cm':'A4 portrait')+' à 150 dpi');
           [el.print,el.png].forEach(function(b){ b.disabled=false; });
         }).catch(function(e){
@@ -539,7 +572,7 @@ ${CANVAS_KIT}
         });
       });
 
-      [el.format,el.fond].forEach(function(s){ s.addEventListener('change', refresh); });
+      [el.format,el.fond,el.photos].forEach(function(s){ s.addEventListener('change', refresh); });
       [el.cover,el.text].forEach(function(c){ c.addEventListener('change', refresh); });
 
       // ── Démarrage ───────────────────────────────────────

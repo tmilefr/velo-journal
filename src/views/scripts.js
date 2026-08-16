@@ -332,11 +332,15 @@ function renderPhotoGrid(input, containerId, state) {
   var files = Array.from(input.files);
   // Choix de la couverture (facultatif) : par défaut la première photo du lot
   var coverInput = input.dataset.coverInput ? document.getElementById(input.dataset.coverInput) : null;
+  // Médias retenus pour le livre photo : la liste des indices cochés 📖
+  var bookInput = input.dataset.bookInput ? document.getElementById(input.dataset.bookInput) : null;
   if (!files.length) {
     if (coverInput) coverInput.value = '0';
+    if (bookInput) bookInput.value = '';
     return;
   }
   var typed = (state && state.captions) || [];
+  var book = (state && state.book) || [];
   var cover = (state && state.cover != null) ? state.cover : -1;
   if (cover < 0 || cover >= files.length) {
     cover = files.findIndex(function(f) { return f.type.indexOf('video/') !== 0; });
@@ -362,7 +366,10 @@ function renderPhotoGrid(input, containerId, state) {
     files.forEach(function(f, k) { if (k !== i) dt.items.add(f); });
     input.files = dt.files;
     var nextCover = (cover === i) ? -1 : (cover > i ? cover - 1 : cover);
-    renderPhotoGrid(input, containerId, { captions: caps, cover: nextCover });
+    // La sélection du livre suit le décalage des indices
+    var nextBook = book.filter(function(k) { return k !== i; })
+                       .map(function(k) { return k > i ? k - 1 : k; });
+    renderPhotoGrid(input, containerId, { captions: caps, cover: nextCover, book: nextBook });
   }
 
   files.forEach(function(f, i) {
@@ -413,9 +420,24 @@ function renderPhotoGrid(input, containerId, state) {
       });
       card.appendChild(cov);
     }
+    if (bookInput && f.type.indexOf('video/') !== 0) {
+      var bk = document.createElement('button');
+      bk.type = 'button';
+      bk.className = 'photo-grid-book' + (book.indexOf(i) >= 0 ? ' is-book' : '');
+      bk.textContent = '📖 Livre';
+      bk.title = 'Retenir ce média pour le livre photo';
+      bk.addEventListener('click', function() {
+        var k = book.indexOf(i);
+        if (k >= 0) book.splice(k, 1); else book.push(i);
+        bk.classList.toggle('is-book', book.indexOf(i) >= 0);
+        bookInput.value = book.slice().sort(function(a, b){ return a - b; }).join(',');
+      });
+      card.appendChild(bk);
+    }
     grid.appendChild(card);
   });
   c.appendChild(grid);
+  if (bookInput) bookInput.value = book.slice().sort(function(a, b){ return a - b; }).join(',');
 }
 
 // ── Barre de progression d'envoi (post + édition) ──────────
