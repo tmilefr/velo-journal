@@ -611,6 +611,12 @@ const CSS = `
   .media-cover-btn.is-cover{background:var(--accent);box-shadow:0 0 0 2px rgba(255,255,255,.85);}
   .photo-grid-cover{margin-top:2px;background:var(--mist);color:var(--ocean-mid);border:1.5px solid var(--sand);border-radius:6px;padding:4px 6px;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:background .15s,border-color .15s;}
   .photo-grid-cover.is-cover{background:var(--accent);border-color:var(--accent);color:#fff;}
+  /* 📖 : média retenu pour le livre photo */
+  .media-book-btn{position:absolute;bottom:4px;left:30px;z-index:2;background:rgba(10,61,98,0.75);color:#fff;border:none;border-radius:50%;width:22px;height:22px;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;transition:background .15s;}
+  .media-book-btn:hover{background:rgba(10,61,98,0.95);}
+  .media-book-btn.is-book{background:var(--emerald);box-shadow:0 0 0 2px rgba(255,255,255,.85);}
+  .photo-grid-book{margin-top:2px;background:var(--mist);color:var(--ocean-mid);border:1.5px solid var(--sand);border-radius:6px;padding:4px 6px;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:background .15s,border-color .15s;}
+  .photo-grid-book.is-book{background:var(--emerald);border-color:var(--emerald);color:#fff;}
   .caption-popup{display:none;position:fixed;inset:0;background:rgba(5,15,30,0.85);z-index:1200;align-items:center;justify-content:center;backdrop-filter:blur(6px);padding:16px;}
   .caption-popup.open{display:flex;}
   .caption-popup-box{background:#fff;border-radius:16px;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.4);overflow:hidden;}

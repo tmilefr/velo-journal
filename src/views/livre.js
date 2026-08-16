@@ -45,7 +45,7 @@ function renderLivre(stages, isStrictAdmin = false) {
         <a href="/settings" class="sys-back">← Système</a>
         <h2 style="margin-bottom:6px">📖 Livre photo du voyage</h2>
         <p style="font-size:14px;color:var(--ink-light);line-height:1.6;margin:0">Une page A4 par étape : le titre, la date, les chiffres du jour, le récit, et les photos assemblées en collage. La carte du voyage fait la couverture, le profil altimétrique la quatrième. À imprimer recto pour relier, ou à envoyer tel quel à un imprimeur.</p>
-        <p style="font-size:13px;color:var(--ink-light);line-height:1.6;margin:10px 0 0;background:var(--mist);border:1px solid var(--sand);border-radius:10px;padding:10px 12px">📷 <strong>Quelles photos ?</strong> Celles de l'étape, dans l'ordre du carnet, la photo mise en avant (⭐) toujours en premier. Pour changer ce qui entre dans le livre, il suffit donc de <strong>réordonner les photos ou de changer l'étoile</strong> en modifiant l'étape — le réglage ci-dessous décide seulement du nombre retenu. Les vidéos sont écartées, et chaque photo garde sa forme : rien n'est rogné.</p>
+        <p style="font-size:13px;color:var(--ink-light);line-height:1.6;margin:10px 0 0;background:var(--mist);border:1px solid var(--sand);border-radius:10px;padding:10px 12px">📷 <strong>Quelles photos ?</strong> Celles que vous avez cochées <strong>📖</strong> en modifiant l'étape. Sans aucune coche, le livre prend les photos de l'étape dans leur ordre, la photo mise en avant (⭐) en premier. Le réglage ci-dessous plafonne le nombre par page. Les vidéos sont écartées, et chaque photo garde sa forme : rien n'est rogné.</p>
       </div>
       ${emptyState
         ? `<div class="form-card"><p style="font-size:14px;color:var(--ink-light);margin:0">Aucune étape à mettre en livre pour le moment.</p></div>`
@@ -69,7 +69,7 @@ function renderLivre(stages, isStrictAdmin = false) {
                  <option value="2">2</option>
                  <option value="4">4</option>
                  <option value="6" selected>6</option>
-                 <option value="99">toutes</option>
+                 <option value="99">toutes celles retenues</option>
                </select>
              </label>
              <label class="liv-field"><input type="checkbox" id="livText" checked> Récit des étapes</label>

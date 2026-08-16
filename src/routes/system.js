@@ -157,14 +157,15 @@ router.get('/livre', requireAuth, (req, res) => {
   res.send(renderLivre(stages, !!req.session.auth));
 });
 
-// Photos d'une étape, sans les vidéos, la préférée en tête.
+// Photos d'une étape pour le livre, sans les vidéos. Si l'auteur en a retenu
+// (bouton 📖 du formulaire), ce sont celles-là, dans l'ordre du carnet ; sinon
+// toutes, la photo mise en avant (⭐) en tête.
 function orderPhotos(p) {
   const photos = (p.photos || []).filter(u => !isVideoUrl(u));
-  const cover  = pickCover(p.photos, p.cover);
-  if (cover && !isVideoUrl(cover)) {
-    const rest = photos.filter(u => u !== cover);
-    return [cover].concat(rest);
-  }
+  const chosen = (p.bookPhotos || []).filter(u => photos.includes(u));
+  if (chosen.length) return photos.filter(u => chosen.includes(u));
+  const cover = pickCover(p.photos, p.cover);
+  if (cover && !isVideoUrl(cover)) return [cover].concat(photos.filter(u => u !== cover));
   return photos;
 }
 

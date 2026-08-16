@@ -22,6 +22,18 @@ const { renderEditForm } = require('../views/editForm');
 
 const router = express.Router();
 
+// Médias retenus pour le livre photo (bouton 📖 des formulaires). On ne garde
+// que ceux qui existent encore, dans l'ordre du carnet — une liste vide veut
+// dire « pas de choix », et le livre prend alors les photos de l'étape.
+function parseBookPhotos(body, photos, newPhotos) {
+  const wanted = new Set(String(body.bookPhotos || '').split(',').map(u => u.trim()).filter(Boolean));
+  String(body.book_new || '').split(',').forEach(i => {
+    const url = newPhotos[parseInt(i, 10)];
+    if (url) wanted.add(url);
+  });
+  return photos.filter(u => wanted.has(u));
+}
+
 router.get('/post', requireAuth, (req, res) => {
   const posts = readPosts().sort((a, b) => new Date(b.date) - new Date(a.date));
   const lastLocation = posts.length > 0 ? (posts[0].location || '') : '';
@@ -129,6 +141,7 @@ router.post('/post', requireAuth, requireCsrf, upload.fields([{name:'photos', ma
     photos,
     captions,
     cover:      pickCover(photos, photos[parseInt(req.body.cover_new, 10)]),
+    bookPhotos: parseBookPhotos(req.body, photos, photos),
     gpx:        gpxFile,
     expenses,
     sleep:      parseSleep(req.body),
@@ -288,6 +301,7 @@ router.post('/edit/:id', requireAuth, requireCsrf, upload.fields([{name:'photos'
     // Couverture : le choix de l'auteur, ou un repli automatique si le média
     // retenu vient d'être supprimé de l'étape.
     cover:      pickCover(photos, req.body.cover),
+    bookPhotos: parseBookPhotos(req.body, photos, newPhotos),
     gpx:        gpxFile,
     expenses:    parseExpenses(req.body),
     sleep:       parseSleep(req.body),

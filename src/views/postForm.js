@@ -38,9 +38,10 @@ function renderPostForm(err, lastLocation = '', isMargot = false, csrf = '', def
           </div>
           <div class="field">
             <label>Photos / vidéos (max 10)</label>
-            <input type="file" name="photos" multiple accept="image/*,video/*" id="photoInputPost" data-photo-grid="newCaptionsPost" data-cover-input="coverNewPost">
+            <input type="file" name="photos" multiple accept="image/*,video/*" id="photoInputPost" data-photo-grid="newCaptionsPost" data-book-input="bookNewPost" data-cover-input="coverNewPost">
             <div id="newCaptionsPost"></div>
             <input type="hidden" name="cover_new" id="coverNewPost" value="0">
+            <input type="hidden" name="book_new" id="bookNewPost" value="">
             <p style="font-size:11px;color:var(--ink-light);margin-top:6px">⭐ Choisissez le média affiché sur la carte du post : les autres photos et vidéos s'ouvrent au clic.</p>
           </div>
           <div class="field">
