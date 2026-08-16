@@ -136,7 +136,6 @@ function renderAffiche(stages, isStrictAdmin = false) {
       };
 
       var world = null;   // frontières décodées
-      var tiles = {};     // tuiles OSM déjà chargées, par z/x/y
       var tileSet = null; // tuiles de l'emprise courante
       var cities = null;  // villes, de la plus peuplée à la moins peuplée
       var tracks = null;  // traces GPX + altitudes
@@ -354,13 +353,18 @@ ${CANVAS_KIT}
         var S=L.sheet, map=L.map;
         var view=viewOf(L), proj=projector(view,map);
 
-        // Les vignettes gagnent du terrain sur la carte avant qu'on dessine
-        // quoi que ce soit : la carte doit savoir où elles seront pour ne pas
-        // y écrire des noms de villes, et le fil de chaque photo part de sa
-        // position définitive.
-        L.legend=legendGeom(L,view);
-        L.stats=o.stats ? statsGeom(L) : null;
-        placeTiles(L, proj, o);
+        // Tout se décide avant le premier trait : le masque du tracé, puis
+        // les encarts posés là où ils ne cachent rien, puis les vignettes —
+        // la carte doit savoir où seront les uns et les autres pour ne pas y
+        // écrire de noms de villes.
+        var mask=buildMask(L, proj);
+        L.legend=legendGeom(L,view,mask);
+        L.stats=o.stats ? statsGeom(L,mask) : null;
+        [L.legend,L.stats].forEach(function(b){
+          if(b) mask.markRect(b.x-10,b.y-10,b.w+20,b.h+20);
+        });
+        mask.seal();
+        placeTiles(L, proj, o, mask);
 
         g.fillStyle=C.paper; g.fillRect(0,0,S.w,S.h);
 
@@ -408,12 +412,13 @@ ${CANVAS_KIT}
         if(t.countries.length) rows.push([t.countries.length>1?'Pays traversés':'Pays', t.countries.join(', ')]);
         return rows;
       }
-      function statsGeom(L){
+      function statsGeom(L, mask){
         var safe=L.safe, rows=statsRows();
         if(!rows.length || safe.w<340 || safe.h<260) return null;
         var w=Math.min(520, Math.max(360, safe.w*0.34));
         var h=26+rows.length*34+14;
-        return { x:safe.x+safe.w-w-14, y:safe.y+14, w:w, h:h, rows:rows };
+        var pos=placeCard(mask, safe, w, h, ['tr','tl','br','bl']);
+        return { x:pos.x, y:pos.y, w:w, h:h, rows:rows };
       }
       function drawStats(g,L){
         var b=L.stats;
@@ -481,36 +486,70 @@ ${CANVAS_KIT}
           if(prevPt && !(tracks[i] && tracks[i].pts.length>1)) markSeg(prevPt,p,TRACE_PAD);
           prevPt=p;
         });
-        if(L.legend) markRect(L.legend.x-10, L.legend.y-10, L.legend.w+20, L.legend.h+20);
-        if(L.stats)  markRect(L.stats.x-10,  L.stats.y-10,  L.stats.w+20,  L.stats.h+20);
-
         // Somme cumulée : sum[r][c] = nombre de cases interdites au-dessus et
-        // à gauche. Un rectangle est libre si sa somme vaut zéro.
-        var sum=new Int32Array((cols+1)*(rows+1));
-        for(var r=0;r<rows;r++){
-          var acc=0;
-          for(var c=0;c<cols;c++){
-            acc+=grid[r*cols+c];
-            sum[(r+1)*(cols+1)+(c+1)] = sum[r*(cols+1)+(c+1)] + acc;
+        // à gauche. Compter les cases occupées d'un rectangle coûte alors
+        // quatre additions. Elle est recalculée à chaque fois qu'on ajoute
+        // quelque chose au masque (les encarts, une fois placés).
+        var sum=null;
+        function seal(){
+          sum=new Int32Array((cols+1)*(rows+1));
+          for(var r=0;r<rows;r++){
+            var acc=0;
+            for(var c=0;c<cols;c++){
+              acc+=grid[r*cols+c];
+              sum[(r+1)*(cols+1)+(c+1)] = sum[r*(cols+1)+(c+1)] + acc;
+            }
           }
         }
+        function busy(x,y,w,h){
+          var c0=Math.max(0,Math.floor((x-inner.x)/CELL)), c1=Math.min(cols-1,Math.floor((x+w-inner.x)/CELL));
+          var r0=Math.max(0,Math.floor((y-inner.y)/CELL)), r1=Math.min(rows-1,Math.floor((y+h-inner.y)/CELL));
+          var W=cols+1;
+          return sum[(r1+1)*W+(c1+1)] - sum[r0*W+(c1+1)] - sum[(r1+1)*W+c0] + sum[r0*W+c0];
+        }
+        seal();
         return {
+          markRect: function(x,y,w,h){ markRect(x,y,w,h); },
+          seal: seal,
+          busy: function(x,y,w,h){
+            if(x<inner.x || y<inner.y || x+w>inner.x+inner.w || y+h>inner.y+inner.h) return Infinity;
+            return busy(x,y,w,h);
+          },
           free: function(x,y,w,h){
             if(x<inner.x || y<inner.y || x+w>inner.x+inner.w || y+h>inner.y+inner.h) return false;
-            var c0=Math.max(0,Math.floor((x-inner.x)/CELL)), c1=Math.min(cols-1,Math.floor((x+w-inner.x)/CELL));
-            var r0=Math.max(0,Math.floor((y-inner.y)/CELL)), r1=Math.min(rows-1,Math.floor((y+h-inner.y)/CELL));
-            var W=cols+1;
-            var s= sum[(r1+1)*W+(c1+1)] - sum[r0*W+(c1+1)] - sum[(r1+1)*W+c0] + sum[r0*W+c0];
-            return s===0;
+            return busy(x,y,w,h)===0;
           }
         };
       }
 
+      // Pose un encart (légende, statistiques) là où il ne cache rien : on
+      // essaie les quatre coins de la zone libre, puis, si le tracé les occupe
+      // tous, on balaie la feuille et on retient l'endroit le moins encombré.
+      function placeCard(mask, area, w, h, order){
+        var M=16, cands=[];
+        var corners={
+          bl:[area.x+M, area.y+area.h-h-M], br:[area.x+area.w-w-M, area.y+area.h-h-M],
+          tl:[area.x+M, area.y+M],          tr:[area.x+area.w-w-M, area.y+M]
+        };
+        (order||['bl','br','tl','tr']).forEach(function(k){ if(corners[k]) cands.push(corners[k]); });
+        for(var i=0;i<cands.length;i++){
+          if(mask.free(cands[i][0],cands[i][1],w,h)) return { x:cands[i][0], y:cands[i][1], w:w, h:h };
+        }
+        var best=null, step=24;
+        for(var y=area.y+M; y+h<=area.y+area.h-M; y+=step){
+          for(var x=area.x+M; x+w<=area.x+area.w-M; x+=step){
+            var b=mask.busy(x,y,w,h);
+            if(b===0) return { x:x, y:y, w:w, h:h };
+            if(!best || b<best.b) best={ x:x, y:y, w:w, h:h, b:b };
+          }
+        }
+        return best || { x:cands[0][0], y:cands[0][1], w:w, h:h };
+      }
+
       // Place les vignettes : on essaie la plus grande taille possible, et pour
       // chacune on cherche en spirale autour de son point d'étape.
-      function placeTiles(L, proj, o){
+      function placeTiles(L, proj, o, mask){
         if(o && !o.photos){ L.slots=[]; return L.slots; }   // affiche sans photos
-        var mask=buildMask(L, proj);
         var pts=STAGES.map(function(s,i){
           var lat=s.lat, lon=s.lon, t=tracks[i];
           if((lat==null||lon==null) && t && t.pts.length){
@@ -774,156 +813,6 @@ ${CANVAS_KIT}
         g.strokeRect(map.x+0.5,map.y+0.5,map.w-1,map.h-1);
       }
 
-      // ── Fond OpenStreetMap ──────────────────────────────
-      // Le même fond que la page Carte. Les tuiles OSM sont en Mercator, comme
-      // la projection de l'affiche : elles se posent par simple mise à
-      // l'échelle, sans reprojection. Le zoom est choisi pour l'export 300 dpi
-      // (échelle 2) : l'aperçu réduit les mêmes tuiles, l'impression est nette
-      // et rien n'est téléchargé deux fois. L'attribut crossOrigin est
-      // indispensable : sans lui le canvas serait « teinté » par les tuiles et
-      // l'export PNG deviendrait impossible.
-      var TILE_HOSTS = ['a','b','c'];
-      var TILE_MAX   = 360;   // plafond de politesse pour les serveurs d'OpenStreetMap
-
-      function tileZoom(view, rect){
-        var span=Math.max(view.xright-view.xleft, 1e-9);
-        // On arrondit vers le haut : mieux vaut réduire des tuiles trop fines
-        // que d'en étirer de trop grosses, qui se verraient à l'impression.
-        var z=Math.ceil(Math.log(rect.w*2*(2*Math.PI/span)/256)/Math.LN2);
-        z=Math.max(0, Math.min(18, z));
-        // Trop de tuiles pour une seule affiche : on descend d'un cran.
-        while(z>0 && tileCount(view,z)>TILE_MAX) z--;
-        return z;
-      }
-      function tileFrame(view, z){
-        var n=Math.pow(2,z), K=2*Math.PI;
-        return {
-          n:n,
-          x0:(view.xleft+Math.PI)/K*n, x1:(view.xright+Math.PI)/K*n,
-          y0:(Math.PI-view.ytop)/K*n,  y1:(Math.PI-view.ybot)/K*n
-        };
-      }
-      function tileCount(view, z){
-        var f=tileFrame(view,z);
-        return (Math.floor(f.x1)-Math.floor(f.x0)+1)*(Math.floor(f.y1)-Math.floor(f.y0)+1);
-      }
-      function loadTiles(view, z, onProgress){
-        var f=tileFrame(view,z), list=[];
-        for(var tx=Math.floor(f.x0); tx<=Math.floor(f.x1); tx++){
-          for(var ty=Math.floor(f.y0); ty<=Math.floor(f.y1); ty++){
-            if(ty<0 || ty>=f.n) continue;
-            list.push({ x:((tx%f.n)+f.n)%f.n, y:ty, gx:tx, gy:ty });
-          }
-        }
-        var next=0, done=0;
-        function worker(){
-          if(next>=list.length) return Promise.resolve();
-          var t=list[next++];
-          var key=z+'/'+t.x+'/'+t.y;
-          if(tiles[key]!==undefined){ t.img=tiles[key]; done++; return worker(); }
-          return new Promise(function(res){
-            var im=new Image();
-            im.crossOrigin='anonymous';
-            im.onload =function(){ tiles[key]=im;   t.img=im;   res(); };
-            im.onerror=function(){ tiles[key]=null; t.img=null; res(); };
-            im.src='https://'+TILE_HOSTS[(t.x+t.y)%3]+'.tile.openstreetmap.org/'+z+'/'+t.x+'/'+t.y+'.png';
-          }).then(function(){
-            if(onProgress) onProgress(++done, list.length);
-            return worker();
-          });
-        }
-        var runners=[]; for(var i=0;i<Math.min(6,list.length);i++) runners.push(worker());
-        return Promise.all(runners).then(function(){
-          return { z:z, frame:f, list:list, ok:list.filter(function(t){ return t.img; }).length };
-        });
-      }
-      function drawTiles(g, map, set){
-        var f=set.frame, tw=map.w/(f.x1-f.x0), th=map.h/(f.y1-f.y0);
-        g.imageSmoothingEnabled=true;
-        if(g.imageSmoothingQuality) g.imageSmoothingQuality='high';
-        set.list.forEach(function(t){
-          if(!t.img) return;
-          // +1 px de recouvrement : sinon un liseré de fond apparaît entre
-          // deux tuiles posées à des coordonnées fractionnaires.
-          g.drawImage(t.img, map.x+(t.gx-f.x0)*tw, map.y+(t.gy-f.y0)*th, tw+1, th+1);
-        });
-      }
-
-      // ── Fond OpenStreetMap ──────────────────────────────
-      // Le même fond que la page Carte. Les tuiles OSM sont en Mercator, comme
-      // la projection de l'affiche : elles se posent par simple mise à
-      // l'échelle, sans reprojection. Le zoom est choisi pour l'export 300 dpi
-      // (échelle 2) : l'aperçu réduit les mêmes tuiles, l'impression est nette
-      // et rien n'est téléchargé deux fois. L'attribut crossOrigin est
-      // indispensable : sans lui le canvas serait « teinté » par les tuiles et
-      // l'export PNG deviendrait impossible.
-      var TILE_HOSTS = ['a','b','c'];
-      var TILE_MAX   = 360;   // plafond de politesse pour les serveurs d'OpenStreetMap
-
-      function tileZoom(view, rect){
-        var span=Math.max(view.xright-view.xleft, 1e-9);
-        // On arrondit vers le haut : mieux vaut réduire des tuiles trop fines
-        // que d'en étirer de trop grosses, qui se verraient à l'impression.
-        var z=Math.ceil(Math.log(rect.w*2*(2*Math.PI/span)/256)/Math.LN2);
-        z=Math.max(0, Math.min(18, z));
-        // Trop de tuiles pour une seule affiche : on descend d'un cran.
-        while(z>0 && tileCount(view,z)>TILE_MAX) z--;
-        return z;
-      }
-      function tileFrame(view, z){
-        var n=Math.pow(2,z), K=2*Math.PI;
-        return {
-          n:n,
-          x0:(view.xleft+Math.PI)/K*n, x1:(view.xright+Math.PI)/K*n,
-          y0:(Math.PI-view.ytop)/K*n,  y1:(Math.PI-view.ybot)/K*n
-        };
-      }
-      function tileCount(view, z){
-        var f=tileFrame(view,z);
-        return (Math.floor(f.x1)-Math.floor(f.x0)+1)*(Math.floor(f.y1)-Math.floor(f.y0)+1);
-      }
-      function loadTiles(view, z, onProgress){
-        var f=tileFrame(view,z), list=[];
-        for(var tx=Math.floor(f.x0); tx<=Math.floor(f.x1); tx++){
-          for(var ty=Math.floor(f.y0); ty<=Math.floor(f.y1); ty++){
-            if(ty<0 || ty>=f.n) continue;
-            list.push({ x:((tx%f.n)+f.n)%f.n, y:ty, gx:tx, gy:ty });
-          }
-        }
-        var next=0, done=0;
-        function worker(){
-          if(next>=list.length) return Promise.resolve();
-          var t=list[next++];
-          var key=z+'/'+t.x+'/'+t.y;
-          if(tiles[key]!==undefined){ t.img=tiles[key]; done++; return worker(); }
-          return new Promise(function(res){
-            var im=new Image();
-            im.crossOrigin='anonymous';
-            im.onload =function(){ tiles[key]=im;   t.img=im;   res(); };
-            im.onerror=function(){ tiles[key]=null; t.img=null; res(); };
-            im.src='https://'+TILE_HOSTS[(t.x+t.y)%3]+'.tile.openstreetmap.org/'+z+'/'+t.x+'/'+t.y+'.png';
-          }).then(function(){
-            if(onProgress) onProgress(++done, list.length);
-            return worker();
-          });
-        }
-        var runners=[]; for(var i=0;i<Math.min(6,list.length);i++) runners.push(worker());
-        return Promise.all(runners).then(function(){
-          return { z:z, frame:f, list:list, ok:list.filter(function(t){ return t.img; }).length };
-        });
-      }
-      function drawTiles(g, map, set){
-        var f=set.frame, tw=map.w/(f.x1-f.x0), th=map.h/(f.y1-f.y0);
-        g.imageSmoothingEnabled=true;
-        if(g.imageSmoothingQuality) g.imageSmoothingQuality='high';
-        set.list.forEach(function(t){
-          if(!t.img) return;
-          // +1 px de recouvrement : sinon un liseré de fond apparaît entre
-          // deux tuiles posées à des coordonnées fractionnaires.
-          g.drawImage(t.img, map.x+(t.gx-f.x0)*tw, map.y+(t.gy-f.y0)*th, tw+1, th+1);
-        });
-      }
-
       // ── Villes ──────────────────────────────────────────
       // Les villes sont triées de la plus peuplée à la moins peuplée : on les
       // parcourt dans l'ordre et on ne pose une étiquette que si elle ne
@@ -990,7 +879,7 @@ ${CANVAS_KIT}
       // Échelle kilométrique + nuancier d'altitude, dans un coin de la carte
       // Position et taille de la légende, calculées avant tout dessin : les
       // vignettes doivent savoir où elle se trouve pour ne pas s'y poser.
-      function legendGeom(L, view){
+      function legendGeom(L, view, mask){
         var map=L.map, safe=L.safe;
         if(safe.w<300 || safe.h<200) return null;   // zone libre trop petite
         var latC=(view.north+view.south)/2;
@@ -1001,7 +890,8 @@ ${CANVAS_KIT}
         for(var i=0;i<CANDS.length;i++){ if(CANDS[i]*1000/mPerPx>=want){ kmBar=CANDS[i]; break; } }
         var barPx=kmBar*1000/mPerPx;
         var boxW=Math.max(200, barPx+40), boxH=relief?128:78;
-        return { x:safe.x+14, y:safe.y+safe.h-boxH-14, w:boxW, h:boxH, kmBar:kmBar, barPx:barPx };
+        var pos=placeCard(mask, safe, boxW, boxH, ['bl','br','tl','tr']);
+        return { x:pos.x, y:pos.y, w:boxW, h:boxH, kmBar:kmBar, barPx:barPx };
       }
 
       function drawLegend(g,L){

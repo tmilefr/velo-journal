@@ -5,7 +5,8 @@ const { CANVAS_KIT } = require('./canvasKit');
 
 // ══════════════════════════════════════════════════════════
 // Compose (côté client, sur canvas) un livre au format A4 :
-//   • la couverture porte le tracé du voyage entier ;
+//   • la couverture porte la carte du voyage entier — fond épuré ou tuiles
+//     OpenStreetMap — avec le tracé par-dessus ;
 //   • chaque étape a sa page — titre, date, chiffres, récit, et un montage
 //     de ses photos à la manière d'un carnet de collage ;
 //   • la quatrième de couverture porte le profil altimétrique.
@@ -43,7 +44,7 @@ function renderLivre(stages, isStrictAdmin = false) {
       <div class="form-card" style="margin-bottom:16px">
         <a href="/settings" class="sys-back">← Système</a>
         <h2 style="margin-bottom:6px">📖 Livre photo du voyage</h2>
-        <p style="font-size:14px;color:var(--ink-light);line-height:1.6;margin:0">Une page A4 par étape : le titre, la date, les chiffres du jour, le récit, et les photos assemblées en collage. Le tracé du voyage fait la couverture, le profil altimétrique la quatrième. À imprimer recto pour relier, ou à envoyer tel quel à un imprimeur.</p>
+        <p style="font-size:14px;color:var(--ink-light);line-height:1.6;margin:0">Une page A4 par étape : le titre, la date, les chiffres du jour, le récit, et les photos assemblées en collage. La carte du voyage fait la couverture, le profil altimétrique la quatrième. À imprimer recto pour relier, ou à envoyer tel quel à un imprimeur.</p>
       </div>
       ${emptyState
         ? `<div class="form-card"><p style="font-size:14px;color:var(--ink-light);margin:0">Aucune étape à mettre en livre pour le moment.</p></div>`
@@ -55,6 +56,12 @@ function renderLivre(stages, isStrictAdmin = false) {
                </select>
              </label>
              <label class="liv-field"><input type="checkbox" id="livCover" checked> Couverture et quatrième</label>
+             <label class="liv-field">Carte de couverture
+               <select id="livFond">
+                 <option value="clean">épurée</option>
+                 <option value="osm">OpenStreetMap</option>
+               </select>
+             </label>
              <label class="liv-field"><input type="checkbox" id="livText" checked> Récit des étapes</label>
              <button class="liv-btn primary" id="livPrint" disabled>🖨️ Imprimer / PDF</button>
              <button class="liv-btn" id="livPng" disabled>⬇️ Pages en PNG</button>
@@ -85,17 +92,20 @@ ${CANVAS_KIT}
         status: document.getElementById('livStatus'),
         format: document.getElementById('livFormat'),
         cover:  document.getElementById('livCover'),
+        fond:   document.getElementById('livFond'),
         text:   document.getElementById('livText'),
         print:  document.getElementById('livPrint'),
         png:    document.getElementById('livPng')
       };
       var world=null, tracks=null, canvases=[], drawing=false, pending=false;
+      var coverTiles=null, coverKey='';
 
       function setStatus(t){ el.status.textContent=t; }
       function opts(){
         return {
           sheet: SHEETS[el.format.value] || SHEETS.a4,
           cover: el.cover.checked,
+          fond:  el.fond.value === 'osm' ? 'osm' : 'clean',
           text:  el.text.checked
         };
       }
@@ -140,8 +150,12 @@ ${CANVAS_KIT}
         var proj=function(lat,lon){
           return [ rect.x+rect.w/2+(mercX(lon)-cx)*k, rect.y+rect.h/2-(mercY(lat)-cy)*k ];
         };
-        proj.view={ west:(cx-(rect.w/2)/k)/RAD, east:(cx+(rect.w/2)/k)/RAD,
-                    south:invMercY(cy-(rect.h/2)/k), north:invMercY(cy+(rect.h/2)/k) };
+        // L'emprise porte à la fois les degrés (pour trier les formes du fond
+        // de carte) et les coordonnées Mercator (dont les tuiles ont besoin).
+        var xl=cx-(rect.w/2)/k, xr=cx+(rect.w/2)/k;
+        var yb=cy-(rect.h/2)/k, yt=cy+(rect.h/2)/k;
+        proj.view={ west:xl/RAD, east:xr/RAD, south:invMercY(yb), north:invMercY(yt),
+                    xleft:xl, xright:xr, ytop:yt, ybot:yb };
         return proj;
       }
 
@@ -154,36 +168,45 @@ ${CANVAS_KIT}
         var rect={ x:M, y:Math.round(S.h*0.20), w:S.w-2*M, h:Math.round(S.h*0.52) };
         var proj=traceProjector(rect, 20);
 
-        if(proj && world){
+        // La carte du voyage, en pleine page : tuiles OpenStreetMap si elles
+        // ont pu être chargées, sinon le fond épuré — mer, terres, littoraux
+        // et frontières — dessiné depuis le même TopoJSON que l'affiche.
+        if(proj){
           g.save();
           g.beginPath(); g.rect(rect.x,rect.y,rect.w,rect.h); g.clip();
           var view=proj.view;
-          // Terres et littoraux, en sourdine : la trace reste la vedette.
-          var land=new Path2D(), drawn=0;
-          world.rings.forEach(function(ring){
-            if(!boxHits(ring.box,view)) return;
-            var pts=ring.pts, p0=proj(pts[0][1],pts[0][0]);
-            land.moveTo(p0[0],p0[1]);
-            for(var i=1;i<pts.length;i++){ var p=proj(pts[i][1],pts[i][0]); land.lineTo(p[0],p[1]); }
-            land.closePath(); drawn++;
-          });
-          // Sur une couverture, le fond reste le papier : un aplat de couleur
-          // découperait un rectangle en plein milieu. Restent les traits de
-          // côte et de frontière, en sourdine, et la trace par-dessus.
-          void drawn;
-          [false,true].forEach(function(shared){
-            g.strokeStyle=shared?C.border:C.coast; g.lineWidth=shared?0.8:1.2;
-            g.setLineDash(shared?[6,5]:[]);
-            g.beginPath();
-            world.lines.forEach(function(l){
-              if(l.shared!==shared || !boxHits(l.box,view)) return;
-              var pts=l.pts, p0=proj(pts[0][1],pts[0][0]);
-              g.moveTo(p0[0],p0[1]);
-              for(var i=1;i<pts.length;i++){ var p=proj(pts[i][1],pts[i][0]); g.lineTo(p[0],p[1]); }
+          var osm = o.fond==='osm' && coverTiles && coverTiles.ok;
+          if(osm){
+            drawTiles(g, rect, coverTiles);
+            g.fillStyle='rgba(251,250,246,0.18)';
+            g.fillRect(rect.x,rect.y,rect.w,rect.h);
+          } else if(world){
+            g.fillStyle=C.sea; g.fillRect(rect.x,rect.y,rect.w,rect.h);
+            var land=new Path2D(), drawn=0;
+            world.rings.forEach(function(ring){
+              if(!boxHits(ring.box,view)) return;
+              var pts=ring.pts, p0=proj(pts[0][1],pts[0][0]);
+              land.moveTo(p0[0],p0[1]);
+              for(var i=1;i<pts.length;i++){ var p=proj(pts[i][1],pts[i][0]); land.lineTo(p[0],p[1]); }
+              land.closePath(); drawn++;
             });
-            g.stroke(); g.setLineDash([]);
-          });
+            if(drawn){ g.fillStyle=C.land; g.fill(land,'evenodd'); }
+            [false,true].forEach(function(shared){
+              g.strokeStyle=shared?C.border:C.coast; g.lineWidth=shared?1:1.4;
+              g.setLineDash(shared?[6,5]:[]);
+              g.beginPath();
+              world.lines.forEach(function(l){
+                if(l.shared!==shared || !boxHits(l.box,view)) return;
+                var pts=l.pts, p0=proj(pts[0][1],pts[0][0]);
+                g.moveTo(p0[0],p0[1]);
+                for(var i=1;i<pts.length;i++){ var p=proj(pts[i][1],pts[i][0]); g.lineTo(p[0],p[1]); }
+              });
+              g.stroke(); g.setLineDash([]);
+            });
+          }
           g.restore();
+          g.strokeStyle='rgba(26,58,58,0.12)'; g.lineWidth=1;
+          g.strokeRect(rect.x+0.5, rect.y+0.5, rect.w-1, rect.h-1);
         }
         if(proj){
           g.lineJoin='round'; g.lineCap='round';
@@ -273,7 +296,9 @@ ${CANVAS_KIT}
         g.font='500 '+Math.round(S.w*0.020)+'px "DM Sans", Helvetica, sans-serif';
         g.fillText(frNum(tot.dplus)+' mètres de dénivelé positif', S.w/2, Math.round(S.h*0.72));
         g.fillStyle=C.inkSoft; g.font='400 13px "DM Sans", Helvetica, sans-serif';
-        g.fillText('Traces GPX du carnet  ·  Fond de carte : Natural Earth', S.w/2, S.h-Math.round(S.h*0.06));
+        g.fillText('Traces GPX du carnet  ·  Fond de carte : '
+          + (opts().fond==='osm' && coverTiles ? '© OpenStreetMap contributors' : 'Natural Earth'),
+          S.w/2, S.h-Math.round(S.h*0.06));
       }
 
       function totals(){
@@ -423,6 +448,9 @@ ${CANVAS_KIT}
       function refresh(){
         if(drawing){ pending=true; return; }
         drawing=true; pending=false;
+        // Pas d'export tant que la composition n'est pas finie : le livre
+        // imprimé serait celui d'avant le réglage qu'on vient de changer.
+        [el.print,el.png].forEach(function(b){ b.disabled=true; });
         var o=opts();
         var need=[];
         STAGES.forEach(function(s){
@@ -431,6 +459,28 @@ ${CANVAS_KIT}
           });
         });
         var chain=Promise.resolve();
+
+        // Tuiles de la couverture : même emprise que la carte qui y sera
+        // dessinée, et le même cache pour tout le livre.
+        if(o.cover && o.fond==='osm'){
+          chain=chain.then(function(){
+            var S=o.sheet, M=Math.round(S.w*0.09);
+            var rect={ x:M, y:Math.round(S.h*0.20), w:S.w-2*M, h:Math.round(S.h*0.52) };
+            var proj=traceProjector(rect, 20);
+            if(!proj) return;
+            var z=tileZoom(proj.view, rect);
+            var key=[proj.view.west.toFixed(3),proj.view.east.toFixed(3),z].join('|');
+            if(coverTiles && coverKey===key) return;
+            setStatus('Chargement du fond OpenStreetMap (' + tileCount(proj.view,z) + ' tuiles)…');
+            return loadTiles(proj.view, z, function(done,total){
+              if(done%8===0||done===total) setStatus('Chargement du fond OpenStreetMap ('+done+' / '+total+')…');
+            }).then(function(set){ coverTiles = set.ok ? set : null; coverKey=key; },
+                    function(){ coverTiles=null; });
+          });
+        } else {
+          coverTiles=null; coverKey='';
+        }
+
         if(need.length){
           chain=chain.then(function(){
             setStatus('Chargement des photos (0 / '+need.length+')…');
@@ -489,7 +539,7 @@ ${CANVAS_KIT}
         });
       });
 
-      [el.format].forEach(function(s){ s.addEventListener('change', refresh); });
+      [el.format,el.fond].forEach(function(s){ s.addEventListener('change', refresh); });
       [el.cover,el.text].forEach(function(c){ c.addEventListener('change', refresh); });
 
       // ── Démarrage ───────────────────────────────────────
