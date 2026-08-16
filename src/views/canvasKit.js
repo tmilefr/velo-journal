@@ -133,6 +133,82 @@ const CANVAS_KIT = `
         return pts;
       }
 
+      // ── Fond OpenStreetMap ──────────────────────────────
+      // Le même fond que la page Carte. Les tuiles OSM sont en Mercator, comme
+      // la projection de l'affiche : elles se posent par simple mise à
+      // l'échelle, sans reprojection. Le zoom est choisi pour l'export 300 dpi
+      // (échelle 2) : l'aperçu réduit les mêmes tuiles, l'impression est nette
+      // et rien n'est téléchargé deux fois. L'attribut crossOrigin est
+      // indispensable : sans lui le canvas serait « teinté » par les tuiles et
+      // l'export PNG deviendrait impossible.
+      var TILE_HOSTS = ['a','b','c'];
+      var TILE_MAX   = 360;   // plafond de politesse pour les serveurs d'OpenStreetMap
+      var tiles = {};         // tuiles déjà chargées, par z/x/y
+
+      function tileZoom(view, rect){
+        var span=Math.max(view.xright-view.xleft, 1e-9);
+        // On arrondit vers le haut : mieux vaut réduire des tuiles trop fines
+        // que d'en étirer de trop grosses, qui se verraient à l'impression.
+        var z=Math.ceil(Math.log(rect.w*2*(2*Math.PI/span)/256)/Math.LN2);
+        z=Math.max(0, Math.min(18, z));
+        // Trop de tuiles pour une seule affiche : on descend d'un cran.
+        while(z>0 && tileCount(view,z)>TILE_MAX) z--;
+        return z;
+      }
+      function tileFrame(view, z){
+        var n=Math.pow(2,z), K=2*Math.PI;
+        return {
+          n:n,
+          x0:(view.xleft+Math.PI)/K*n, x1:(view.xright+Math.PI)/K*n,
+          y0:(Math.PI-view.ytop)/K*n,  y1:(Math.PI-view.ybot)/K*n
+        };
+      }
+      function tileCount(view, z){
+        var f=tileFrame(view,z);
+        return (Math.floor(f.x1)-Math.floor(f.x0)+1)*(Math.floor(f.y1)-Math.floor(f.y0)+1);
+      }
+      function loadTiles(view, z, onProgress){
+        var f=tileFrame(view,z), list=[];
+        for(var tx=Math.floor(f.x0); tx<=Math.floor(f.x1); tx++){
+          for(var ty=Math.floor(f.y0); ty<=Math.floor(f.y1); ty++){
+            if(ty<0 || ty>=f.n) continue;
+            list.push({ x:((tx%f.n)+f.n)%f.n, y:ty, gx:tx, gy:ty });
+          }
+        }
+        var next=0, done=0;
+        function worker(){
+          if(next>=list.length) return Promise.resolve();
+          var t=list[next++];
+          var key=z+'/'+t.x+'/'+t.y;
+          if(tiles[key]!==undefined){ t.img=tiles[key]; done++; return worker(); }
+          return new Promise(function(res){
+            var im=new Image();
+            im.crossOrigin='anonymous';
+            im.onload =function(){ tiles[key]=im;   t.img=im;   res(); };
+            im.onerror=function(){ tiles[key]=null; t.img=null; res(); };
+            im.src='https://'+TILE_HOSTS[(t.x+t.y)%3]+'.tile.openstreetmap.org/'+z+'/'+t.x+'/'+t.y+'.png';
+          }).then(function(){
+            if(onProgress) onProgress(++done, list.length);
+            return worker();
+          });
+        }
+        var runners=[]; for(var i=0;i<Math.min(6,list.length);i++) runners.push(worker());
+        return Promise.all(runners).then(function(){
+          return { z:z, frame:f, list:list, ok:list.filter(function(t){ return t.img; }).length };
+        });
+      }
+      function drawTiles(g, map, set){
+        var f=set.frame, tw=map.w/(f.x1-f.x0), th=map.h/(f.y1-f.y0);
+        g.imageSmoothingEnabled=true;
+        if(g.imageSmoothingQuality) g.imageSmoothingQuality='high';
+        set.list.forEach(function(t){
+          if(!t.img) return;
+          // +1 px de recouvrement : sinon un liseré de fond apparaît entre
+          // deux tuiles posées à des coordonnées fractionnaires.
+          g.drawImage(t.img, map.x+(t.gx-f.x0)*tw, map.y+(t.gy-f.y0)*th, tw+1, th+1);
+        });
+      }
+
       // ── Aides de dessin ─────────────────────────────────
       function roundRect(g,x,y,w,h,r){
         g.beginPath();
