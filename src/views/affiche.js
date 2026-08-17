@@ -380,10 +380,17 @@ ${CANVAS_KIT}
       // Les chiffres que le sous-titre ne peut pas porter : durée, moyennes,
       // records, pays traversés. L'encart se pose dans un coin de la zone
       // libre, et les photos l'évitent comme elles évitent la légende.
+      // Mêmes comptes que la page Statistiques du carnet : les kilomètres de
+      // train ne se mêlent pas à ceux du vélo, ils s'y ajoutent pour donner le
+      // trajet parcouru.
       function tripStats(){
-        var km=0, dplus=0, train=0, best=null, high=null, days={}, countries=[];
+        var bike=0, dplus=0, train=0, trainCount=0, rides=0;
+        var best=null, high=null, longTrain=null, days={}, countries=[];
         STAGES.forEach(function(s){
-          km+=s.km||0; dplus+=s.dplus||0; train+=s.trainKm||0;
+          bike+=s.km||0; dplus+=s.dplus||0;
+          if(s.km>0) rides++;
+          if(s.trainKm>0){ train+=s.trainKm; trainCount++;
+            if(!longTrain || s.trainKm>longTrain.trainKm) longTrain=s; }
           if(s.km && (!best || s.km>best.km)) best=s;
           if(s.dplus && (!high || s.dplus>high.dplus)) high=s;
           if(s.date) days[String(s.date).slice(0,10)]=1;
@@ -394,21 +401,32 @@ ${CANVAS_KIT}
         var last=STAGES[STAGES.length-1]&&STAGES[STAGES.length-1].date ? new Date(STAGES[STAGES.length-1].date) : null;
         var span = (first&&last&&!isNaN(first)&&!isNaN(last))
           ? Math.round((last-first)/86400000)+1 : 0;
-        var ridden=Object.keys(days).length;
         return {
-          km:km, dplus:dplus, train:train, span:span, ridden:ridden,
-          perDay: ridden ? km/ridden : 0,
+          bike:bike, train:train, total:bike+train, dplus:dplus,
+          trainCount:trainCount, rides:rides, longTrain:longTrain,
+          span:span, dated:Object.keys(days).length,
+          perRide: rides ? bike/rides : 0,
           best:best, high:high, countries:countries
         };
       }
       function statsRows(){
         var t=tripStats(), rows=[];
-        if(t.span)  rows.push(['Durée', t.span+' jour'+(t.span>1?'s':'')+(t.ridden?' · '+t.ridden+' avec étape':'')]);
-        rows.push(['Distance', frNum(t.km)+' km'+(t.train?'  ·  '+frNum(t.train)+' km en train':'')]);
+        if(t.span)  rows.push(['Durée', t.span+' jour'+(t.span>1?'s':'')+(t.dated?'  ·  '+t.dated+' avec étape':'')]);
+        var roule = t.rides ? '  ·  '+t.rides+' étape'+(t.rides>1?'s':'')+' roulée'+(t.rides>1?'s':'') : '';
+        // Sans train, le total et le vélo seraient deux fois le même chiffre :
+        // une seule ligne suffit alors.
+        if(t.train){
+          rows.push(['Trajet parcouru', frNum(t.total)+' km']);
+          rows.push(['À vélo', frNum(t.bike)+' km'+roule]);
+          rows.push(['En train', frNum(t.train)+' km  ·  '+t.trainCount+' trajet'+(t.trainCount>1?'s':'')]);
+        } else {
+          rows.push(['Trajet parcouru', frNum(t.bike)+' km à vélo'+roule]);
+        }
         rows.push(['Dénivelé', frNum(t.dplus)+' m D+']);
-        if(t.perDay) rows.push(['Moyenne', frNum(t.perDay)+' km par étape']);
+        if(t.perRide) rows.push(['Moyenne', frNum(t.perRide)+' km par étape roulée']);
         if(t.best)   rows.push(['Plus longue', frNum(t.best.km)+' km — '+(t.best.location||t.best.title||'')]);
         if(t.high)   rows.push(['Plus raide', frNum(t.high.dplus)+' m D+ — '+(t.high.location||t.high.title||'')]);
+        if(t.longTrain) rows.push(['Plus long train', frNum(t.longTrain.trainKm)+' km — '+(t.longTrain.location||t.longTrain.title||'')]);
         if(t.countries.length) rows.push([t.countries.length>1?'Pays traversés':'Pays', t.countries.join(', ')]);
         return rows;
       }
@@ -662,9 +680,9 @@ ${CANVAS_KIT}
       }
 
       function tripTotals(){
-        var km=0, dplus=0;
-        STAGES.forEach(function(s){ km+=s.km||0; dplus+=s.dplus||0; });
-        return { km:km, dplus:dplus };
+        var km=0, dplus=0, train=0;
+        STAGES.forEach(function(s){ km+=s.km||0; dplus+=s.dplus||0; train+=s.trainKm||0; });
+        return { km:km, dplus:dplus, train:train };
       }
 
       function drawHead(g,L){
@@ -681,7 +699,10 @@ ${CANVAS_KIT}
         var bits=[];
         if(d1&&d2) bits.push(d1+' → '+d2); else if(d1) bits.push('depuis le '+d1);
         bits.push(STAGES.length+' étape'+(STAGES.length>1?'s':''));
-        if(tot.km)    bits.push(frNum(tot.km)+' km');
+        // « 1 397 km » tout court prêterait à confusion dès qu'il y a du train :
+        // on précise alors le vélo, et le train juste après.
+        if(tot.km)    bits.push(frNum(tot.km)+' km'+(tot.train?' à vélo':''));
+        if(tot.train) bits.push(frNum(tot.train)+' km en train');
         if(tot.dplus) bits.push(frNum(tot.dplus)+' m D+');
         g.fillStyle=C.inkSoft;
         g.font='400 21px "DM Sans", Helvetica, sans-serif';
