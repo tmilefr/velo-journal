@@ -412,7 +412,13 @@ ${CANVAS_KIT}
       function statsRows(){
         var t=tripStats(), rows=[];
         if(t.span)  rows.push(['Durée', t.span+' jour'+(t.span>1?'s':'')+(t.dated?'  ·  '+t.dated+' avec étape':'')]);
-        var roule = t.rides ? '  ·  '+t.rides+' étape'+(t.rides>1?'s':'')+' roulée'+(t.rides>1?'s':'') : '';
+        // « 53 étapes roulées » quand le carnet en compte 59 laisse le lecteur
+        // faire la soustraction : on dit sur combien, les autres n'ayant pas
+        // de kilomètres à vélo (train, repos, ou distance non renseignée).
+        var roule = t.rides
+          ? '  ·  '+t.rides+' étape'+(t.rides>1?'s':'')+' roulée'+(t.rides>1?'s':'')
+            +(STAGES.length>t.rides ? ' sur '+STAGES.length : '')
+          : '';
         // Sans train, le total et le vélo seraient deux fois le même chiffre :
         // une seule ligne suffit alors.
         if(t.train){
