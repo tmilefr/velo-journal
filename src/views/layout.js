@@ -40,6 +40,12 @@ const SYSTEM_SECTIONS = [
     desc: 'Une page A4 par étape — récit et collage de photos — avec le tracé en couverture et le profil en quatrième.',
   },
   {
+    key: 'sys-diplome', href: '/diplome', icon: '🏅',
+    label: 'Diplôme',
+    title: 'Diplôme de la route',
+    desc: 'Le diplôme A4 d\'un compagnon de route monté en selle en chemin : ses kilomètres, ses moyennes, son dénivelé et ses badges.',
+  },
+  {
     key: 'sys-subscribers', href: '/settings/subscribers', icon: '🔔',
     label: 'Abonnés',
     title: 'Abonnés aux notifications',
