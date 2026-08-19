@@ -177,14 +177,16 @@ function orderPhotos(p) {
 // cherchant le lieu par son nom), on recalcule les statistiques sur la portion
 // parcourue ensemble, et la vue en fait une feuille A4 à imprimer.
 router.get('/diplome', requireAuth, (req, res) => {
-  const posts = readPosts();
-  const data  = diplomaData(posts, {
+  const place = String(req.query.lieu ?? 'Nuremberg').trim().substring(0, 40);
+  const data  = diplomaData(readPosts(), {
     fromId: String(req.query.from || '').trim(),
-    place:  String(req.query.lieu || 'Nuremberg').trim(),
+    place,
   });
   res.send(renderDiplome(data, {
-    name:  String(req.query.nom || 'Margot').trim().substring(0, 30) || 'Margot',
-    theme: String(req.query.theme || ''),
+    name:      String(req.query.nom || 'Margot').trim().substring(0, 30) || 'Margot',
+    signature: String(req.query.signe ?? 'Maman et Papa').trim().substring(0, 40),
+    theme:     String(req.query.theme || ''),
+    place,
     // Une case décochée ne s'envoie pas : c'est le marqueur `regle` du
     // formulaire qui distingue « décochée » de « page ouverte telle quelle ».
     showFrise: req.query.regle ? req.query.frise != null : true,

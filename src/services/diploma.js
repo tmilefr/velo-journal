@@ -58,16 +58,20 @@ function stagePlace(p) {
   return loc || String(p.title || '').trim();
 }
 
-// Retrouve l'étape où quelqu'un a rejoint le voyage. On cherche le nom du lieu
-// dans ce qui peut le porter — le lieu de l'étape, son titre, le libellé du
-// trajet en train qui l'a amenée — et on retient la première qui correspond.
+// Une étape parle-t-elle du lieu cherché ? On regarde tout ce qui peut le
+// porter : le lieu de l'étape, son titre, le libellé du trajet en train qui
+// l'a amenée.
+function stageMentions(p, needles) {
+  const hay = normalize([p.location, p.title, p.trainLabel, p.trainTo, p.trainFrom].filter(Boolean).join(' | '));
+  return needles.some(n => hay.includes(n));
+}
+
+// Retrouve l'étape où quelqu'un a rejoint le voyage : la première qui parle du
+// lieu des retrouvailles.
 function findJoinStage(posts, place) {
   const needles = placeNeedles(place);
   if (!needles.length) return null;
-  return stageList(posts).find(p => {
-    const hay = normalize([p.location, p.title, p.trainLabel, p.trainTo, p.trainFrom].filter(Boolean).join(' | '));
-    return needles.some(n => hay.includes(n));
-  }) || null;
+  return stageList(posts).find(p => stageMentions(p, needles)) || null;
 }
 
 // Deux étapes distinctes, et il ne faut pas les confondre :
@@ -181,12 +185,18 @@ function diplomaData(posts, { fromId = '', place = '' } = {}) {
     }));
 
   const last = mine[mine.length - 1] || start;
+  // Le nom des retrouvailles : celui qu'on cherchait quand l'étape en parle
+  // (« Nuremberg » plutôt que « Warmshowers opéra », le titre de l'étape),
+  // sinon le lieu tel qu'il est écrit dans le carnet.
+  const needles = placeNeedles(place);
+  const joinPlace = !join ? ''
+    : (needles.length && stageMentions(join, needles) ? String(place).trim() : stagePlace(join));
   const metrics = { km: s.km, dplus: s.dplus, nDays: s.nDays, maxKm: s.maxKm, countries: countryList.length };
 
   return {
     stages,                              // toutes les étapes, pour le sélecteur
     start, join, last,
-    joinPlace:  join ? stagePlace(join) : '',
+    joinPlace,
     startPlace: stagePlace(start),
     endPlace:   stagePlace(last),
     stats: s,
