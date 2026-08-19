@@ -14,6 +14,8 @@ const { requireAuth } = require('../middleware/auth');
 const { renderSystemHome, renderBackup, renderRecalc, renderSubscribers } = require('../views/settings');
 const { renderAffiche } = require('../views/affiche');
 const { renderLivre } = require('../views/livre');
+const { renderDiplome } = require('../views/diplome');
+const { diplomaData } = require('../services/diploma');
 const { reliefGrid } = require('../services/relief');
 
 const router = express.Router();
@@ -168,6 +170,26 @@ function orderPhotos(p) {
   if (cover && !isVideoUrl(cover)) return [cover].concat(photos.filter(u => u !== cover));
   return photos;
 }
+
+// ── Diplôme : les kilomètres d'un compagnon de route ─────
+// Margot a rejoint le voyage à Nuremberg : ses chiffres à elle commencent à
+// cette étape-là. On retrouve l'étape d'arrivée (par son identifiant, sinon en
+// cherchant le lieu par son nom), on recalcule les statistiques sur la portion
+// parcourue ensemble, et la vue en fait une feuille A4 à imprimer.
+router.get('/diplome', requireAuth, (req, res) => {
+  const posts = readPosts();
+  const data  = diplomaData(posts, {
+    fromId: String(req.query.from || '').trim(),
+    place:  String(req.query.lieu || 'Nuremberg').trim(),
+  });
+  res.send(renderDiplome(data, {
+    name:  String(req.query.nom || 'Margot').trim().substring(0, 30) || 'Margot',
+    theme: String(req.query.theme || ''),
+    // Une case décochée ne s'envoie pas : c'est le marqueur `regle` du
+    // formulaire qui distingue « décochée » de « page ouverte telle quelle ».
+    showFrise: req.query.regle ? req.query.frise != null : true,
+  }, !!req.session.auth));
+});
 
 // Grille d'altitudes de l'emprise de l'affiche, pour l'ombrage du relief.
 // Le calcul interroge Open-Meteo (quelques dizaines d'appels) puis reste en
