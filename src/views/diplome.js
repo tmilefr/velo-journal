@@ -55,8 +55,7 @@ function sheetData(d, { name, theme, showFrise, signature }) {
 
   const medals = [
     { icon: '🚴', num: fr0(s.km),       unit: 'km',      lbl: 'parcourus à vélo' },
-    { icon: '🗓️', num: fr0(s.nDays),    unit: `jour${plural(s.nDays)}`,
-      lbl: s.restDays > 0 ? `de vélo, ${s.restDays} de repos` : 'de vélo, sans une pause' },
+    { icon: '🗓️', num: fr0(s.nDays),    unit: `jour${plural(s.nDays)}`, lbl: 'à vélo' },
     { icon: '📊', num: fr1(s.avgKm),    unit: 'km/jour', lbl: 'de moyenne' },
     { icon: '⛰️', num: fr0(s.dplus),    unit: 'm D+',    lbl: 'de montée cumulée' },
     { icon: '🏔️', num: fr0(s.avgDplus), unit: 'm/jour',  lbl: 'de montée en moyenne' },
@@ -83,7 +82,7 @@ function sheetData(d, { name, theme, showFrise, signature }) {
     } : null,
     {
       icon: '🗺️', lbl: 'Du guidon au guidon', val: `${s.spanDays} jour${plural(s.spanDays)}`,
-      sub: `de la première à la dernière étape${s.restDays > 0 ? `, dont ${s.restDays} de repos` : ', sans une pause'}`,
+      sub: 'de la première à la dernière étape de son voyage',
     },
   ].filter(Boolean);
 
