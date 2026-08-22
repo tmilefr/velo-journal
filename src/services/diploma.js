@@ -142,18 +142,24 @@ const BADGE_LADDERS = [
   { icon: '📈', value: s => s.maxKm, tiers: [
     [20, 'Belle journée'], [40, 'Sacrée journée'], [65, 'Journée de championne'], [90, 'Journée de folie'],
   ]},
-  { icon: '🌍', value: s => s.countries, tiers: [
-    [1, 'Voyageuse'], [2, 'Franchisseuse de frontières'], [3, 'Exploratrice d\'Europe'],
-  ]},
+];
+
+// Les titres qui ne se mesurent pas en kilomètres — ceux-là sont acquis, et
+// ils comptent autant que les autres.
+const HONOURS = [
+  { icon: '👧', name: 'Grande sœur extraordinaire' },
+  { icon: '💬', name: 'Moulin à paroles' },
+  { icon: '☀️', name: 'Génératrice de bonne humeur' },
 ];
 
 function badges(metrics) {
-  return BADGE_LADDERS.map(l => {
+  const earned = BADGE_LADDERS.map(l => {
     const v = l.value(metrics) || 0;
     let won = null;
     l.tiers.forEach(([threshold, name]) => { if (v >= threshold) won = name; });
     return won ? { icon: l.icon, name: won } : null;
   }).filter(Boolean);
+  return earned.concat(HONOURS);
 }
 
 // ── Le diplôme ────────────────────────────────────────────
@@ -191,7 +197,7 @@ function diplomaData(posts, { fromId = '', place = '' } = {}) {
   const needles = placeNeedles(place);
   const joinPlace = !join ? ''
     : (needles.length && stageMentions(join, needles) ? String(place).trim() : stagePlace(join));
-  const metrics = { km: s.km, dplus: s.dplus, nDays: s.nDays, maxKm: s.maxKm, countries: countryList.length };
+  const metrics = { km: s.km, dplus: s.dplus, nDays: s.nDays, maxKm: s.maxKm };
 
   return {
     stages,                              // toutes les étapes, pour le sélecteur

@@ -272,16 +272,17 @@ const DRAW_SCRIPT = `
         }
 
         // ── Ce qu'il reste à répartir sous l'en-tête ───────
-        var badgesH = DATA.badges.length ? u(35) : 0;
-        var friseH  = DATA.frise ? u(61) : 0;
-        var footH   = u(76);
-        var medalsH = u(105);
+        var badgeLay = layoutBadges();
+        var badgesH = badgeLay ? badgeLay.h : 0;
+        var friseH  = DATA.frise ? u(54) : 0;
+        var footH   = u(70);
+        var medalsH = u(97);
         var blocks  = 1 + (badgesH ? 1 : 0) + (friseH ? 1 : 0) + 2; // médailles, colonnes, badges, frise, pied
         var colsH   = bot - y - medalsH - badgesH - friseH - footH - GAP*S*blocks;
 
         drawMedals(y, medalsH); y += medalsH + u(GAP);
         drawCols(y, colsH);     y += colsH + u(GAP);
-        if(badgesH){ drawBadges(y, badgesH); y += badgesH + u(GAP); }
+        if(badgesH){ drawBadges(y, badgeLay); y += badgesH + u(GAP); }
         if(friseH){  drawFrise(y, friseH);   y += friseH + u(GAP); }
         drawFoot(y, footH);
 
@@ -291,10 +292,10 @@ const DRAW_SCRIPT = `
           DATA.medals.forEach(function(m, i){
             var x = L + i*(w + gp), mx = x + w/2;
             card(x, y0, w, h, T.edge3);
-            text(m.icon, mx, y0 + u(26), { size: 19, align: 'center' });
-            gradText(m.num, mx, y0 + u(56), { size: 25, weight: 700, stops: [T.c1, T.c4] });
-            text(m.unit, mx, y0 + u(73), { size: 12, weight: 600, align: 'center', max: w - u(10) });
-            text(m.lbl,  mx, y0 + u(89), { size: 10, color: T.soft, align: 'center', max: w - u(8) });
+            text(m.icon, mx, y0 + u(24), { size: 19, align: 'center' });
+            gradText(m.num, mx, y0 + u(53), { size: 25, weight: 700, stops: [T.c1, T.c4] });
+            text(m.unit, mx, y0 + u(69), { size: 12, weight: 600, align: 'center', max: w - u(10) });
+            text(m.lbl,  mx, y0 + u(85), { size: 10, color: T.soft, align: 'center', max: w - u(8) });
           });
         }
 
@@ -337,45 +338,56 @@ const DRAW_SCRIPT = `
         }
 
         // ── Les badges gagnés ──────────────────────────────
-        function drawBadges(y0, h){
-          var pills = DATA.badges.map(function(b){
-            return { txt: b.name, icon: b.icon, w: 0 };
-          });
-          var size = 11.5, padX = 15.1, gp = u(9.4), total;
-          // Tout doit tenir sur une ligne : on resserre, puis on renonce aux
-          // derniers badges si vraiment ils ne rentrent pas.
-          for(var pass = 0; pass < 12; pass++){
-            total = 0;
-            pills.forEach(function(p){
-              p.w = measure(p.icon, { size: size + 2.5 }) + u(5) + measure(p.txt, { size: size, weight: 600 }) + u(padX*2);
-              total += p.w;
+        // Ils se rangent sur une ou deux lignes, chacune centrée. On resserre
+        // l'écriture tant qu'il en faut une troisième, et on ne renonce à un
+        // badge qu'en dernier recours.
+        function layoutBadges(){
+          if(!DATA.badges.length) return null;
+          var size = 11.5, padX = 15.1, gp = u(9.4), rowH = u(26), rowGap = u(7);
+          var list = DATA.badges.slice();
+          for(var pass = 0; pass < 20; pass++){
+            var lines = [], cur = [], curW = 0;
+            list.forEach(function(b){
+              var w = measure(b.icon, { size: size + 2.5 }) + u(5)
+                    + measure(b.name, { size: size, weight: 600 }) + u(padX*2);
+              var add = (cur.length ? gp : 0) + w;
+              if(cur.length && curW + add > CW){ lines.push({ pills: cur, w: curW }); cur = []; curW = 0; add = w; }
+              curW += add; cur.push({ icon: b.icon, txt: b.name, w: w });
             });
-            total += gp * (pills.length - 1);
-            if(total <= CW) break;
-            if(size > 9){ size -= 0.5; padX -= 0.8; } else { pills.pop(); }
+            if(cur.length) lines.push({ pills: cur, w: curW });
+            if(lines.length <= 2){
+              return { lines: lines, size: size, padX: padX, gp: gp, rowH: rowH,
+                       h: lines.length*rowH + (lines.length - 1)*rowGap, rowGap: rowGap };
+            }
+            if(size > 9){ size -= 0.5; padX -= 0.8; } else { list.pop(); }
           }
-          var x = cx - total/2, ph = u(26), py = y0 + (h - ph)/2;
-          pills.forEach(function(p, i){
-            var stops = [[T.c1,T.c2],[T.c2,T.c3],[T.c3,T.c4],[T.c4,T.c1]][i % 4];
-            roundRect(g, x, py, p.w, ph, ph/2);
-            g.fillStyle = grad(x, py, x + p.w, py + ph, stops); g.fill();
-            var ix = x + u(padX);
-            ix += text(p.icon, ix, py + ph/2 + u(5), { size: size + 2.5, color: '#fff' }) + u(5);
-            text(p.txt, ix, py + ph/2 + u(4), { size: size, weight: 600, color: '#fff' });
-            x += p.w + gp;
+        }
+        function drawBadges(y0, lay){
+          var n = 0;
+          lay.lines.forEach(function(ln, li){
+            var x = cx - ln.w/2, py = y0 + li*(lay.rowH + lay.rowGap);
+            ln.pills.forEach(function(p){
+              var stops = [[T.c1,T.c2],[T.c2,T.c3],[T.c3,T.c4],[T.c4,T.c1]][n++ % 4];
+              roundRect(g, x, py, p.w, lay.rowH, lay.rowH/2);
+              g.fillStyle = grad(x, py, x + p.w, py + lay.rowH, stops); g.fill();
+              var ix = x + u(lay.padX);
+              ix += text(p.icon, ix, py + lay.rowH/2 + u(5), { size: lay.size + 2.5, color: '#fff' }) + u(5);
+              text(p.txt, ix, py + lay.rowH/2 + u(4), { size: lay.size, weight: 600, color: '#fff' });
+              x += p.w + lay.gp;
+            });
           });
         }
 
         // ── La frise des journées de vélo ──────────────────
         function drawFrise(y0, h){
           card(L, y0, CW, h, T.edge3);
-          text(DATA.frise.lbl, L + u(15), y0 + u(22), { size: 10.5, weight: 700, max: u(195) });
-          text(DATA.frise.sub, L + u(15), y0 + u(37), { size: 9.5, color: T.soft, max: u(195) });
+          text(DATA.frise.lbl, L + u(15), y0 + u(20), { size: 10.5, weight: 700, max: u(195) });
+          text(DATA.frise.sub, L + u(15), y0 + u(34), { size: 9.5, color: T.soft, max: u(195) });
           var bx = L + u(225), bw = CW - u(225 + 15);
           var n = DATA.frise.bars.length, gp = u(n > 60 ? 1 : 2);
           var w = Math.min(u(26.5), (bw - gp*(n-1)) / n);
           var span = n*w + gp*(n-1), x0 = bx + (bw - span)/2;
-          var base = y0 + h - u(11), hMax = u(41.6);
+          var base = y0 + h - u(9), hMax = u(34);
           DATA.frise.bars.forEach(function(v, i){
             var bh = Math.max(u(3), v*hMax), x = x0 + i*(w + gp);
             roundRect(g, x, base - bh, w, bh, Math.min(u(3), w/2));
@@ -385,7 +397,7 @@ const DRAW_SCRIPT = `
 
         // ── Signatures et sceau ────────────────────────────
         function drawFoot(y0, h){
-          var r = u(38), cy = y0 + h/2;
+          var r = u(35), cy = y0 + h/2;
           var sideW = (CW - r*2 - u(50)) / 2;
           [[L + sideW/2, DATA.signature], [R - sideW/2, DATA.madeOn]].forEach(function(sg){
             g.setLineDash([u(1.5), u(4)]); g.lineWidth = u(1.5); g.strokeStyle = T.soft;
@@ -400,11 +412,13 @@ const DRAW_SCRIPT = `
           g.beginPath(); g.arc(0, 0, r - u(6), 0, Math.PI*2);
           g.setLineDash([u(4), u(3)]); g.lineWidth = u(1.5); g.strokeStyle = 'rgba(255,255,255,.85)'; g.stroke();
           g.setLineDash([]);
-          text('🏅', 0, -u(7), { size: 15, align: 'center', color: '#fff' });
+          text('🏅', 0, -u(8), { size: 14, align: 'center', color: '#fff' });
+          // Le total tient dans le rond quoi qu'il arrive : on rétrécit plutôt
+          // que de laisser les chiffres mordre sur le liséré.
           var numSize = 12;
-          while(numSize > 8 && measure(DATA.seal.num, { size: numSize, weight: 700 }) > r*1.45) numSize -= 0.5;
-          text(DATA.seal.num, 0, u(9), { size: numSize, weight: 700, color: '#fff', align: 'center' });
-          text(DATA.seal.sub, 0, u(20), { size: 7.5, color: 'rgba(255,255,255,.92)', align: 'center' });
+          while(numSize > 7 && measure(DATA.seal.num, { size: numSize, weight: 700 }) > r*1.12) numSize -= 0.5;
+          text(DATA.seal.num, 0, u(6), { size: numSize, weight: 700, color: '#fff', align: 'center' });
+          text(DATA.seal.sub, 0, u(16), { size: 7, color: 'rgba(255,255,255,.92)', align: 'center' });
           g.restore();
         }
         return cv;
