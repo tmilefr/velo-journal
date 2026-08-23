@@ -6,12 +6,13 @@ const { DATA, UPLOADS_DIR } = require('../config');
 const { buildZip } = require('../lib/zip');
 const { readPosts, writePosts } = require('../services/posts');
 const { readSubscribers } = require('../services/subscribers');
+const { commentEmails, setCommentEmails } = require('../services/settings');
 const { isVideoUrl, pickCover } = require('../services/media');
 const { geoJobStatus } = require('../services/geo');
 const { uploadBackup } = require('../middleware/upload');
 const { csrfToken, requireCsrf } = require('../middleware/csrf');
 const { requireAuth } = require('../middleware/auth');
-const { renderSystemHome, renderBackup, renderRecalc, renderSubscribers } = require('../views/settings');
+const { renderSystemHome, renderBackup, renderRecalc, renderSubscribers, renderCommentMails } = require('../views/settings');
 const { renderAffiche } = require('../views/affiche');
 const { renderLivre } = require('../views/livre');
 const { renderDiplome } = require('../views/diplome');
@@ -99,6 +100,32 @@ router.get('/settings/subscribers', requireAuth, (req, res) => {
   req.session.save(() => res.send(
     renderSubscribers(token, readSubscribers(), !!req.session.auth)
   ));
+});
+
+// ── Adresses prévenues à chaque commentaire ───────────────
+// Réglage propre au site (pas de .env à éditer) : la liste vit dans
+// data/settings.json et se modifie depuis cette page.
+router.get('/settings/commentaires', requireAuth, (req, res) => {
+  const token = csrfToken(req);
+  const saved = req.query.enregistre != null
+    ? {
+        count:    parseInt(req.query.enregistre, 10) || 0,
+        rejected: [].concat(req.query.ignore || []).filter(Boolean).map(String),
+      }
+    : null;
+  req.session.save(() => res.send(
+    renderCommentMails(token, commentEmails(), saved, !!req.session.auth)
+  ));
+});
+
+router.post('/settings/commentaires', requireAuth, requireCsrf, (req, res) => {
+  const { emails, rejected } = setCommentEmails(req.body.emails);
+  // Les adresses écartées repartent dans l'URL pour être signalées à l'admin,
+  // plutôt que d'être perdues en silence (au plus 5, pour garder l'URL courte).
+  const params = new URLSearchParams();
+  params.set('enregistre', String(emails.length));
+  rejected.slice(0, 5).forEach(r => params.append('ignore', r.substring(0, 60)));
+  res.redirect('/settings/commentaires?' + params.toString());
 });
 
 // ── Affiche : la carte du voyage en A3, photos autour ────

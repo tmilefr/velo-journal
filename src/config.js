@@ -29,6 +29,7 @@ const PORT = process.env.PORT || 3000;
 // ── Chemins ───────────────────────────────────────────────
 const DATA        = path.join(ROOT, 'data', 'posts.json');
 const SUBSCRIBERS = path.join(ROOT, 'data', 'subscribers.json');
+const SETTINGS    = path.join(ROOT, 'data', 'settings.json');
 const MAIL_LOG    = path.join(ROOT, 'data', 'mail.log');
 const PUBLIC_DIR  = path.join(ROOT, 'public');
 const UPLOADS_DIR = path.join(PUBLIC_DIR, 'uploads');
@@ -64,7 +65,7 @@ const AUTHORS = ['NiJuMaTim'];
 
 module.exports = {
   ROOT, PORT,
-  DATA, SUBSCRIBERS, MAIL_LOG, PUBLIC_DIR, UPLOADS_DIR, LOG_FILE,
+  DATA, SUBSCRIBERS, SETTINGS, MAIL_LOG, PUBLIC_DIR, UPLOADS_DIR, LOG_FILE,
   ADMIN_PASSWORD, FAMILY_PASSWORD, MARGOT_PASSWORD,
   MYMEMORY_EMAIL, SESSION_SECRET,
   TRIP_TITLE, TRIP_START, TRIP_END,
