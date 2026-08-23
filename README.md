@@ -5,12 +5,13 @@ Journal de voyage vélo auto-hébergé. Postez vos étapes depuis votre téléph
 ## Fonctionnalités
 
 - **Page famille** — fil d'étapes avec photos, carte interactive, commentaires
+- **Page Commentaires** — tous les messages du carnet sur une seule page, du plus récent au plus ancien, avec un filtre par prénom
 - **Interface mobile** — poster une étape depuis le téléphone (titre, texte, photos, GPS auto)
 - **Carte Leaflet** — tracé automatique de votre itinéraire
 - **Statistiques** — menu à deux entrées réservé aux administrateurs : **📏 Distances** (km cumulés, D+ total, nombre d'étapes, trajet total vélo + train, kilométrage par pays et par région) et **💶 Finances** (total dépensé, moyenne mensuelle, répartition par catégorie et par personne)
-- **Système** — menu d'entretien du carnet (admin) : **💾 Sauvegarde**, **📐 Recalculs**, **🖼️ Affiche**, **📖 Livre photo**, **🏅 Diplôme**, **🔔 Abonnés**
+- **Système** — menu d'entretien du carnet (admin) : **💾 Sauvegarde**, **📐 Recalculs**, **🖼️ Affiche**, **📖 Livre photo**, **🏅 Diplôme**, **🔔 Abonnés**, **💬 Commentaires**
 - **Flux RSS** — pour les proches qui utilisent un lecteur RSS
-- **Notifications e-mail** — vos proches s'abonnent avec leur e-mail (double opt-in) et sont prévenus à chaque nouvelle étape publiée
+- **Notifications e-mail** — vos proches s'abonnent avec leur e-mail (double opt-in) et sont prévenus à chaque nouvelle étape publiée ; de votre côté, vous recevez un e-mail dès qu'un commentaire est déposé
 - **Mot de passe** — page de post protégée, page famille publique
 - **Zéro base de données** — tout dans des fichiers JSON
 
@@ -196,6 +197,7 @@ L'entretien du carnet est regroupé sous l'entrée de menu **⚙️ Système**, 
 - **📖 Livre photo** (`/livre`) — une page **A4** (ou carrée 21 × 21 cm) par étape : titre, date, chiffres du jour, récit et collage des photos, façon carnet de voyage. Chaque photo garde sa forme — une verticale de téléphone reste verticale, rien n'est rogné — et le livre retient celles cochées **📖** en modifiant l'étape (à défaut, toutes, la photo mise en avant ⭐ en tête) ; leur nombre par page est réglable Le tracé du voyage fait la couverture, sur une vraie carte (fond épuré ou tuiles OpenStreetMap), et le profil altimétrique la quatrième. Impression d'un bloc ou export PNG page par page
 - **🏅 Diplôme** (`/diplome`) — le diplôme **A4 paysage** d'un compagnon de route monté en selle en cours de voyage. Quelqu'un qui rejoint l'aventure en chemin n'a pas les kilomètres de tout le monde : la page retrouve l'étape des retrouvailles — par son nom de lieu, y compris dans sa graphie locale (Nuremberg / Nürnberg) — et ne compte qu'à partir de sa **première étape à vélo**. On y lit ses kilomètres, ses jours de vélo, sa **moyenne par jour**, son **dénivelé** total et moyen, ses records (plus longue journée, plus grosse montée, pays traversés, trajets en train), les mêmes chiffres traduits à hauteur d'enfant (tours Eiffel grimpées, marathons, tours de pédale, boules de glace méritées), les badges gagnés — ceux qui se méritent en kilomètres, plus les titres honorifiques du carnet (`HONOURS` dans `src/services/diploma.js`) — et la frise des journées de vélo. Prénom, étape de départ, lieu des retrouvailles, signature, jeu de couleurs et frise se règlent en haut de page. Le diplôme est **dessiné sur un canvas** comme l'affiche et le livre : l'aperçu, l'impression A4 paysage et l'export **PNG 150 / 300 dpi** sont la même image, et chaque bloc reçoit sa place — rien ne peut déborder d'un cadre
 - **🔔 Abonnés** (`/settings/subscribers`) — liste des abonnés e-mail, validation manuelle et retrait
+- **💬 Commentaires** (`/settings/commentaires`) — les adresses e-mail prévenues dès qu'un commentaire est déposé sur le carnet (une par ligne, 20 au maximum). Rien à éditer dans `.env` : la liste est saisie depuis la page et rangée dans `data/settings.json`
 
 Le sommaire est accessible aux comptes admin et Margot ; les Statistiques restent réservées à l'admin.
 
@@ -204,6 +206,15 @@ Le sommaire est accessible aux comptes admin et Margot ; les Statistiques resten
 - Partagez simplement `https://votre-domaine.fr`
 - Pas de compte, pas d'app à installer
 - Ils peuvent laisser des commentaires avec leur prénom
+
+### Page Commentaires
+
+`/commentaires` (entrée **💬 Commentaires** du menu) rassemble sur une seule page **tous les messages laissés sur le carnet** — commentaires et réponses, étapes et articles de préparation confondus — du plus récent au plus ancien, avec pour chacun le lien vers l'étape concernée.
+
+- **Filtre par prénom** — une pastille par personne (avec son nombre de messages) ou une saisie libre ; la casse est ignorée, « mamie » et « Mamie » comptent pour la même personne
+- Le filtre et l'ordre voyagent dans l'URL (`/commentaires?auteur=Mamie&ordre=ancien`) : un lien vers « les commentaires de Mamie » se partage tel quel
+- Un clic sur **↑ voir les plus anciens d'abord** retourne la liste
+- La page suit les mêmes règles de visibilité que le journal : les commentaires d'une étape pas encore publiée ne sont visibles que de l'admin, qui peut aussi supprimer un message directement depuis la liste (🗑️)
 
 ### Flux RSS
 
@@ -218,6 +229,14 @@ Si SMTP est configuré dans `.env`, une icône **🔔** apparaît à côté du m
 3. Chaque e-mail contient un lien de désinscription en un clic
 4. La liste des abonnés se gère depuis la page **Système → 🔔 Abonnés** (admin) : on peut retirer une adresse, ou **valider une inscription à la main** avec le bouton « ✔ valider » si l'e-mail de confirmation n'arrive jamais (spam, adresse dictée de vive voix…)
 5. Chaque envoi (confirmation d'inscription, notification) est tracé dans `data/mail.log`
+
+**E-mail à chaque commentaire.** Indépendamment des abonnés, vous pouvez être prévenu dès qu'un lecteur laisse un commentaire — ou répond à un autre :
+
+1. Renseignez les adresses à prévenir dans **Système → 💬 Commentaires** (une par ligne, 20 au maximum) ; elles sont rangées dans `data/settings.json`
+2. À chaque commentaire déposé, chacune reçoit un e-mail avec le prénom de l'auteur, son message et un lien vers l'étape concernée
+3. L'envoi se fait en arrière-plan : le lecteur qui commente n'attend jamais le serveur SMTP, et une panne d'envoi ne perd jamais son commentaire
+4. Ces envois sont tracés dans `data/mail.log` (`COMMENTAIRE post=… comment=…`)
+5. Laisser la liste vide désactive ces notifications
 
 Exemple de configuration SMTP (Gmail avec mot de passe d'application) :
 
@@ -248,7 +267,8 @@ velo-journal/
 │   └── views/         ← templates HTML (layout, pages, scripts client, outils canvas)
 ├── data/
 │   ├── posts.json     ← vos étapes (auto-créé)
-│   └── subscribers.json ← abonnés e-mail (auto-créé)
+│   ├── subscribers.json ← abonnés e-mail (auto-créé)
+│   └── settings.json  ← réglages saisis depuis Système, dont les adresses prévenues des commentaires (auto-créé)
 ├── tmp/
 │   └── relief/        ← cache des grilles d'altitude de l'affiche (auto-créé)
 └── public/

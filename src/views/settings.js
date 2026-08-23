@@ -3,6 +3,7 @@
 // abonnés), listées à la fois dans le sous-menu « ⚙️ Système » et dans le
 // sommaire /settings. Le découpage lui-même vit dans layout.js.
 const { TRIP_TITLE, MAIL_ENABLED } = require('../config');
+const { MAX_COMMENT_EMAILS } = require('../services/settings');
 const { esc } = require('../lib/html');
 const { formatDateShort } = require('../lib/dates');
 const { CSS, SYSTEM_SECTIONS, renderHeader } = require('./layout');
@@ -287,4 +288,50 @@ function renderSubscribers(csrf = '', subscribers = [], isStrictAdmin = false) {
   });
 }
 
-module.exports = { renderSystemHome, renderBackup, renderRecalc, renderSubscribers };
+// ══════════════════════════════════════════════════════════
+//  Notifications de commentaires : /settings/commentaires
+// ══════════════════════════════════════════════════════════
+
+// `saved` : null au chargement, sinon { count, rejected } au retour du POST.
+function renderCommentMails(csrf = '', emails = [], saved = null, isStrictAdmin = false) {
+  let banners = '';
+  if (saved) {
+    banners += saved.count
+      ? bannerOk(`✅ ${saved.count} adresse${saved.count > 1 ? 's' : ''} enregistrée${saved.count > 1 ? 's' : ''} — elle${saved.count > 1 ? 's seront prévenues' : ' sera prévenue'} au prochain commentaire.`)
+      : bannerInfo('ℹ️ Aucune adresse enregistrée — les notifications de commentaire sont désormais désactivées.');
+    if (saved.rejected && saved.rejected.length) {
+      banners += bannerWarn(`⚠️ Adresse(s) ignorée(s) : ${saved.rejected.map(esc).join(', ')} — vérifiez l'orthographe (au maximum ${MAX_COMMENT_EMAILS} adresses).`);
+    }
+  }
+  if (!MAIL_ENABLED) {
+    banners += bannerWarn(`⚠️ L'envoi d'e-mails n'est pas configuré : renseignez <code>SMTP_HOST</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code> (et <code>MAIL_FROM</code>) dans <code>.env</code>. Les adresses saisies ici sont conservées, mais rien ne partira tant que le serveur SMTP n'est pas réglé.`);
+  }
+
+  const current = emails.length
+    ? `<p style="font-size:13px;color:var(--ink-light);margin-top:14px;line-height:1.6">Actuellement prévenu(e)s : ${emails.map(e => `<strong>${esc(e)}</strong>`).join(', ')}.</p>`
+    : `<p style="font-size:13px;color:var(--ink-light);margin-top:14px;line-height:1.6">Aucune adresse pour le moment : les commentaires ne déclenchent aucun e-mail.</p>`;
+
+  return renderSystemPage({
+    key: 'sys-comment-mails',
+    isStrictAdmin,
+    banners,
+    body: `<div class="form-card">
+        <h2>💬 Qui est prévenu d'un nouveau commentaire ?</h2>
+        <p style="font-size:14px;color:var(--ink-light);margin-bottom:18px;line-height:1.6">Dès qu'un lecteur laisse un commentaire — ou répond à un autre — un e-mail part vers chacune des adresses ci-dessous, avec le message et un lien vers l'étape concernée. C'est indépendant des <a href="/settings/subscribers" style="color:var(--ocean-mid)">🔔 abonnés</a>, prévenus eux des nouvelles étapes.</p>
+        <form method="POST" action="/settings/commentaires">
+          <input type="hidden" name="_csrf" value="${csrf}">
+          <div class="field">
+            <label>Adresses à prévenir</label>
+            <textarea name="emails" placeholder="marie@example.fr&#10;tim@example.fr" style="height:120px">${esc(emails.join('\n'))}</textarea>
+            <p class="field-hint">Une adresse par ligne (ou séparées par des virgules), ${MAX_COMMENT_EMAILS} au maximum. Laisser vide pour ne plus recevoir de notification.</p>
+          </div>
+          <button class="btn-submit" type="submit">💾 Enregistrer</button>
+        </form>
+        ${current}
+      </div>`,
+  });
+}
+
+module.exports = {
+  renderSystemHome, renderBackup, renderRecalc, renderSubscribers, renderCommentMails,
+};

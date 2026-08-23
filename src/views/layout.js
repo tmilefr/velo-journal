@@ -51,6 +51,12 @@ const SYSTEM_SECTIONS = [
     title: 'Abonnés aux notifications',
     desc: 'Gérer la liste des lecteurs prévenus par e-mail à chaque nouvelle étape publiée.',
   },
+  {
+    key: 'sys-comment-mails', href: '/settings/commentaires', icon: '💬',
+    label: 'Commentaires',
+    title: 'Notifications de commentaires',
+    desc: 'Choisir les adresses e-mail prévenues dès qu\'un commentaire est déposé sur le carnet.',
+  },
 ];
 
 function renderHeader({ activePage = '', isAdmin = false, isStrictAdmin = false, showMap = false, csrf = '' } = {}) {
@@ -58,6 +64,7 @@ function renderHeader({ activePage = '', isAdmin = false, isStrictAdmin = false,
     { href: '/',           label: 'Journal',       key: 'journal',     icon: '📖' },
     { href: '/timeline',   label: 'Timeline',      key: 'timeline',    icon: '📅' },
     { href: '/map',        label: 'Carte',         key: 'map',         icon: '🗺️' },
+    { href: '/commentaires', label: 'Commentaires', key: 'comments',    icon: '💬' },
     // Les chiffres du voyage — distances et budget — sont réservés aux administrateurs
     ...(isStrictAdmin ? [{
       label: 'Statistiques', key: 'grp-stats', icon: '📊',
@@ -700,6 +707,34 @@ const CSS = `
   .empty{text-align:center;padding:60px 20px;color:var(--ink-light);}
   .empty-icon{font-size:48px;margin-bottom:12px}
   .empty h3{font-family:'Playfair Display',serif;font-size:20px;margin-bottom:8px;color:var(--ink-mid)}
+
+  /* ── PAGE COMMENTAIRES ───────────────────────────── */
+  .cmt-wrap{max-width:640px;margin:0 auto;padding:24px 14px 80px}
+  .cmt-head{margin-bottom:16px}
+  .cmt-head h1{font-family:'Playfair Display',serif;font-size:24px;color:var(--ocean);font-weight:700;line-height:1.25;}
+  .cmt-head p{font-size:13px;color:var(--ink-light);margin-top:4px;line-height:1.6;}
+  .cmt-filter{background:#fff;border:1px solid var(--sand);border-radius:14px;padding:14px 16px;margin-bottom:18px;box-shadow:0 2px 12px rgba(10,61,98,0.06);}
+  .cmt-filter-row{display:flex;gap:8px;align-items:center}
+  .cmt-filter input{flex:1;min-width:0;border:1.5px solid var(--sand);border-radius:10px;padding:9px 13px;font-size:14px;font-family:inherit;background:var(--warm-white);color:var(--ink);transition:border-color .15s;}
+  .cmt-filter input:focus{outline:none;border-color:var(--teal-light);background:#fff;}
+  .cmt-filter button{background:linear-gradient(135deg, var(--ocean-mid), var(--teal));color:#fff;border:none;border-radius:10px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;}
+  .cmt-filter button:hover{opacity:.92}
+  .cmt-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .cmt-chip{background:#fff;border:1.5px solid var(--teal-light);color:var(--ocean-mid);border-radius:999px;padding:4px 11px;font-size:12px;font-weight:500;text-decoration:none;transition:background .15s;white-space:nowrap;}
+  .cmt-chip:hover{background:var(--sage)}
+  .cmt-chip.active{background:linear-gradient(135deg, var(--ocean-mid), var(--teal));border-color:var(--ocean-mid);color:#fff}
+  .cmt-chip-count{opacity:.7;font-size:11px;margin-left:3px}
+  .cmt-count{font-size:13px;color:var(--ink-light);margin-bottom:10px}
+  .cmt-item{display:flex;gap:10px;background:#fff;border:1px solid var(--sand);border-radius:14px;padding:12px 14px;margin-bottom:10px;box-shadow:0 2px 10px rgba(10,61,98,0.05);}
+  .cmt-item-main{flex:1;min-width:0}
+  .cmt-item-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+  .cmt-author{font-size:14px;font-weight:600;color:var(--ink)}
+  .cmt-date{font-size:11px;color:var(--ink-light)}
+  .cmt-reply-tag{font-size:10px;background:var(--mist);color:var(--ocean-mid);border-radius:20px;padding:2px 8px;font-weight:600}
+  .cmt-text{font-size:14px;color:var(--ink-mid);line-height:1.55;margin-top:5px;white-space:pre-wrap;word-wrap:break-word}
+  .cmt-post{display:inline-block;margin-top:8px;font-size:12px;color:var(--ocean-mid);text-decoration:none;font-weight:500}
+  .cmt-post:hover{text-decoration:underline}
+  .cmt-item-actions{margin-left:auto;flex-shrink:0}
 
   /* ── TIMELINE ────────────────────────────────────── */
   .timeline-wrap{max-width:600px;margin:0 auto;padding:24px 14px 80px}

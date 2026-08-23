@@ -1,4 +1,4 @@
-// ── Envoi d'e-mails : confirmation d'abonnement et notification de nouvelle étape ──
+// ── Envoi d'e-mails : confirmation d'abonnement, nouvelle étape, nouveau commentaire ──
 // Nécessite SMTP_HOST (+ SMTP_USER/SMTP_PASS/MAIL_FROM) dans .env, sinon désactivé.
 const fs         = require('fs');
 const nodemailer = require('nodemailer');
@@ -7,9 +7,10 @@ const {
   MAIL_FROM, MAIL_ENABLED, BASE_URL, MAIL_LOG, TRIP_TITLE,
 } = require('../config');
 const { esc, stripTags } = require('../lib/html');
-const { formatDateShort } = require('../lib/dates');
+const { formatDate, formatDateShort } = require('../lib/dates');
 const { readPosts, writePosts } = require('./posts');
 const { confirmedSubscribers } = require('./subscribers');
+const { commentEmails } = require('./settings');
 
 // URL publique du site pour les liens dans les e-mails :
 // BASE_URL si défini, sinon déduite de la requête (trust proxy actif).
@@ -141,6 +142,66 @@ async function notifySubscribers(post, baseUrl) {
   console.log(`[mailer] notification envoyée à ${sent}/${subs.length} abonné(s)`);
 }
 
+// ── E-mail « nouveau commentaire » ────────────────────────
+// Destinataires : les adresses réglées dans Système → 💬 Commentaires
+// (data/settings.json), et non les abonnés du carnet.
+function buildCommentEmail(post, comment, baseUrl, parent = null) {
+  const isPrep    = post.type === 'preparation';
+  const postUrl   = `${baseUrl}${isPrep ? '/preparation' : '/'}#post-${post.id}`;
+  const listUrl   = `${baseUrl}/commentaires`;
+  const author    = comment.author || 'Quelqu\'un';
+  const intro     = parent
+    ? `<strong>${esc(author)}</strong> a répondu à <strong>${esc(parent.author || 'un commentaire')}</strong> sur l'étape :`
+    : `<strong>${esc(author)}</strong> a laissé un commentaire sur l'étape :`;
+
+  const html = mailLayout(`
+    <p style="margin:0 0 4px;font-size:12px;color:#4aabab;text-transform:uppercase;letter-spacing:1px;font-weight:bold">${parent ? 'Nouvelle réponse' : 'Nouveau commentaire'}</p>
+    <p style="margin:0 0 10px">${intro}</p>
+    <h2 style="margin:0 0 14px;font-size:19px;color:#1a3a3a">${esc(post.title)}</h2>
+    <div style="background:#f0fafa;border:1px solid #cce8e8;border-left:4px solid #2a7a7a;border-radius:10px;padding:12px 16px">
+      <div style="font-size:13px;color:#5a8080;margin-bottom:6px">${esc(author)} · ${esc(formatDate(comment.date))}</div>
+      <div style="white-space:pre-wrap">${esc(comment.text)}</div>
+    </div>
+    <p style="text-align:center;margin:24px 0 4px">
+      <a href="${esc(postUrl)}" style="background:#2a7a7a;color:#ffffff;text-decoration:none;padding:12px 26px;border-radius:10px;font-weight:bold;display:inline-block">💬 Voir sur le journal</a>
+    </p>
+    <p style="text-align:center;font-size:12px;color:#8aa;margin:10px 0 0">
+      <a href="${esc(listUrl)}" style="color:#8aa">Tous les commentaires du carnet</a>
+    </p>
+  `);
+  const text = `${parent ? `${author} a répondu à ${parent.author || 'un commentaire'}` : `${author} a laissé un commentaire`} sur l'étape « ${post.title} » :\n\n${comment.text}\n\nVoir sur le journal : ${postUrl}\nTous les commentaires : ${listUrl}`;
+  const subject = parent
+    ? `💬 Réponse de ${author} — ${post.title}`
+    : `💬 Nouveau commentaire de ${author} — ${post.title}`;
+  return { subject, html, text };
+}
+
+async function sendCommentNotification(post, comment, baseUrl, parent) {
+  const recipients = commentEmails();
+  if (!recipients.length) return;
+  const { subject, html, text } = buildCommentEmail(post, comment, baseUrl, parent);
+  for (const email of recipients) {
+    try {
+      await sendMail(email, subject, html, text);
+      logMailSend(`COMMENTAIRE post=${post.id} comment=${comment.id}`, email, true);
+    } catch (e) {
+      console.error(`[mailer] échec d'envoi à ${email} :`, e.message);
+      logMailSend(`COMMENTAIRE post=${post.id} comment=${comment.id}`, email, false, e.message);
+    }
+  }
+}
+
+// Prévient les adresses réglées dans Système qu'un commentaire vient d'être
+// déposé. Envoi en arrière-plan : le lecteur qui commente n'attend jamais le
+// serveur SMTP, et un échec d'envoi ne perd pas son commentaire.
+function notifyNewComment(post, comment, baseUrl, parent = null) {
+  if (!MAIL_ENABLED) return;
+  if (!commentEmails().length) return;
+  console.log(`[mailer] commentaire de ${comment.author} sur « ${post.title} » → ${commentEmails().length} destinataire(s)`);
+  sendCommentNotification(post, comment, baseUrl, parent)
+    .catch(e => console.error('[mailer] notification de commentaire échouée :', e.message));
+}
+
 // Prévient les abonnés qu'un post est publié — une seule fois par post.
 // Le marqueur notifiedAt garantit qu'une édition ultérieure ne renvoie rien.
 function maybeNotifyNewPost(postId, baseUrl) {
@@ -157,4 +218,4 @@ function maybeNotifyNewPost(postId, baseUrl) {
   notifySubscribers(post, baseUrl).catch(e => console.error('[mailer] notification échouée :', e.message));
 }
 
-module.exports = { siteBaseUrl, sendConfirmationEmail, maybeNotifyNewPost };
+module.exports = { siteBaseUrl, sendConfirmationEmail, maybeNotifyNewPost, notifyNewComment };
