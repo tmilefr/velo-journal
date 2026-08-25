@@ -60,7 +60,11 @@ function renderStats(posts, isAdmin = false) {
   const countryHtml = countryList.length === 0 ? '' : `
       <div class="stats-section-title">🌍 Distance par pays et par région</div>
       ${countryList.map((c, ci) => {
-        const regions   = Object.values(c.regions).sort((a, b) => (b.totalKm + b.trainKm) - (a.totalKm + a.trainKm));
+        // Régions dans l'ordre du voyage : la première date roulée dans la
+        // région donne son rang (les étapes sont déjà triées par date), et
+        // deux régions découvertes le même jour sont départagées au kilométrage.
+        const firstDay = r => (r.stages.length ? new Date(r.stages[0].date).getTime() : Infinity);
+        const regions   = Object.values(c.regions).sort((a, b) => (firstDay(a) - firstDay(b)) || ((b.totalKm + b.trainKm) - (a.totalKm + a.trainKm)));
         const maxRegion = regions.reduce((m, r) => Math.max(m, r.totalKm + r.trainKm), 1);
         const pctCountry = Math.max(2, Math.round((c.totalKm + c.trainKm) / maxCountryKm * 100));
         const subParts = [
