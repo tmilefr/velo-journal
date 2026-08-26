@@ -212,6 +212,10 @@ router.get('/diplome', requireAuth, (req, res) => {
   res.send(renderDiplome(data, {
     name:      String(req.query.nom || 'Margot').trim().substring(0, 30) || 'Margot',
     signature: String(req.query.signe ?? 'Maman et Papa').trim().substring(0, 40),
+    // Titre et bandeau se réécrivent depuis la page ; vides, ils reprennent
+    // leur formulation d'origine.
+    title:     String(req.query.titre   || '').trim().substring(0, 80),
+    ribbon:    String(req.query.bandeau || '').trim().substring(0, 80),
     theme:     String(req.query.theme || ''),
     place,
     // Une case décochée ne s'envoie pas : c'est le marqueur `regle` du
