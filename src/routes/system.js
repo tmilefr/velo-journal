@@ -16,7 +16,7 @@ const { renderSystemHome, renderBackup, renderRecalc, renderSubscribers, renderC
 const { renderAffiche } = require('../views/affiche');
 const { renderLivre } = require('../views/livre');
 const { renderDiplome } = require('../views/diplome');
-const { diplomaData } = require('../services/diploma');
+const { diplomaData, parseHonours, DEFAULT_HONOURS } = require('../services/diploma');
 const { reliefGrid } = require('../services/relief');
 
 const router = express.Router();
@@ -205,13 +205,22 @@ function orderPhotos(p) {
 // parcourue ensemble, et la vue en fait une feuille A4 à imprimer.
 router.get('/diplome', requireAuth, (req, res) => {
   const place = String(req.query.lieu ?? 'Nuremberg').trim().substring(0, 40);
-  const data  = diplomaData(readPosts(), {
+  // Les titres honorifiques s'écrivent à la suite, séparés par des virgules.
+  // Champ vidé à la main : le diplôme n'en porte aucun.
+  const honoursText = String(req.query.titres ?? DEFAULT_HONOURS).substring(0, 300);
+  const data = diplomaData(readPosts(), {
     fromId: String(req.query.from || '').trim(),
     place,
+    honours: parseHonours(honoursText),
   });
   res.send(renderDiplome(data, {
     name:      String(req.query.nom || 'Margot').trim().substring(0, 30) || 'Margot',
     signature: String(req.query.signe ?? 'Maman et Papa').trim().substring(0, 40),
+    // Titre et bandeau se réécrivent depuis la page ; vides, ils reprennent
+    // leur formulation d'origine.
+    title:     String(req.query.titre   || '').trim().substring(0, 80),
+    ribbon:    String(req.query.bandeau || '').trim().substring(0, 80),
+    honoursText,
     theme:     String(req.query.theme || ''),
     place,
     // Une case décochée ne s'envoie pas : c'est le marqueur `regle` du

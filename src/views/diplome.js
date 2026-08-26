@@ -19,8 +19,9 @@ const fr1 = n => (Math.round(n * 10) / 10).toLocaleString('fr-FR', { minimumFrac
 const frFact = n => (n >= 10 ? fr0(n) : fr1(n));
 const plural = (n, s = 's') => (n > 1 ? s : '');
 
-// Trois habillages au choix — le diplôme n'est pas une facture. `c1` à `c4`
-// sont les couleurs vives, les autres les teintes de papier et de trait.
+// Le diplôme n'est pas une facture : il a le choix des couleurs. `c1` à `c4`
+// sont les teintes vives — cadre, titres, chiffres, badges — et les autres le
+// papier, l'encre et les traits.
 const THEMES = {
   arc: {
     label: 'Arc-en-ciel',
@@ -43,14 +44,54 @@ const THEMES = {
     halo1: 'rgba(232,69,95,.14)', halo3: 'rgba(255,201,60,.20)',
     edge3: '#ffe6a8', edge4: '#dfc6f5',
   },
+  bonbon: {
+    label: 'Bonbon',
+    c1: '#ff4fa3', c2: '#ff8fc7', c3: '#a06bff', c4: '#3fb9f0',
+    paper: '#fffafd', ink: '#4a2144', soft: '#8d6a86', line: '#d8bcd2',
+    halo1: 'rgba(255,79,163,.14)', halo3: 'rgba(160,107,255,.14)',
+    edge3: '#f2d8ff', edge4: '#c8e9fb',
+  },
+  agrume: {
+    label: 'Agrumes',
+    c1: '#f4701f', c2: '#ffc300', c3: '#8fce00', c4: '#00b894',
+    paper: '#fffdf0', ink: '#3f3a12', soft: '#7d7645', line: '#cfc79b',
+    halo1: 'rgba(244,112,31,.13)', halo3: 'rgba(143,206,0,.16)',
+    edge3: '#e2eeae', edge4: '#b3e8d9',
+  },
+  foret: {
+    label: 'Forêt',
+    c1: '#2f7d4f', c2: '#6cb544', c3: '#b7c93f', c4: '#d98b2b',
+    paper: '#f9fdf6', ink: '#22381f', soft: '#5b7355', line: '#adc0a6',
+    halo1: 'rgba(47,125,79,.13)', halo3: 'rgba(183,201,63,.16)',
+    edge3: '#cfe0b4', edge4: '#f0d3ac',
+  },
+  lagon: {
+    label: 'Lagon',
+    c1: '#0093c4', c2: '#00bcd4', c3: '#33d6b0', c4: '#7c6cf0',
+    paper: '#f7fdff', ink: '#123a45', soft: '#4d7d8a', line: '#a3c8d2',
+    halo1: 'rgba(0,147,196,.13)', halo3: 'rgba(51,214,176,.15)',
+    edge3: '#aeeadd', edge4: '#cfcafa',
+  },
+  myrtille: {
+    label: 'Myrtille',
+    c1: '#6a4cc4', c2: '#9b6ef3', c3: '#d36bd6', c4: '#4ab5e8',
+    paper: '#fdfbff', ink: '#2f2350', soft: '#6d6390', line: '#c1b6da',
+    halo1: 'rgba(106,76,196,.13)', halo3: 'rgba(211,107,214,.13)',
+    edge3: '#e4cdf2', edge4: '#c9e6f8',
+  },
 };
+
+// Le bandeau et le titre se réécrivent depuis la page ; voici ce qu'ils
+// disent tant qu'on n'y touche pas.
+const DEFAULT_RIBBON = 'Grand diplôme de la route';
+const DEFAULT_TITLE  = 'Diplôme de Grande Cycliste';
 
 // ══════════════════════════════════════════════════════════
 //  Les données du diplôme, prêtes à peindre
 // ══════════════════════════════════════════════════════════
 // Tout est mis en forme ici — nombres à la française, phrases, libellés — pour
 // que le dessin sur canvas n'ait plus qu'à poser du texte déjà écrit.
-function sheetData(d, { name, theme, showFrise, signature }) {
+function sheetData(d, { name, theme, showFrise, signature, title, ribbon }) {
   const s = d.stats;
 
   const medals = [
@@ -80,10 +121,6 @@ function sheetData(d, { name, theme, showFrise, signature }) {
       val: `${fr0(d.train.km)} km`,
       sub: `soit ${fr0(d.totals.totalKm)} km de voyage en tout, vélo et rail réunis`,
     } : null,
-    {
-      icon: '🗺️', lbl: 'Du guidon au guidon', val: `${s.spanDays} jour${plural(s.spanDays)}`,
-      sub: 'de la première à la dernière étape de son voyage',
-    },
   ].filter(Boolean);
 
   const facts = d.facts.slice(0, 4).map(f => ({ icon: f.icon, num: frFact(f.count), lbl: f.label }));
@@ -107,8 +144,7 @@ function sheetData(d, { name, theme, showFrise, signature }) {
   return {
     theme: THEMES[theme] || THEMES.arc,
     kicker: TRIP_TITLE,
-    ribbon: 'Grand diplôme de la route',
-    title:  'Diplôme de Grande Cycliste',
+    ribbon, title,
     award:  'fièrement décerné à',
     name, story,
     medals, records, facts,
@@ -177,8 +213,13 @@ const DRAW_SCRIPT = `
           if('letterSpacing' in g) g.letterSpacing = '0px';
           return w;
         }
-        // Texte en dégradé : le dégradé court sur la largeur du texte.
+        // Texte en dégradé : le dégradé court sur la largeur du texte. Un titre
+        // écrit à la main peut être long — on réduit alors le corps jusqu'à ce
+        // qu'il tienne dans le cadre.
         function gradText(str, cx, y, o){
+          if(o.max){
+            while(o.size > (o.min || 12) && measure(str, o) > o.max) o.size -= 0.5;
+          }
           var w = measure(str, o);
           g.fillStyle = grad(cx - w/2, y, cx + w/2, y, o.stops);
           g.font = font(o.size, o.weight, o.family);
@@ -223,13 +264,15 @@ const DRAW_SCRIPT = `
         text(DATA.kicker.toUpperCase(), cx, y + u(11), { size: 10.5, weight: 600, color: T.soft, align: 'center', spacing: 1.7, max: CW });
         y += u(18);
 
-        var rw = measure(DATA.ribbon.toUpperCase(), { size: 11, weight: 600, spacing: 1.1 }) + u(32);
+        var ribSize = 11;
+        while(ribSize > 7.5 && measure(DATA.ribbon.toUpperCase(), { size: ribSize, weight: 600, spacing: 1.1 }) + u(32) > CW) ribSize -= 0.5;
+        var rw = measure(DATA.ribbon.toUpperCase(), { size: ribSize, weight: 600, spacing: 1.1 }) + u(32);
         roundRect(g, cx - rw/2, y, rw, u(21), u(10.5));
         g.fillStyle = grad(cx - rw/2, y, cx + rw/2, y + u(21), [T.c1, T.c2]); g.fill();
-        text(DATA.ribbon.toUpperCase(), cx, y + u(14.5), { size: 11, weight: 600, color: '#fff', align: 'center', spacing: 1.1 });
+        text(DATA.ribbon.toUpperCase(), cx, y + u(14.5), { size: ribSize, weight: 600, color: '#fff', align: 'center', spacing: 1.1 });
         y += u(21 + 6);
 
-        gradText(DATA.title, cx, y + u(25), { size: 28, weight: 700, stops: [T.c1, T.c4, T.c3] });
+        gradText(DATA.title, cx, y + u(25), { size: 28, weight: 700, stops: [T.c1, T.c4, T.c3], max: CW, min: 15 });
         y += u(34);
         text(DATA.award, cx, y + u(11), { size: 12, weight: 500, color: T.soft, align: 'center' });
         y += u(16);
@@ -434,9 +477,12 @@ function renderDiplome(data, opts = {}, isStrictAdmin = false) {
   const showFrise = opts.showFrise !== false;
   const place     = opts.place || '';
   const signature = opts.signature || 'Maman et Papa';
+  const title     = opts.title  || DEFAULT_TITLE;
+  const ribbon    = opts.ribbon || DEFAULT_RIBBON;
+  const honours   = opts.honoursText ?? '';
 
   const empty = !data || data.stats.nDays === 0;
-  const payload = empty ? null : sheetData(data, { name, theme, showFrise, signature });
+  const payload = empty ? null : sheetData(data, { name, theme, showFrise, signature, title, ribbon });
   const dataJson = JSON.stringify(payload).replace(/</g, '\\u003c');
 
   const stageOptions = (data ? data.stages : []).map(p => {
@@ -479,12 +525,17 @@ ${CSS}
       ${empty ? `<div class="form-card"><p style="font-size:14px;color:var(--ink-light);margin:0">Pas encore de kilomètre à mettre au diplôme : il faut au moins une étape avec des kilomètres après celle choisie.</p></div>` : `
       <form class="dip-toolbar" method="GET" action="/diplome">
         <input type="hidden" name="regle" value="1">
+        <label class="dip-field">Titre <input type="text" name="titre" value="${esc(title)}" maxlength="80" style="width:210px"></label>
+        <label class="dip-field">Bandeau <input type="text" name="bandeau" value="${esc(ribbon)}" maxlength="80" style="width:200px"></label>
         <label class="dip-field">Prénom <input type="text" name="nom" value="${esc(name)}" maxlength="30"></label>
         <label class="dip-field">Sa première étape à vélo
           <select name="from">${stageOptions}</select>
         </label>
         <label class="dip-field">Retrouvailles à <input type="text" name="lieu" value="${esc(place)}" maxlength="40" placeholder="Nuremberg"></label>
         <label class="dip-field">Signé <input type="text" name="signe" value="${esc(signature)}" maxlength="40"></label>
+        <label class="dip-field" title="Séparés par des virgules ; commencez par un emoji pour choisir son image">Titres honorifiques
+          <input type="text" name="titres" value="${esc(honours)}" maxlength="300" style="width:340px">
+        </label>
         <label class="dip-field">Couleurs <select name="theme">${themeOptions}</select></label>
         <label class="dip-field"><input type="checkbox" name="frise" value="1"${showFrise ? ' checked' : ''}> Frise des journées</label>
         <button class="dip-btn" type="submit">↻ Mettre à jour</button>
