@@ -479,6 +479,7 @@ function renderDiplome(data, opts = {}, isStrictAdmin = false) {
   const signature = opts.signature || 'Maman et Papa';
   const title     = opts.title  || DEFAULT_TITLE;
   const ribbon    = opts.ribbon || DEFAULT_RIBBON;
+  const honours   = opts.honoursText ?? '';
 
   const empty = !data || data.stats.nDays === 0;
   const payload = empty ? null : sheetData(data, { name, theme, showFrise, signature, title, ribbon });
@@ -532,6 +533,9 @@ ${CSS}
         </label>
         <label class="dip-field">Retrouvailles à <input type="text" name="lieu" value="${esc(place)}" maxlength="40" placeholder="Nuremberg"></label>
         <label class="dip-field">Signé <input type="text" name="signe" value="${esc(signature)}" maxlength="40"></label>
+        <label class="dip-field" title="Séparés par des virgules ; commencez par un emoji pour choisir son image">Titres honorifiques
+          <input type="text" name="titres" value="${esc(honours)}" maxlength="300" style="width:340px">
+        </label>
         <label class="dip-field">Couleurs <select name="theme">${themeOptions}</select></label>
         <label class="dip-field"><input type="checkbox" name="frise" value="1"${showFrise ? ' checked' : ''}> Frise des journées</label>
         <button class="dip-btn" type="submit">↻ Mettre à jour</button>

@@ -146,26 +146,41 @@ const BADGE_LADDERS = [
 
 // Les titres qui ne se mesurent pas en kilomètres — ceux-là sont acquis, et
 // ils comptent autant que les autres.
-const HONOURS = [
-  { icon: '👧', name: 'Grande sœur extraordinaire' },
-  { icon: '💬', name: 'Moulin à paroles' },
-  { icon: '☀️', name: 'Génératrice de bonne humeur' },
-];
+// Ils se règlent depuis la page, séparés par des virgules ; voici ce qu'ils
+// disent tant qu'on n'y touche pas.
+const DEFAULT_HONOURS = '👧 Grande sœur extraordinaire, 💬 Moulin à paroles, ☀️ Génératrice de bonne humeur';
 
-function badges(metrics) {
+// « 👧 Grande sœur extraordinaire, 💬 Moulin à paroles » → deux titres, chacun
+// avec son emoji. Le premier mot fait l'icône s'il ne contient ni lettre ni
+// chiffre ; sinon le titre reçoit une étoile et garde son texte entier.
+function parseHonours(raw) {
+  return String(raw ?? '')
+    .split(',')
+    .map(t => t.trim())
+    .filter(Boolean)
+    .slice(0, 8)
+    .map(entry => {
+      const [head, ...rest] = entry.split(/\s+/);
+      return (rest.length && !/[\p{L}\p{N}]/u.test(head))
+        ? { icon: head, name: rest.join(' ').substring(0, 40) }
+        : { icon: '⭐', name: entry.substring(0, 40) };
+    });
+}
+
+function badges(metrics, honours) {
   const earned = BADGE_LADDERS.map(l => {
     const v = l.value(metrics) || 0;
     let won = null;
     l.tiers.forEach(([threshold, name]) => { if (v >= threshold) won = name; });
     return won ? { icon: l.icon, name: won } : null;
   }).filter(Boolean);
-  return earned.concat(HONOURS);
+  return earned.concat(honours);
 }
 
 // ── Le diplôme ────────────────────────────────────────────
 // Toutes les données de la page : l'étape d'arrivée du compagnon de route, les
 // chiffres de sa portion de voyage, ses records, ses comparaisons, ses badges.
-function diplomaData(posts, { fromId = '', place = '' } = {}) {
+function diplomaData(posts, { fromId = '', place = '', honours = null } = {}) {
   const stages = stageList(posts);
   const { start, join } = resolveStart(posts, { fromId, place });
   if (!start) return null;
@@ -210,8 +225,8 @@ function diplomaData(posts, { fromId = '', place = '' } = {}) {
     countries: countryList,
     days,
     facts:  funFacts({ km: s.km, dplus: s.dplus }),
-    badges: badges(metrics),
+    badges: badges(metrics, honours || parseHonours(DEFAULT_HONOURS)),
   };
 }
 
-module.exports = { diplomaData, findJoinStage };
+module.exports = { diplomaData, findJoinStage, parseHonours, DEFAULT_HONOURS };
