@@ -501,14 +501,16 @@ ${CANVAS_KIT}
             prev=q;
           });
         });
-        var prevPt=null;
-        STAGES.forEach(function(st,i){
-          if(st.lat==null||st.lon==null){ prevPt=null; return; }
+        STAGES.forEach(function(st){
+          if(st.lat==null||st.lon==null) return;
           var p=proj(st.lat,st.lon);
           markPt(p[0],p[1],DOT_PAD);
-          // Raccord entre deux étapes quand la seconde n'a pas de trace
-          if(prevPt && !(tracks[i] && tracks[i].pts.length>1)) markSeg(prevPt,p,TRACE_PAD);
-          prevPt=p;
+        });
+        // Les raccords en pointillés font partie du tracé : aucune vignette ne
+        // doit venir s'asseoir dessus. On réserve donc les segments que
+        // drawRoute dessinera, calculés par la même fonction.
+        routeDashSegments(STAGES, tracks).forEach(function(seg){
+          markSeg(proj(seg[0][0],seg[0][1]), proj(seg[1][0],seg[1][1]), TRACE_PAD);
         });
         // Somme cumulée : sum[r][c] = nombre de cases interdites au-dessus et
         // à gauche. Compter les cases occupées d'un rectangle coûte alors
@@ -791,31 +793,11 @@ ${CANVAS_KIT}
           });
         }
 
-        // Raccords entre étapes sans trace : le voyage reste continu
-        g.strokeStyle='rgba(224,122,58,0.55)'; g.lineWidth=1.8; g.setLineDash([8,7]);
-        g.beginPath();
-        for(var i=1;i<STAGES.length;i++){
-          var a3=STAGES[i-1], b3=STAGES[i];
-          if(a3.lat==null||b3.lat==null) continue;
-          if(tracks[i] && tracks[i].pts.length>1) continue;
-          var pa=proj(a3.lat,a3.lon), pb=proj(b3.lat,b3.lon);
-          g.moveTo(pa[0],pa[1]); g.lineTo(pb[0],pb[1]);
-        }
-        g.stroke(); g.setLineDash([]);
-
-        // Traces GPX : halo clair puis trait franc
-        [[C.trackHalo,6.5,0.85],[C.track,3,1]].forEach(function(style){
-          g.strokeStyle=style[0]; g.lineWidth=style[1]; g.globalAlpha=style[2];
-          g.lineJoin='round'; g.lineCap='round';
-          g.beginPath();
-          tracks.forEach(function(t){
-            if(t.pts.length<2) return;
-            var p0=proj(t.pts[0].lat,t.pts[0].lon);
-            g.moveTo(p0[0],p0[1]);
-            for(var i=1;i<t.pts.length;i++){ var p=proj(t.pts[i].lat,t.pts[i].lon); g.lineTo(p[0],p[1]); }
-          });
-          g.stroke();
-          g.globalAlpha=1;
+        // Le voyage : traces GPX en trait plein, raccords en pointillés —
+        // le même tracé, par les mêmes fonctions, que la page Carte et le
+        // livre photo.
+        drawRoute(g, proj, STAGES, tracks, {
+          scale: routeScale(map.w), color: C.track, halo: C.trackHalo
         });
 
         // Villes, puis points d'étape par-dessus. Le fond OSM porte déjà ses
@@ -916,7 +898,9 @@ ${CANVAS_KIT}
         var kmBar=CANDS[CANDS.length-1];
         for(var i=0;i<CANDS.length;i++){ if(CANDS[i]*1000/mPerPx>=want){ kmBar=CANDS[i]; break; } }
         var barPx=kmBar*1000/mPerPx;
-        var boxW=Math.max(200, barPx+40), boxH=relief?128:78;
+        // Deux lignes de légende pour le tracé (trait plein, pointillés) puis,
+        // s'il y a lieu, le nuancier d'altitude.
+        var boxW=Math.max(200, barPx+40), boxH=relief?150:100;
         var pos=placeCard(mask, safe, boxW, boxH, ['bl','br','tl','tr']);
         return { x:pos.x, y:pos.y, w:boxW, h:boxH, kmBar:kmBar, barPx:barPx };
       }
@@ -942,15 +926,23 @@ ${CANVAS_KIT}
         g.stroke();
         g.fillText(frNum(kmBar)+' km', bx, by+18);
 
-        // Trace
+        // Trace, puis raccords : les mêmes traits que sur la carte
+        var kL=routeScale(L.map.w);
         var ty=y+ (relief?66:62);
-        g.strokeStyle=C.track; g.lineWidth=3; g.lineCap='round';
+        g.strokeStyle=C.track; g.lineWidth=ROUTE.wTrack*kL; g.lineCap='round';
         g.beginPath(); g.moveTo(bx,ty); g.lineTo(bx+34,ty); g.stroke();
         g.fillStyle=C.inkSoft; g.fillText('trace GPX', bx+44, ty+5);
 
+        var dy=ty+21;
+        g.strokeStyle=C.track; g.lineWidth=ROUTE.wDash*kL;
+        g.setLineDash(routeDashArray(kL*0.7));
+        g.beginPath(); g.moveTo(bx,dy); g.lineTo(bx+34,dy); g.stroke();
+        g.setLineDash([]);
+        g.fillStyle=C.inkSoft; g.fillText('liaison sans trace', bx+44, dy+5);
+
         // Nuancier d'altitude
         if(relief){
-          var gy=y+92, gw=boxW-36, gh=10;
+          var gy=y+114, gw=boxW-36, gh=10;
           var grad=g.createLinearGradient(bx,0,bx+gw,0);
           for(var s=0;s<=10;s++){
             var e=relief.min+(relief.max-relief.min)*s/10;

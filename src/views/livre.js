@@ -220,17 +220,11 @@ ${CANVAS_KIT}
           g.strokeRect(rect.x+0.5, rect.y+0.5, rect.w-1, rect.h-1);
         }
         if(proj){
-          g.lineJoin='round'; g.lineCap='round';
-          [['#ffffff',7,0.9],[C.track,3.4,1]].forEach(function(st){
-            g.strokeStyle=st[0]; g.lineWidth=st[1]; g.globalAlpha=st[2];
-            g.beginPath();
-            tracks.forEach(function(t){
-              if(t.pts.length<2) return;
-              var p0=proj(t.pts[0].lat,t.pts[0].lon);
-              g.moveTo(p0[0],p0[1]);
-              for(var i=1;i<t.pts.length;i++){ var p=proj(t.pts[i].lat,t.pts[i].lon); g.lineTo(p[0],p[1]); }
-            });
-            g.stroke(); g.globalAlpha=1;
+          // Le même tracé que l'affiche et que la page Carte : traces GPX en
+          // trait plein, raccords en pointillés là où le GPS n'a rien
+          // enregistré, par les mêmes fonctions.
+          drawRoute(g, proj, STAGES, tracks, {
+            scale: routeScale(rect.w), color: C.track, halo: '#ffffff', haloAlpha: 0.9
           });
           [[0,'#e67e22'],[STAGES.length-1,'#1a7a4a']].forEach(function(e){
             var s=STAGES[e[0]];
