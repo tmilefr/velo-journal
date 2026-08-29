@@ -3,19 +3,18 @@
 // destiné au navigateur : projection Mercator, décodage du fond de carte,
 // lecture des traces GPX, chargement des photos et petites aides de dessin.
 // L'affiche et le livre le glissent tel quel dans leur <script>, ce qui leur
-// évite d'entretenir chacun sa copie.
-const CANVAS_KIT = `
+// évite d'entretenir chacun sa copie. Le tracé du voyage, lui, est partagé
+// avec la page Carte : il vit dans routeKit.
+const { ROUTE_KIT } = require('./routeKit');
+
+const CANVAS_KIT = ROUTE_KIT + `
       // ── Projection Mercator ─────────────────────────────
       var RAD = Math.PI/180;
       function mercY(lat){ var l=Math.max(-85,Math.min(85,lat)); return Math.log(Math.tan(Math.PI/4 + l*Math.PI/360)); }
       function invMercY(y){ return (2*Math.atan(Math.exp(y)) - Math.PI/2) * 180/Math.PI; }
       function mercX(lon){ return lon*RAD; }
 
-      function haversine(la1,lo1,la2,lo2){
-        var R=6371000, dLa=(la2-la1)*Math.PI/180, dLo=(lo2-lo1)*Math.PI/180;
-        var a=Math.sin(dLa/2)*Math.sin(dLa/2)+Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(dLo/2)*Math.sin(dLo/2);
-        return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
-      }
+      // haversine() et le tracé du voyage viennent de routeKit.
 
       // ── Chargements ─────────────────────────────────────
       function loadJson(url){ return fetch(url).then(function(r){ if(!r.ok) throw new Error('http '+r.status); return r.json(); }); }

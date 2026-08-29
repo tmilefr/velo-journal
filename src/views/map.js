@@ -1,5 +1,6 @@
 const { TRIP_TITLE } = require('../config');
 const { CSS, renderHeader } = require('./layout');
+const { ROUTE_KIT } = require('./routeKit');
 
 // ══════════════════════════════════════════════════════════
 //  renderMap
@@ -80,7 +81,10 @@ function renderMap(posts, isAdmin = false, isStrictAdmin = false, csrf = '') {
               <div class="map-legend-row"><div class="map-legend-dot" style="background:linear-gradient(135deg,#1a7a4a,#2ecc71)"></div>Dernière position</div>
               ${withSleep.length ? `<div class="map-legend-row"><div class="map-legend-dot" style="background:linear-gradient(135deg,#7a4fb5,#a67ee0)"></div>🛏️ Couchage</div>` : ''}
               <div class="map-legend-row" style="margin-top:6px;padding-top:6px;border-top:1px solid var(--sand)">
-                <div style="width:28px;height:4px;background:#3a9090;border-radius:2px;flex-shrink:0"></div>Trace GPS du jour
+                <div style="width:28px;height:5px;background:#3a9090;border-radius:3px;flex-shrink:0"></div>Trace GPS du jour
+              </div>
+              <div class="map-legend-row">
+                <div style="width:28px;height:4px;flex-shrink:0;background:repeating-linear-gradient(to right,#2a7a7a 0 8px,transparent 8px 14px)"></div>Liaison sans trace
               </div>
             </div>
           </div>`}
@@ -89,6 +93,9 @@ function renderMap(posts, isAdmin = false, isStrictAdmin = false, csrf = '') {
     </div>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
+      // Le tracé du voyage — quels segments sont en pointillés, et à quelle
+      // épaisseur — est partagé avec l'affiche et le livre photo.
+      ${ROUTE_KIT}
       const gpsData = ${gpsJson};
       const sleepData = ${sleepJson};
       function initMap() {
@@ -97,48 +104,31 @@ function renderMap(posts, isAdmin = false, isStrictAdmin = false, csrf = '') {
         L.control.zoom({ position: 'bottomright' }).addTo(map);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(map);
         const pts = gpsData.map(p => [p.lat, p.lon]);
-        // Lien droit entre deux étapes consécutives UNIQUEMENT si l'étape
-        // d'arrivée n'a pas de trace GPX (auquel cas la trace remplace le segment).
-        const segments = [];
-        for (let i = 1; i < gpsData.length; i++) {
-          if (gpsData[i].gpx) continue; // trace présente → pas de lien droit
-          segments.push([[gpsData[i-1].lat, gpsData[i-1].lon], [gpsData[i].lat, gpsData[i].lon]]);
-        }
-        segments.forEach(function(seg) {
-          L.polyline(seg, { color: 'rgba(0,0,0,.10)', weight: 8 }).addTo(map);
-          L.polyline(seg, { color: '#2a7a7a', weight: 4, opacity: .9 }).addTo(map);
-          L.polyline(seg, { color: '#fff', weight: 1.5, opacity: .5, dashArray: '8,10' }).addTo(map);
-        });
-        // Distance approx. en mètres entre deux points [lat,lon] (Haversine).
-        function ptDist(a, b) {
-          const R = 6371000, dLat = (b[0]-a[0])*Math.PI/180, dLon = (b[1]-a[1])*Math.PI/180;
-          const la1 = a[0]*Math.PI/180, la2 = b[0]*Math.PI/180;
-          const x = Math.sin(dLat/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;
-          return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
-        }
-        const GAP_THRESHOLD_M = 150;
-        gpsData.forEach(function(p, i) {
-          if (!p.gpx) return;
-          fetch(p.gpx).then(r => r.text()).then(txt => {
+        // Les traces GPX d'abord, toutes ensemble : c'est seulement une fois
+        // qu'on les a qu'on sait où le voyage a besoin d'un pointillé — d'une
+        // étape à la suivante faute de trace, ou entre le bout d'une trace et
+        // le point d'une étape quand les deux ne coïncident pas. routeKit
+        // tranche, comme pour l'affiche et le livre photo.
+        const dashArray = routeDashArray(1).join(',');
+        Promise.all(gpsData.map(p => {
+          if (!p.gpx) return Promise.resolve({ pts: [] });
+          return fetch(p.gpx).then(r => r.text()).then(txt => {
             const xml = new DOMParser().parseFromString(txt, 'text/xml');
-            const trkpts = Array.from(xml.querySelectorAll('trkpt')).map(tp => [parseFloat(tp.getAttribute('lat')), parseFloat(tp.getAttribute('lon'))]);
-            if (trkpts.length < 2) return;
-            L.polyline(trkpts, { color: 'rgba(0,0,0,0.12)', weight: 6 }).addTo(map);
-            L.polyline(trkpts, { color: '#3a9090', weight: 3, opacity: 0.85 }).addTo(map);
-            // Raccords si le point GPS de l'étape (marqueur, éventuellement fixé
-            // manuellement) ne coïncide pas avec les extrémités de la trace, pour
-            // que le rendu reste continu d'une étape à l'autre.
-            const bridges = [];
-            if (i > 0) {
-              const prevMarker = [gpsData[i-1].lat, gpsData[i-1].lon];
-              if (ptDist(prevMarker, trkpts[0]) > GAP_THRESHOLD_M) bridges.push([prevMarker, trkpts[0]]);
-            }
-            const marker = [p.lat, p.lon], last = trkpts[trkpts.length - 1];
-            if (ptDist(last, marker) > GAP_THRESHOLD_M) bridges.push([last, marker]);
-            bridges.forEach(function(seg) {
-              L.polyline(seg, { color: '#2a7a7a', weight: 3, opacity: .7, dashArray: '6,8' }).addTo(map);
-            });
-          }).catch(() => {});
+            return { pts: Array.from(xml.querySelectorAll('trkpt'))
+              .map(tp => ({ lat: parseFloat(tp.getAttribute('lat')), lon: parseFloat(tp.getAttribute('lon')) }))
+              .filter(q => !isNaN(q.lat) && !isNaN(q.lon)) };
+          }).catch(() => ({ pts: [] }));
+        })).then(function(tracks) {
+          tracks.forEach(function(t) {
+            if (t.pts.length < 2) return;
+            const line = t.pts.map(q => [q.lat, q.lon]);
+            L.polyline(line, { color: 'rgba(0,0,0,0.12)', weight: ROUTE.wHalo }).addTo(map);
+            L.polyline(line, { color: '#3a9090', weight: ROUTE.wTrack, opacity: 0.9 }).addTo(map);
+          });
+          routeDashSegments(gpsData, tracks).forEach(function(seg) {
+            L.polyline(seg, { color: 'rgba(0,0,0,0.10)', weight: ROUTE.wDashHalo, dashArray: dashArray }).addTo(map);
+            L.polyline(seg, { color: '#2a7a7a', weight: ROUTE.wDash, opacity: .9, dashArray: dashArray }).addTo(map);
+          });
         });
         gpsData.forEach((p, i) => {
           const isFirst = i === 0, isLast = i === gpsData.length - 1;
@@ -166,8 +156,8 @@ function renderMap(posts, isAdmin = false, isStrictAdmin = false, csrf = '') {
         const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
         sleepData.forEach(s => {
           // Rattache visuellement le couchage au point d'arrivée de l'étape
-          if (s.plat && s.plon && ptDist([s.plat, s.plon], [s.lat, s.lon]) > 40) {
-            L.polyline([[s.plat, s.plon], [s.lat, s.lon]], { color: '#7a4fb5', weight: 2, opacity: .65, dashArray: '4,6' }).addTo(map);
+          if (s.plat && s.plon && haversine(s.plat, s.plon, s.lat, s.lon) > 40) {
+            L.polyline([[s.plat, s.plon], [s.lat, s.lon]], { color: '#7a4fb5', weight: ROUTE.wDash*0.8, opacity: .7, dashArray: routeDashArray(0.6).join(',') }).addTo(map);
           }
           // Même pastille que les étapes intermédiaires, à la couleur près :
           // un couchage n'est pas plus important qu'une étape, il ne doit pas
