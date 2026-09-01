@@ -8,514 +8,471 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap">
+<link rel="stylesheet" href="vendor/bootstrap.min.css">
 <style>
 /* ══════════════════════════════════════════════════════════
-   Cette page reprend la feuille de style du carnet lui-même :
-   mêmes jetons de couleur, mêmes polices, mêmes composants
-   (en-tête, bandeau de chiffres, cartes, pastilles, cartes
-   Système, bouton flottant). Le site ressemble à l'application
-   parce que c'est la même identité, pas une imitation.
-   Comme le carnet, il n'existe qu'en clair.
+   Bootstrap 5.3, habillé aux couleurs du carnet.
+   La feuille ci-dessous ne fait que deux choses : brancher les
+   variables de Bootstrap sur les jetons de src/views/layout.js,
+   puis ajouter les quelques pièces que Bootstrap n'a pas —
+   le bandeau de chiffres, le bloc profil, le terminal.
+   Comme le carnet, la page n'existe qu'en clair.
    ══════════════════════════════════════════════════════════ */
 :root {
-  --ocean: #2a7a7a;
-  --ocean-mid: #3a9090;
-  --teal: #4aabab;
-  --teal-light: #7ecece;
-  --emerald: #2d7a5a;
-  --emerald-mid: #3a9e72;
-  --emerald-light: #a0dfc0;
-  --sage: #e8f7f4;
-  --mist: #f0fafa;
-  --cream: #fdfffe;
-  --warm-white: #f5fdfc;
-  --sand: #cce8e8;
-  --ink: #1a3a3a;
-  --ink-mid: #2d5555;
-  --ink-light: #5a8080;
-  --accent: #e07a3a;
-  --accent-light: #fdebd8;
-  color-scheme: light;
+  /* ── Jetons du carnet (src/views/layout.js) ── */
+  --ocean:#2a7a7a; --ocean-mid:#3a9090; --teal:#4aabab; --teal-light:#7ecece;
+  --emerald:#2d7a5a; --emerald-mid:#3a9e72; --emerald-light:#a0dfc0;
+  --sage:#e8f7f4; --mist:#f0fafa; --cream:#fdfffe; --warm-white:#f5fdfc; --sand:#cce8e8;
+  --ink:#1a3a3a; --ink-mid:#2d5555; --ink-light:#5a8080;
+  --accent:#e07a3a; --accent-light:#fdebd8;
+
+  /* ── Les mêmes, branchés sur Bootstrap ── */
+  --bs-body-font-family:'DM Sans',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;
+  --bs-body-font-size:1rem;
+  --bs-body-line-height:1.6;
+  --bs-body-bg:var(--warm-white);
+  --bs-body-color:var(--ink);
+  --bs-secondary-color:var(--ink-light);
+  --bs-emphasis-color:var(--ink);
+  --bs-heading-color:var(--ink);
+  --bs-border-color:var(--sand);
+  --bs-link-color:var(--ocean);
+  --bs-link-hover-color:var(--emerald);
+  --bs-primary:var(--ocean);
+  --bs-primary-rgb:42,122,122;
+  --bs-focus-ring-color:rgba(224,122,58,.35);
+  color-scheme:light;
 }
-*{box-sizing:border-box;margin:0;padding:0}
-html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
-body{font-family:'DM Sans',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--warm-white);color:var(--ink);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased;}
-a{color:inherit;text-decoration:none}
-img{display:block;max-width:100%}
-:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
+h1,h2,h3,.font-display{font-family:'Playfair Display',Georgia,'Times New Roman',serif;font-weight:700;}
+.text-carnet{color:var(--ocean)!important}
+.text-soft{color:var(--ink-light)!important}
+.text-mid{color:var(--ink-mid)!important}
+.bg-mist{background-color:var(--mist)!important}
+.kicker{font-size:.625rem;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--teal)}
 
-/* ── EN-TÊTE ─────────────────────────────────────── */
-.header{background:#ffffff;border-bottom:2px solid var(--sand);color:var(--ink);padding:0;position:sticky;top:0;z-index:10;overflow:visible;box-shadow:0 2px 12px rgba(42,122,122,0.10);}
-.header-inner{position:relative;display:flex;align-items:center;gap:12px;padding:14px 20px;max-width:1180px;margin:0 auto;}
-.header-title-block{flex:1;min-width:0}
-.wordmark{display:block;font-family:'Playfair Display',Georgia,serif;font-size:26px;font-weight:700;color:var(--ocean);line-height:1.05;letter-spacing:-0.01em;}
-.wordmark .bike{font-size:22px;margin-right:2px}
-.header-sub{font-size:11px;color:var(--teal);font-weight:500;letter-spacing:0.08em;text-transform:uppercase;margin-top:2px;display:block;}
-.header-nav{display:flex;align-items:center;gap:4px;flex-shrink:0;}
-.header-nav a{color:var(--ink-mid);font-size:12px;font-weight:600;padding:6px 12px;border-radius:20px;border:1.5px solid var(--sand);background:var(--mist);transition:all .2s;white-space:nowrap;}
-.header-nav a:hover,.header-nav a.active{background:var(--sage);color:var(--ocean);border-color:var(--teal-light);}
-.hamburger{display:none;flex-direction:column;justify-content:center;align-items:center;gap:5px;width:40px;height:40px;border-radius:10px;border:1.5px solid var(--sand);background:var(--mist);cursor:pointer;flex-shrink:0;}
-.hamburger span{display:block;width:18px;height:2px;background:var(--ocean);border-radius:2px;transition:all .25s;}
-.hamburger.open span:nth-child(1){transform:translateY(7px) rotate(45deg)}
-.hamburger.open span:nth-child(2){opacity:0;transform:scaleX(0)}
-.hamburger.open span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
-.mobile-menu{display:none;position:absolute;top:100%;right:0;left:0;background:#ffffff;border-top:1px solid var(--sand);border-bottom:2px solid var(--teal-light);z-index:200;flex-direction:column;padding:10px 14px 14px;gap:5px;box-shadow:0 8px 24px rgba(42,122,122,0.12);}
-.mobile-menu.open{display:flex}
-.mobile-menu a{color:var(--ink-mid);font-size:14px;font-weight:500;padding:10px 14px;border-radius:10px;border:1px solid var(--sand);background:var(--mist);display:flex;align-items:center;gap:8px;}
-.mobile-menu a:hover{background:var(--sage);border-color:var(--teal-light)}
-@media(max-width:820px){.header-nav{display:none}.hamburger{display:flex}}
-@media(min-width:821px){.mobile-menu{display:none!important}}
+/* ── En-tête : la navbar Bootstrap en pastilles du carnet ── */
+.navbar{background:#fff;border-bottom:2px solid var(--sand);box-shadow:0 2px 12px rgba(42,122,122,.10)}
+.navbar .wordmark{font-family:'Playfair Display',Georgia,serif;font-size:1.6rem;font-weight:700;color:var(--ocean);line-height:1.05}
+.navbar .header-sub{font-size:.6875rem;color:var(--teal);font-weight:500;letter-spacing:.08em;text-transform:uppercase;display:block}
+.navbar .nav-link{color:var(--ink-mid);font-size:.75rem;font-weight:600;padding:.375rem .75rem;border-radius:20px;border:1.5px solid var(--sand);background:var(--mist);transition:all .2s}
+.navbar .nav-link:hover,.navbar .nav-link.active{background:var(--sage);color:var(--ocean);border-color:var(--teal-light)}
+.navbar-toggler{border:1.5px solid var(--sand);background:var(--mist);border-radius:10px;padding:.4rem .55rem}
+.navbar-toggler:focus{box-shadow:none}
+.navbar-toggler-icon{background-image:url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='%232a7a7a' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2.5' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e")}
+@media(max-width:991.98px){.navbar .nav-link{border-radius:10px;font-size:.875rem;padding:.6rem .875rem}}
 
-/* ── BANDEAU DE CHIFFRES ─────────────────────────── */
-.stats-bar{position:relative;background:var(--ocean);border-bottom:1px solid rgba(255,255,255,0.08);padding:14px 20px;display:flex;gap:0;overflow:hidden;}
-.stats-bike{position:absolute;inset:0;opacity:0.09;background-image:url("img/bike.png");background-size:360px auto;background-repeat:repeat-x;background-position:center bottom;pointer-events:none;}
-.stats-bar-inner{position:relative;display:grid;grid-template-columns:repeat(4,1fr);width:100%;max-width:1180px;margin:0 auto;}
-.stat{text-align:center;flex:1;position:relative;}
-.stat:not(:last-child)::after{content:'';position:absolute;right:0;top:20%;height:60%;width:1px;background:rgba(255,255,255,0.12);}
-.stat-num{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:#fff;line-height:1;}
-.stat-lbl{font-size:10px;color:rgba(255,255,255,0.62);text-transform:uppercase;letter-spacing:0.1em;margin-top:3px;}
-@media(max-width:560px){.stats-bar-inner{grid-template-columns:repeat(2,1fr);row-gap:14px}.stat::after{display:none}.stat-num{font-size:19px}.stat-lbl{font-size:9px;letter-spacing:.06em}}
+/* ── Bandeau de chiffres (le .stats-bar du carnet) ── */
+.stats-bar{position:relative;background:var(--ocean);overflow:hidden}
+.stats-bar .bike{position:absolute;inset:0;opacity:.09;background-image:url("img/bike.png");background-size:360px auto;background-repeat:repeat-x;background-position:center bottom;pointer-events:none}
+.stat-num{font-family:'Playfair Display',serif;font-size:1.375rem;font-weight:700;color:#fff;line-height:1}
+.stat-lbl{font-size:.625rem;color:rgba(255,255,255,.62);text-transform:uppercase;letter-spacing:.1em;margin-top:3px}
+.stat-col{position:relative}
+.stat-col+.stat-col::before{content:'';position:absolute;left:0;top:20%;height:60%;width:1px;background:rgba(255,255,255,.12)}
+@media(max-width:575.98px){.stat-col:nth-child(odd)::before{display:none}}
 
-/* ── LE FIL ──────────────────────────────────────── */
-.feed{max-width:760px;margin:0 auto;padding:26px 14px 96px;display:flex;flex-direction:column;gap:20px;}
-.page-hero{text-align:center;margin:8px 0 2px;}
-.page-hero h1{font-family:'Playfair Display',serif;font-size:clamp(26px,5vw,38px);color:var(--ocean);font-weight:700;line-height:1.2;text-wrap:balance;}
-.page-hero p{font-size:15px;color:var(--ink-light);margin-top:10px;max-width:56ch;margin-inline:auto;line-height:1.7;}
+/* ── Cartes : les étapes du journal, via .card ── */
+.card{--bs-card-border-color:rgba(0,0,0,.06);--bs-card-border-radius:1.125rem;--bs-card-inner-border-radius:1.125rem;--bs-card-bg:#fff;box-shadow:0 2px 12px rgba(10,61,98,.07),0 1px 3px rgba(0,0,0,.04);transition:box-shadow .2s,transform .2s}
+.card:hover{box-shadow:0 8px 28px rgba(10,61,98,.12),0 2px 6px rgba(0,0,0,.06);transform:translateY(-1px)}
+.card-head-icon{font-size:1.75rem;line-height:1;width:2.4rem;text-align:center;flex:none}
+.card-title{font-family:'Playfair Display',serif;font-size:1.25rem;font-weight:700;line-height:1.3;color:var(--ink)}
+.card-media{background:var(--mist);border-top:1px solid var(--sand);border-bottom:1px solid var(--sand)}
+.card-media-cap{display:block;font-size:.6875rem;color:var(--ink-light);background:var(--mist);padding:.45rem .875rem;text-align:center;line-height:1.5;border-bottom:1px solid var(--sand)}
+.card-text{font-size:.9rem;color:var(--ink-mid);line-height:1.75}
+.card-text strong{color:var(--ink);font-weight:600}
+.notes{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.625rem}
+.notes li{display:grid;grid-template-columns:auto 1fr;gap:.625rem;align-items:start}
+.notes li::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--teal-light);margin-top:.62em}
+blockquote.carnet{margin:0;padding:.5rem .875rem;border-left:3px solid var(--teal-light);background:var(--mist);border-radius:0 8px 8px 0;color:var(--ink-mid);font-style:italic;font-size:.875rem}
+code{font-size:.85em;background:var(--mist);border:1px solid var(--sand);padding:1px 6px;border-radius:6px;color:var(--ocean)}
 
-/* ── CARTES (comme les étapes du journal) ────────── */
-.card{background:#fff;border-radius:18px;overflow:hidden;border:1px solid rgba(0,0,0,0.06);box-shadow:0 2px 12px rgba(10,61,98,0.07), 0 1px 3px rgba(0,0,0,0.04);transition:box-shadow .2s, transform .2s;}
-.card:hover{box-shadow:0 8px 28px rgba(10,61,98,0.12), 0 2px 6px rgba(0,0,0,0.06);transform:translateY(-1px);}
-.card-head{display:flex;align-items:center;gap:10px;padding:16px 18px 0;}
-.card-icon{font-family:'Playfair Display',serif;font-size:30px;line-height:1;min-width:42px;text-align:center;}
-.card-kicker{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:var(--teal);display:block;}
-.card-head h2{font-family:'Playfair Display',serif;font-size:20px;font-weight:700;line-height:1.3;color:var(--ink);margin-top:2px;}
-.card-cover{display:block;width:100%;margin:14px 0 0;background:var(--mist);border-top:1px solid var(--sand);border-bottom:1px solid var(--sand);}
-.card-cover img{width:100%;height:auto}
-.card-cover-cap{display:block;font-size:11px;color:var(--ink-light);background:var(--mist);padding:7px 14px;text-align:center;line-height:1.5;border-bottom:1px solid var(--sand);}
-.card-body{padding:16px 18px 20px}
-.card-badges{display:flex;align-items:center;gap:6px;margin-bottom:12px;flex-wrap:wrap;}
-.pill-loc{font-size:12px;background:var(--sage);color:var(--emerald);padding:4px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:4px;font-weight:600;}
-.pill-km{font-size:12px;background:var(--accent-light);color:var(--accent);padding:4px 10px;border-radius:20px;font-weight:700;display:inline-flex;align-items:center;gap:3px;}
-.pill-dp{font-size:12px;background:var(--mist);color:var(--ocean-mid);padding:4px 10px;border-radius:20px;font-weight:600;display:inline-flex;align-items:center;gap:3px;}
-.card-text{font-size:14.5px;color:var(--ink-mid);line-height:1.75;}
-.card-text p{margin:0 0 10px}
-.card-text p:last-child{margin-bottom:0}
-.card-text b,.card-text strong{color:var(--ink);font-weight:600}
-.card-text ul{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:10px}
-.card-text li{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:start}
-.card-text li::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--teal-light);margin-top:.62em}
-.card-text code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.85em;background:var(--mist);border:1px solid var(--sand);padding:1px 6px;border-radius:6px;color:var(--ocean)}
-.card-quote{margin:12px 0 0;padding:8px 14px;border-left:3px solid var(--teal-light);background:var(--mist);border-radius:0 8px 8px 0;color:var(--ink-mid);font-style:italic;font-size:14px}
+/* ── Pastilles (.card-loc, .km-badge, .dplus-badge du carnet) ── */
+.badge.b-loc{background:var(--sage);color:var(--emerald);font-weight:600}
+.badge.b-km{background:var(--accent-light);color:var(--accent);font-weight:700}
+.badge.b-dp{background:var(--mist);color:var(--ocean-mid);font-weight:600}
+.badge{font-size:.75rem;padding:.3rem .625rem}
 
-/* ── CHIFFRES EN CARTES (comme la page Statistiques) ── */
-.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;}
-.stat-card{background:#fff;border:1px solid var(--sand);border-radius:16px;padding:18px 16px;text-align:center;box-shadow:0 2px 12px rgba(10,61,98,0.06);}
-.stat-card.feature{grid-column:1/-1;background:linear-gradient(135deg,var(--ocean),var(--emerald));border:none;color:#fff;}
-.stat-card .sc-icon{font-size:24px;line-height:1;}
-.stat-card .sc-num{font-family:'Playfair Display',serif;font-size:30px;font-weight:700;color:var(--ocean);line-height:1.1;margin-top:6px;}
-.stat-card.feature .sc-num{color:#fff;font-size:34px;}
-.stat-card .sc-lbl{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--ink-light);margin-top:6px;font-weight:600;}
-.stat-card.feature .sc-lbl{color:rgba(255,255,255,0.85);}
-.stat-card .sc-sub{font-size:12px;color:var(--ink-light);margin-top:4px;line-height:1.5}
-.stat-card.feature .sc-sub{color:rgba(255,255,255,0.9);}
-.stats-note{font-size:12px;color:var(--ink-light);text-align:center;line-height:1.6;background:var(--mist);border:1px solid var(--sand);border-radius:12px;padding:12px 16px;}
+/* ── Boutons : variables Bootstrap, dégradé du carnet ── */
+.btn{--bs-btn-font-weight:600;--bs-btn-border-radius:.75rem;--bs-btn-padding-y:.8rem;--bs-btn-font-size:.9375rem}
+.btn-carnet{--bs-btn-color:#fff;--bs-btn-hover-color:#fff;--bs-btn-active-color:#fff;--bs-btn-border-color:transparent;--bs-btn-hover-border-color:transparent;--bs-btn-bg:transparent;--bs-btn-hover-bg:transparent;--bs-btn-active-bg:transparent;background-image:linear-gradient(135deg,var(--ocean-mid) 0%,var(--teal) 50%,var(--emerald) 100%);box-shadow:0 4px 14px rgba(10,61,98,.3);transition:opacity .15s,transform .15s}
+.btn-carnet:hover{opacity:.92;transform:translateY(-1px)}
+.btn-soft{--bs-btn-color:var(--ocean-mid);--bs-btn-bg:var(--mist);--bs-btn-border-color:var(--teal-light);--bs-btn-hover-bg:var(--sage);--bs-btn-hover-color:var(--ocean);--bs-btn-hover-border-color:var(--teal);--bs-btn-active-bg:var(--sage);--bs-btn-active-color:var(--ocean);--bs-btn-active-border-color:var(--teal);border-width:1.5px}
+.fab{position:fixed;bottom:24px;right:24px;width:56px;height:56px;border-radius:50%;background-image:linear-gradient(135deg,var(--ocean-mid),var(--emerald));color:#fff;font-size:1.5rem;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(10,61,98,.4);z-index:1030;text-decoration:none;transition:transform .2s,box-shadow .2s}
+.fab:hover{color:#fff;transform:scale(1.08);box-shadow:0 8px 28px rgba(10,61,98,.5)}
 
-/* ── CARTES SYSTÈME ──────────────────────────────── */
-.sys-cards{display:flex;flex-direction:column;gap:10px}
-.sys-card{display:flex;align-items:flex-start;gap:12px;background:#fff;border:1px solid var(--sand);border-radius:14px;padding:14px 16px;box-shadow:0 2px 12px rgba(10,61,98,0.06);transition:transform .15s,box-shadow .15s,border-color .15s;}
-.sys-card:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(10,61,98,0.12);border-color:var(--teal-light);}
-.sys-card-icon{font-size:22px;line-height:1.3;flex-shrink:0;}
-.sys-card-body{flex:1;min-width:0}
-.sys-card-title{display:block;font-size:15px;font-weight:700;color:var(--ink);}
-.sys-card-desc{display:block;font-size:13px;color:var(--ink-light);line-height:1.55;margin-top:3px;}
+/* ── Chiffres en cartes (page Statistiques du carnet) ── */
+.stat-card{background:#fff;border:1px solid var(--sand);border-radius:1rem;box-shadow:0 2px 12px rgba(10,61,98,.06)}
+.stat-card.feature{background-image:linear-gradient(135deg,var(--ocean),var(--emerald));border:none;color:#fff}
+.sc-num{font-family:'Playfair Display',serif;font-size:1.875rem;font-weight:700;color:var(--ocean);line-height:1.1}
+.stat-card.feature .sc-num{color:#fff;font-size:2.125rem}
+.sc-lbl{font-size:.6875rem;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-light);font-weight:600}
+.stat-card.feature .sc-lbl{color:rgba(255,255,255,.85)}
+.sc-sub{font-size:.75rem;color:var(--ink-light);line-height:1.5}
+.stat-card.feature .sc-sub{color:rgba(255,255,255,.9)}
 
-/* ── BOUTONS ─────────────────────────────────────── */
-.btn-submit{display:inline-flex;align-items:center;justify-content:center;gap:9px;width:100%;background:linear-gradient(135deg, var(--ocean-mid) 0%, var(--teal) 50%, var(--emerald) 100%);color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;box-shadow:0 4px 14px rgba(10,61,98,0.3);transition:opacity .15s, transform .15s;font-family:inherit;}
-.btn-submit:hover{opacity:.92;transform:translateY(-1px)}
-.btn-second{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;background:var(--mist);color:var(--ocean-mid);border:1.5px solid var(--teal-light);border-radius:12px;padding:12px;font-size:14px;font-weight:600;transition:background .15s;font-family:inherit;}
-.btn-second:hover{background:var(--sage);border-color:var(--teal)}
-.btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
-.btn-row>*{flex:1;min-width:200px}
-.fab{position:fixed;bottom:24px;right:24px;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg, var(--ocean-mid), var(--emerald));color:#fff;font-size:24px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(10,61,98,0.4);z-index:100;transition:transform .2s, box-shadow .2s;}
-.fab:hover{transform:scale(1.08);box-shadow:0 8px 28px rgba(10,61,98,0.5)}
+/* ── Liste Système (.sys-card du carnet) ── */
+.list-group-item{--bs-list-group-border-color:var(--sand);--bs-list-group-border-radius:.875rem;box-shadow:0 2px 12px rgba(10,61,98,.06);transition:transform .15s,box-shadow .15s,border-color .15s}
+.list-group-item:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(10,61,98,.12);border-color:var(--teal-light)}
 
-/* ── TERMINAL & PROFIL ───────────────────────────── */
-.shell{background:var(--ink);color:#dff2ee;border-radius:12px;padding:16px 18px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;line-height:1.95;white-space:pre;overflow-x:auto;margin-top:14px;}
+/* ── Terminal et profil ── */
+.shell{background:var(--ink);color:#dff2ee;border-radius:.75rem;padding:1rem 1.125rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.8125rem;line-height:1.95;white-space:pre;overflow-x:auto}
 .shell .p{color:var(--accent);font-weight:600}
 .shell .c{color:var(--teal-light);opacity:.75}
-.elev{margin-top:14px;background:var(--mist);border:1px solid var(--sand);border-radius:12px;padding:12px 14px 10px;}
-.elev-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--ink-light);font-weight:600;margin-bottom:4px;}
+.clone{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.78rem;color:var(--ink-light);background:var(--mist);border:1px solid var(--sand);border-radius:.625rem;padding:.55rem .75rem;overflow-x:auto;white-space:nowrap}
+.elev{background:var(--mist);border:1px solid var(--sand);border-radius:.75rem}
+.elev-head{font-size:.625rem;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-light);font-weight:600}
 #profile{width:100%;height:120px;display:block}
-.elev-stats{display:flex;gap:0;margin-top:14px;border-top:1px solid var(--sand);padding-top:12px;}
-.elev-stat{flex:1;text-align:center;position:relative;}
-.elev-stat:not(:last-child)::after{content:'';position:absolute;right:0;top:15%;height:70%;width:1px;background:var(--sand);}
-.elev-stat-num{font-family:'Playfair Display',serif;font-size:19px;font-weight:700;color:var(--ocean-mid);line-height:1;}
-.elev-stat-lbl{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--ink-light);margin-top:4px;}
-.clone{margin-top:10px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;color:var(--ink-light);background:var(--mist);border:1px solid var(--sand);border-radius:10px;padding:9px 12px;overflow-x:auto;white-space:nowrap;}
+.elev-num{font-family:'Playfair Display',serif;font-size:1.1875rem;font-weight:700;color:var(--ocean-mid);line-height:1}
+.elev-lbl{font-size:.625rem;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-light)}
+.elev-col{position:relative}
+.elev-col+.elev-col::before{content:'';position:absolute;left:0;top:15%;height:70%;width:1px;background:var(--sand)}
 
-/* ── DEUX IMAGES CÔTE À CÔTE ─────────────────────── */
-.duo{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
-.duo figure{background:var(--mist);border:1px solid var(--sand);border-radius:12px;overflow:hidden}
-.duo figcaption{font-size:11px;color:var(--ink-light);padding:7px 10px;text-align:center;line-height:1.45}
-@media(max-width:560px){.duo{grid-template-columns:1fr}}
-
-/* ── PIED ────────────────────────────────────────── */
-.foot{border-top:1px solid var(--sand);background:#fff;padding:28px 14px 40px;text-align:center;}
-.foot p{font-size:13px;color:var(--ink-light);max-width:60ch;margin:0 auto 12px;line-height:1.7}
-.foot-links{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
-.foot-links a{font-size:12px;font-weight:600;color:var(--ink-mid);padding:6px 12px;border-radius:20px;border:1.5px solid var(--sand);background:var(--mist);transition:all .2s}
-.foot-links a:hover{background:var(--sage);color:var(--ocean);border-color:var(--teal-light)}
-
+.figure-caption{font-size:.6875rem;color:var(--ink-light);line-height:1.45}
 @media (prefers-reduced-motion: reduce){*{animation-duration:.001ms!important;transition-duration:.001ms!important}}
 </style>
 </head>
 <body>
 
-<div class="header">
-  <div class="header-inner">
-    <div class="header-title-block">
-      <a href="#haut" class="wordmark"><span class="bike">🚲</span> Velo Journal</a>
+<nav class="navbar navbar-expand-lg sticky-top py-2">
+  <div class="container-fluid px-3 px-lg-4">
+    <a class="navbar-brand me-auto py-1" href="#haut">
+      <span class="wordmark">🚲 Velo Journal</span>
       <span class="header-sub">Carnet de voyage à vélo, auto-hébergé</span>
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav"
+            aria-controls="mainNav" aria-expanded="false" aria-label="Ouvrir le menu">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse flex-grow-0" id="mainNav">
+      <ul class="navbar-nav gap-1 mt-3 mt-lg-0">
+        <li class="nav-item"><a class="nav-link" href="#carnet">📖 Le carnet</a></li>
+        <li class="nav-item"><a class="nav-link" href="#chiffres">📊 Les chiffres</a></li>
+        <li class="nav-item"><a class="nav-link" href="#proches">💬 Les proches</a></li>
+        <li class="nav-item"><a class="nav-link" href="#retour">🖼️ Après le retour</a></li>
+        <li class="nav-item"><a class="nav-link" href="#demo">🎒 La démo</a></li>
+        <li class="nav-item"><a class="nav-link active" href="#telecharger">⬇️ Télécharger</a></li>
+      </ul>
     </div>
-    <nav class="header-nav">
-      <a href="#carnet">📖 Le carnet</a>
-      <a href="#chiffres">📊 Les chiffres</a>
-      <a href="#proches">💬 Les proches</a>
-      <a href="#retour">🖼️ Après le retour</a>
-      <a href="#demo">🎒 La démo</a>
-      <a href="#telecharger" class="active">⬇️ Télécharger</a>
-    </nav>
-    <button class="hamburger" id="hamburger" aria-label="Menu" aria-expanded="false"><span></span><span></span><span></span></button>
   </div>
-  <nav class="mobile-menu" id="mobileMenu">
-    <a href="#carnet">📖 Le carnet</a>
-    <a href="#chiffres">📊 Les chiffres</a>
-    <a href="#proches">💬 Les proches</a>
-    <a href="#retour">🖼️ Après le retour</a>
-    <a href="#demo">🎒 La démo</a>
-    <a href="#telecharger">⬇️ Télécharger</a>
-  </nav>
-</div>
+</nav>
 
-<div class="stats-bar">
-  <div class="stats-bike" aria-hidden="true"></div>
-  <div class="stats-bar-inner">
-    <div class="stat"><div class="stat-num">0</div><div class="stat-lbl">base de données</div></div>
-    <div class="stat"><div class="stat-num">7</div><div class="stat-lbl">dépendances</div></div>
-    <div class="stat"><div class="stat-num">11 148</div><div class="stat-lbl">lignes de js</div></div>
-    <div class="stat"><div class="stat-num">2 min</div><div class="stat-lbl">pour l'essayer</div></div>
+<div class="stats-bar py-3">
+  <div class="bike" aria-hidden="true"></div>
+  <div class="container-fluid px-3 position-relative">
+    <div class="row row-cols-2 row-cols-sm-4 g-0 text-center gy-3 gy-sm-0">
+      <div class="col stat-col"><div class="stat-num">0</div><div class="stat-lbl">base de données</div></div>
+      <div class="col stat-col"><div class="stat-num">7</div><div class="stat-lbl">dépendances</div></div>
+      <div class="col stat-col"><div class="stat-num">11 148</div><div class="stat-lbl">lignes de JS</div></div>
+      <div class="col stat-col"><div class="stat-num">2 min</div><div class="stat-lbl">pour l'essayer</div></div>
+    </div>
   </div>
 </div>
 
-<main class="feed" id="haut">
+<main class="container py-4 py-lg-5" id="haut">
+<div class="row justify-content-center">
+<div class="col-12 col-lg-10 col-xl-9 d-flex flex-column gap-4">
 
-  <div class="page-hero">
-    <h1>Le soir, vous postez l'étape.<br>La maison la lit dans la minute.</h1>
-    <p>Un carnet de voyage à vélo tenu depuis le guidon, hébergé chez vous. Vos proches
-    suivent sur une page qui leur est réservée, commentent, s'abonnent aux nouvelles.
-    Pas de base de données, pas de compte à créer, pas de mouchard.</p>
-  </div>
+  <header class="text-center mt-2 mb-1">
+    <h1 class="text-carnet display-6 fw-bold lh-sm">Le soir, vous postez l'étape.<br>La maison la lit dans la minute.</h1>
+    <p class="text-soft mx-auto mt-3 mb-0" style="max-width:56ch">Un carnet de voyage à vélo tenu depuis le
+      guidon, hébergé chez vous. Vos proches suivent sur une page qui leur est réservée, commentent,
+      s'abonnent aux nouvelles. Pas de base de données, pas de compte à créer, pas de mouchard.</p>
+  </header>
 
   <article class="card">
-    <div class="card-head">
-      <span class="card-icon">🚲</span>
+    <div class="card-body pb-0 d-flex align-items-center gap-2">
+      <span class="card-head-icon">🚲</span>
       <div>
-        <span class="card-kicker">Ce que ça donne</span>
-        <h2>Un mois de selle, de Nancy à Venise</h2>
+        <span class="kicker">Ce que ça donne</span>
+        <h2 class="card-title mt-1 mb-0">Un mois de selle, de Nancy à Venise</h2>
       </div>
     </div>
-    <div class="card-cover">
-      <img src="img/affiche.jpg" width="1800" height="1275" alt="L'affiche A3 du voyage : la trace orange de Nancy à Venise sur un fond de carte épuré, une photo de chaque étape disposée tout autour du cadre et reliée par un fil à son point d'arrivée, avec le profil altimétrique en bas.">
+    <div class="card-media mt-3">
+      <img src="img/affiche.jpg" class="img-fluid w-100" width="1800" height="1275" alt="L'affiche A3 du voyage : la trace orange de Nancy à Venise sur un fond de carte épuré, une photo de chaque étape disposée tout autour du cadre et reliée par un fil à son point d'arrivée, avec le profil altimétrique en bas.">
     </div>
-    <span class="card-cover-cap">L'affiche A3 dessinée par le carnet, à partir des traces GPX et de la photo favorite de chaque étape</span>
+    <span class="card-media-cap">L'affiche A3 dessinée par le carnet, à partir des traces GPX et de la photo favorite de chaque étape</span>
     <div class="card-body">
-      <div class="card-badges">
-        <span class="pill-loc">📍 5 pays</span>
-        <span class="pill-km">🚴 1 546 km</span>
-        <span class="pill-dp">⛰️ 9 450 m D+</span>
+      <div class="d-flex flex-wrap gap-2 mb-3">
+        <span class="badge rounded-pill b-loc">📍 5 pays</span>
+        <span class="badge rounded-pill b-km">🚴 1 546 km</span>
+        <span class="badge rounded-pill b-dp">⛰️ 9 450 m D+</span>
       </div>
       <div class="card-text">
-        <p>Titre, récit, photos, position GPS et trace du jour, envoyés du téléphone sous la
-        tente. Le carnet fait le reste : la carte, les statistiques, les notifications, et —
-        au retour — l'affiche, le livre photo et le diplôme.</p>
-        <p>Tout tourne sur votre serveur, dans des fichiers JSON. <b>Le voyage ci-dessus est
-        le carnet de démonstration fourni avec le projet</b> : une commande, et vous l'avez
-        sous les yeux.</p>
+        <p>Titre, récit, photos, position GPS et trace du jour, envoyés du téléphone sous la tente.
+          Le carnet fait le reste : la carte, les statistiques, les notifications, et — au retour —
+          l'affiche, le livre photo et le diplôme.</p>
+        <p class="mb-0">Tout tourne sur votre serveur, dans des fichiers JSON. <strong>Le voyage
+          ci-dessus est le carnet de démonstration fourni avec le projet</strong> : une commande, et
+          vous l'avez sous les yeux.</p>
       </div>
-      <div class="btn-row">
-        <a class="btn-submit" href="https://github.com/tmilefr/velo-journal/archive/refs/heads/main.zip">⬇️ Télécharger le projet</a>
-        <a class="btn-second" href="https://github.com/tmilefr/velo-journal">Voir le code sur GitHub</a>
+      <div class="row g-2 mt-3">
+        <div class="col-12 col-sm-7"><a class="btn btn-carnet w-100" href="https://github.com/tmilefr/velo-journal/archive/refs/heads/main.zip">⬇️ Télécharger le projet</a></div>
+        <div class="col-12 col-sm-5"><a class="btn btn-soft w-100" href="https://github.com/tmilefr/velo-journal">Voir sur GitHub</a></div>
       </div>
-      <div class="clone">git clone https://github.com/tmilefr/velo-journal.git</div>
+      <div class="clone mt-2">git clone https://github.com/tmilefr/velo-journal.git</div>
     </div>
   </article>
 
   <article class="card" id="carnet">
-    <div class="card-head">
-      <span class="card-icon">📖</span>
+    <div class="card-body pb-0 d-flex align-items-center gap-2">
+      <span class="card-head-icon">📖</span>
       <div>
-        <span class="card-kicker">Depuis le guidon</span>
-        <h2>Publier une étape prend deux minutes, sous la pluie</h2>
+        <span class="kicker">Depuis le guidon</span>
+        <h2 class="card-title mt-1 mb-0">Publier une étape prend deux minutes, sous la pluie</h2>
       </div>
     </div>
-    <div class="card-cover">
-      <img src="img/journal.jpg" width="1100" height="739" alt="La page famille : une étape avec sa date, son lieu, sa distance, son dénivelé, sa photo et son récit.">
+    <div class="card-media mt-3">
+      <img src="img/journal.jpg" class="img-fluid w-100" width="1100" height="739" alt="La page famille : une étape avec sa date, son lieu, sa distance, son dénivelé, sa photo et son récit.">
     </div>
-    <span class="card-cover-cap">La page famille — une étape, ses chiffres du jour, sa photo et son récit</span>
-    <div class="card-body">
-      <div class="card-text">
-        <p>La page de saisie est faite pour un téléphone tenu d'une main : le mot de passe est
-        retenu trente jours, la position se prend d'un bouton, les photos partent en lot.</p>
-        <ul>
-          <li><span><b>Titre, récit, photos.</b> Jusqu'à dix médias par étape, redimensionnés à l'arrivée. Une photo mise en avant, une sélection pour le livre.</span></li>
-          <li><span><b>La trace fait le calcul.</b> Déposez le GPX : distance, dénivelé et point d'arrivée en sont déduits, ainsi que les pays et régions traversés — au prorata quand l'étape passe une frontière.</span></li>
-          <li><span><b>Les jours sans vélo comptent aussi.</b> Repos, étape à cheval sur deux journées, transfert en train : chacun est rangé à sa place et n'abîme pas les moyennes.</span></li>
-          <li><span><b>Ce qui reste privé le reste.</b> Une étape peut n'être visible que de vous, et chaque étape porte une note d'intendance que personne d'autre ne lit.</span></li>
-        </ul>
-      </div>
+    <span class="card-media-cap">La page famille — une étape, ses chiffres du jour, sa photo et son récit</span>
+    <div class="card-body card-text">
+      <p>La page de saisie est faite pour un téléphone tenu d'une main : le mot de passe est retenu
+        trente jours, la position se prend d'un bouton, les photos partent en lot.</p>
+      <ul class="notes mt-3">
+        <li><span><strong>Titre, récit, photos.</strong> Jusqu'à dix médias par étape, redimensionnés à l'arrivée. Une photo mise en avant, une sélection pour le livre.</span></li>
+        <li><span><strong>La trace fait le calcul.</strong> Déposez le GPX : distance, dénivelé et point d'arrivée en sont déduits, ainsi que les pays et régions traversés — au prorata quand l'étape passe une frontière.</span></li>
+        <li><span><strong>Les jours sans vélo comptent aussi.</strong> Repos, étape à cheval sur deux journées, transfert en train : chacun est rangé à sa place et n'abîme pas les moyennes.</span></li>
+        <li><span><strong>Ce qui reste privé le reste.</strong> Une étape peut n'être visible que de vous, et chaque étape porte une note d'intendance que personne d'autre ne lit.</span></li>
+      </ul>
     </div>
   </article>
 
   <article class="card" id="chiffres">
-    <div class="card-head">
-      <span class="card-icon">📊</span>
+    <div class="card-body pb-0 d-flex align-items-center gap-2">
+      <span class="card-head-icon">📊</span>
       <div>
-        <span class="card-kicker">Ce que la trace raconte</span>
-        <h2>Les chiffres du voyage, sans tableur</h2>
+        <span class="kicker">Ce que la trace raconte</span>
+        <h2 class="card-title mt-1 mb-0">Les chiffres du voyage, sans tableur</h2>
       </div>
     </div>
-    <div class="card-cover">
-      <img src="img/stats.jpg" width="1100" height="739" alt="La page Distances : la répartition du kilométrage par pays, drapeau par drapeau, puis par région, chaque ligne dépliable sur le détail des étapes.">
+    <div class="card-media mt-3">
+      <img src="img/stats.jpg" class="img-fluid w-100" width="1100" height="739" alt="La page Distances : la répartition du kilométrage par pays, drapeau par drapeau, puis par région, chaque ligne dépliable sur le détail des étapes.">
     </div>
-    <span class="card-cover-cap">📏 Distances — le kilométrage pays par pays, puis région par région</span>
-    <div class="card-body">
-      <div class="card-text">
-        <ul>
-          <li><span><b>Jours roulés, jours de repos.</b> Moyennes, records, distance mois par mois, et le trajet total vélo + train — les kilomètres de rail comptés à part, pour ne pas gonfler les moyennes.</span></li>
-          <li><span><b>Par pays et par région.</b> Neuf régions dans cinq pays sur le voyage de démonstration, cinq étapes à cheval sur une frontière comptées des deux côtés.</span></li>
-        </ul>
-      </div>
+    <span class="card-media-cap">📏 Distances — le kilométrage pays par pays, puis région par région</span>
+    <div class="card-body card-text">
+      <ul class="notes">
+        <li><span><strong>Jours roulés, jours de repos.</strong> Moyennes, records, distance mois par mois, et le trajet total vélo + train — les kilomètres de rail comptés à part, pour ne pas gonfler les moyennes.</span></li>
+        <li><span><strong>Par pays et par région.</strong> Neuf régions dans cinq pays sur le voyage de démonstration, cinq étapes à cheval sur une frontière comptées des deux côtés.</span></li>
+      </ul>
     </div>
   </article>
 
   <article class="card">
-    <div class="card-head">
-      <span class="card-icon">💶</span>
+    <div class="card-body pb-0 d-flex align-items-center gap-2">
+      <span class="card-head-icon">💶</span>
       <div>
-        <span class="card-kicker">L'autre compteur</span>
-        <h2>Le budget se tient tout seul</h2>
+        <span class="kicker">L'autre compteur</span>
+        <h2 class="card-title mt-1 mb-0">Le budget se tient tout seul</h2>
       </div>
     </div>
-    <div class="card-cover">
-      <img src="img/finances.jpg" width="1100" height="739" alt="La page Finances : total dépensé, moyenne mensuelle et répartition par catégorie, chaque ligne dépliable sur le détail des dépenses.">
+    <div class="card-media mt-3">
+      <img src="img/finances.jpg" class="img-fluid w-100" width="1100" height="739" alt="La page Finances : total dépensé, moyenne mensuelle et répartition par catégorie, chaque ligne dépliable sur le détail des dépenses.">
     </div>
-    <span class="card-cover-cap">💶 Finances — par catégorie, par personne, mois par mois</span>
+    <span class="card-media-cap">💶 Finances — par catégorie, par personne, mois par mois</span>
     <div class="card-body">
-      <div class="card-badges">
-        <span class="pill-loc">🍽️ Restaurant</span>
-        <span class="pill-loc">🏨 Hébergement</span>
-        <span class="pill-loc">🛒 Nourriture</span>
-        <span class="pill-loc">🧳 Divers</span>
+      <div class="d-flex flex-wrap gap-2 mb-3">
+        <span class="badge rounded-pill b-loc">🍽️ Restaurant</span>
+        <span class="badge rounded-pill b-loc">🏨 Hébergement</span>
+        <span class="badge rounded-pill b-loc">🛒 Nourriture</span>
+        <span class="badge rounded-pill b-loc">🧳 Divers</span>
       </div>
-      <div class="card-text">
-        <p>Les dépenses se saisissent sur l'étape du jour, en même temps que le récit. Hôtel et
-        camping se distinguent, chaque ligne dit qui a payé, et les achats de préparation entrent
-        dans le budget sans entrer dans les kilomètres.</p>
-      </div>
+      <p class="card-text mb-0">Les dépenses se saisissent sur l'étape du jour, en même temps que le
+        récit. Hôtel et camping se distinguent, chaque ligne dit qui a payé, et les achats de
+        préparation entrent dans le budget sans entrer dans les kilomètres.</p>
     </div>
   </article>
 
   <article class="card" id="proches">
-    <div class="card-head">
-      <span class="card-icon">💬</span>
+    <div class="card-body pb-0 d-flex align-items-center gap-2">
+      <span class="card-head-icon">💬</span>
       <div>
-        <span class="card-kicker">Ceux qui suivent</span>
-        <h2>Une page à partager, et rien à installer pour eux</h2>
+        <span class="kicker">Ceux qui suivent</span>
+        <h2 class="card-title mt-1 mb-0">Une page à partager, et rien à installer pour eux</h2>
       </div>
     </div>
-    <div class="card-cover">
-      <img src="img/commentaires.jpg" width="1100" height="739" alt="La page Commentaires : tous les messages du carnet sur une page, avec une pastille par prénom indiquant le nombre de messages.">
+    <div class="card-media mt-3">
+      <img src="img/commentaires.jpg" class="img-fluid w-100" width="1100" height="739" alt="La page Commentaires : tous les messages du carnet sur une page, avec une pastille par prénom indiquant le nombre de messages.">
     </div>
-    <span class="card-cover-cap">💬 Commentaires — tout le carnet sur une page, filtrable par personne</span>
-    <div class="card-body">
-      <div class="card-text">
-        <ul>
-          <li><span><b>Un mot de Mamie, chaque soir.</b> Prénom et message, avec des réponses en fil. Le lien du filtre par personne se partage tel quel.</span></li>
-          <li><span><b>Un e-mail à chaque étape.</b> Inscription à double confirmation, désabonnement en un clic, validation à la main si le courriel se perd. De votre côté, une alerte dès qu'un commentaire arrive.</span></li>
-          <li><span><b>Un flux RSS.</b> Pour ceux qui vivent dans Feedly ou NetNewsWire et n'ont pas envie de changer d'habitude.</span></li>
-        </ul>
-        <p class="card-quote">« BRAVO !!! On a suivi toute l'année sur la carte de la classe. Merci pour les photos de chaque pays. » — un des 62 commentaires du carnet de démonstration</p>
-      </div>
+    <span class="card-media-cap">💬 Commentaires — tout le carnet sur une page, filtrable par personne</span>
+    <div class="card-body card-text">
+      <ul class="notes mb-3">
+        <li><span><strong>Un mot de Mamie, chaque soir.</strong> Prénom et message, avec des réponses en fil. Le lien du filtre par personne se partage tel quel.</span></li>
+        <li><span><strong>Un e-mail à chaque étape.</strong> Inscription à double confirmation, désabonnement en un clic, validation à la main si le courriel se perd. De votre côté, une alerte dès qu'un commentaire arrive.</span></li>
+        <li><span><strong>Un flux RSS.</strong> Pour ceux qui vivent dans Feedly ou NetNewsWire et n'ont pas envie de changer d'habitude.</span></li>
+      </ul>
+      <blockquote class="carnet">« BRAVO !!! On a suivi toute l'année sur la carte de la classe. Merci
+        pour les photos de chaque pays. » — un des 62 commentaires du carnet de démonstration</blockquote>
     </div>
   </article>
 
   <article class="card" id="retour">
-    <div class="card-head">
-      <span class="card-icon">🖼️</span>
+    <div class="card-body pb-0 d-flex align-items-center gap-2">
+      <span class="card-head-icon">🖼️</span>
       <div>
-        <span class="card-kicker">Après le retour</span>
-        <h2>Le voyage sort de l'écran</h2>
+        <span class="kicker">Après le retour</span>
+        <h2 class="card-title mt-1 mb-0">Le voyage sort de l'écran</h2>
       </div>
     </div>
-    <div class="card-cover">
-      <img src="img/diplome.jpg" width="1300" height="921" alt="Le diplôme A4 paysage de Margot : 987 km, 14 jours de vélo, 70,5 km/jour de moyenne, 6 023 m de dénivelé, ses records, ses badges et la frise de ses journées.">
+    <div class="card-media mt-3">
+      <img src="img/diplome.jpg" class="img-fluid w-100" width="1300" height="921" alt="Le diplôme A4 paysage de Margot : 987 km, 14 jours de vélo, 70,5 km/jour de moyenne, 6 023 m de dénivelé, ses records, ses badges et la frise de ses journées.">
     </div>
-    <span class="card-cover-cap">🏅 Le diplôme d'un compagnon de route monté en selle en chemin</span>
-    <div class="card-body">
-      <div class="card-text">
-        <p>Trois pièces imprimables, dessinées par le carnet à partir de vos propres étapes.
-        Aperçu, impression et export PNG sont la même image, dessinée sur un canvas : rien ne
-        peut déborder d'un cadre.</p>
-        <ul>
-          <li><span><b>L'affiche A3.</b> Les traces sur un fond épuré ou les tuiles OpenStreetMap, la photo favorite de chaque étape posée au plus près de son point d'arrivée, reliée par un fil.</span></li>
-          <li><span><b>Le livre photo.</b> Une page A4 par étape : titre, chiffres du jour, récit et collage. Chaque photo garde sa forme, rien n'est rogné.</span></li>
-          <li><span><b>Le diplôme.</b> Il retrouve l'étape des retrouvailles par son nom de lieu — Nuremberg, Nürnberg — et ne compte qu'à partir de la première journée de vélo du compagnon.</span></li>
-        </ul>
-      </div>
-      <div class="duo">
-        <figure>
-          <img src="img/livre.jpg" width="700" height="990" alt="La couverture du livre photo : le titre du voyage, les dates, et la carte du parcours avec la trace du départ à l'arrivée.">
-          <figcaption>La couverture du livre : le tracé sur une vraie carte</figcaption>
-        </figure>
-        <figure>
-          <img src="img/journal.jpg" width="1100" height="739" alt="Une page du carnet, telle qu'elle est reprise dans le livre photo.">
-          <figcaption>Chaque étape devient une page A4</figcaption>
-        </figure>
+    <span class="card-media-cap">🏅 Le diplôme d'un compagnon de route monté en selle en chemin</span>
+    <div class="card-body card-text">
+      <p>Trois pièces imprimables, dessinées par le carnet à partir de vos propres étapes. Aperçu,
+        impression et export PNG sont la même image, dessinée sur un canvas : rien ne peut déborder
+        d'un cadre.</p>
+      <ul class="notes mt-3">
+        <li><span><strong>L'affiche A3.</strong> Les traces sur un fond épuré ou les tuiles OpenStreetMap, la photo favorite de chaque étape posée au plus près de son point d'arrivée, reliée par un fil.</span></li>
+        <li><span><strong>Le livre photo.</strong> Une page A4 par étape : titre, chiffres du jour, récit et collage. Chaque photo garde sa forme, rien n'est rogné.</span></li>
+        <li><span><strong>Le diplôme.</strong> Il retrouve l'étape des retrouvailles par son nom de lieu — Nuremberg, Nürnberg — et ne compte qu'à partir de la première journée de vélo du compagnon.</span></li>
+      </ul>
+      <div class="row g-3 mt-1">
+        <div class="col-12 col-sm-6">
+          <figure class="figure bg-mist border rounded-3 overflow-hidden w-100 mb-0">
+            <img src="img/livre.jpg" class="figure-img img-fluid w-100 mb-0" width="700" height="990" alt="La couverture du livre photo : le titre du voyage, les dates, et la carte du parcours avec la trace du départ à l'arrivée.">
+            <figcaption class="figure-caption text-center px-2 py-2">La couverture du livre : le tracé sur une vraie carte</figcaption>
+          </figure>
+        </div>
+        <div class="col-12 col-sm-6">
+          <figure class="figure bg-mist border rounded-3 overflow-hidden w-100 mb-0">
+            <img src="img/journal.jpg" class="figure-img img-fluid w-100 mb-0" width="1100" height="739" alt="Une page du carnet, telle qu'elle est reprise dans le livre photo.">
+            <figcaption class="figure-caption text-center px-2 py-2">Chaque étape devient une page A4</figcaption>
+          </figure>
+        </div>
       </div>
     </div>
   </article>
 
   <article class="card" id="demo">
-    <div class="card-head">
-      <span class="card-icon">🎒</span>
+    <div class="card-body pb-0 d-flex align-items-center gap-2">
+      <span class="card-head-icon">🎒</span>
       <div>
-        <span class="card-kicker">Essayer</span>
-        <h2>Un voyage de démonstration est fourni</h2>
+        <span class="kicker">Essayer</span>
+        <h2 class="card-title mt-1 mb-0">Un voyage de démonstration est fourni</h2>
       </div>
     </div>
     <div class="card-body">
-      <div class="card-text">
-        <p>Pour voir le carnet plein plutôt que vide : <b>Nancy → Venise</b>, un mois de selle
-        fabriqué de toutes pièces par un script. Toutes les images de cette page en sortent.</p>
-      </div>
-      <div class="shell"><span class="p">$</span> git clone https://github.com/tmilefr/velo-journal.git
+      <p class="card-text">Pour voir le carnet plein plutôt que vide : <strong>Nancy → Venise</strong>,
+        un mois de selle fabriqué de toutes pièces par un script. Toutes les images de cette page en
+        sortent.</p>
+      <div class="shell mt-3"><span class="p">$</span> git clone https://github.com/tmilefr/velo-journal.git
 <span class="p">$</span> cd velo-journal &amp;&amp; npm install
 <span class="p">$</span> npm run demo      <span class="c"># fabrique le carnet de démonstration</span>
 <span class="p">$</span> npm start         <span class="c"># http://localhost:3000</span></div>
-      <div class="elev">
-        <div class="elev-head"><span>Profil du voyage de démonstration</span><span>Nancy → Venise</span></div>
+      <div class="elev mt-3 p-3 pb-2">
+        <div class="d-flex justify-content-between flex-wrap gap-2 elev-head mb-1">
+          <span>Profil du voyage de démonstration</span><span>Nancy → Venise</span>
+        </div>
         <canvas id="profile" role="img" aria-label="Profil altimétrique du voyage de démonstration : plat jusqu'à Vienne, puis le pic du col du Vršič à 1 611 mètres avant la descente sur l'Adriatique."></canvas>
-        <div class="elev-stats">
-          <div class="elev-stat"><div class="elev-stat-num">29</div><div class="elev-stat-lbl">publications</div></div>
-          <div class="elev-stat"><div class="elev-stat-num">20</div><div class="elev-stat-lbl">traces GPX</div></div>
-          <div class="elev-stat"><div class="elev-stat-num">85</div><div class="elev-stat-lbl">photos</div></div>
-          <div class="elev-stat"><div class="elev-stat-num">62</div><div class="elev-stat-lbl">commentaires</div></div>
+        <div class="row row-cols-4 g-0 text-center border-top pt-3 mt-2">
+          <div class="col elev-col"><div class="elev-num">29</div><div class="elev-lbl">publications</div></div>
+          <div class="col elev-col"><div class="elev-num">20</div><div class="elev-lbl">traces GPX</div></div>
+          <div class="col elev-col"><div class="elev-num">85</div><div class="elev-lbl">photos</div></div>
+          <div class="col elev-col"><div class="elev-num">62</div><div class="elev-lbl">commentaires</div></div>
         </div>
       </div>
-      <div class="card-text">
-        <ul>
-          <li><span><b>Des traces calées sur les chiffres.</b> Elles serpentent jusqu'à mesurer exactement la distance annoncée, et leur relief donne le dénivelé annoncé : un recalcul depuis la page Système retrouve les mêmes valeurs.</span></li>
-          <li><span><b>Des photos dessinées à la volée</b>, en portrait et en paysage, pour que l'affiche et le livre aient de quoi se mettre en page.</span></li>
-          <li><span><b>Hors ligne.</b> Ni tuiles, ni géocodage, ni interrogation d'altitude : le carnet de démonstration s'installe dans un train. <code>npm run demo -- --clean</code> le retire.</span></li>
-        </ul>
-      </div>
+      <ul class="notes card-text mt-3 mb-0">
+        <li><span><strong>Des traces calées sur les chiffres.</strong> Elles serpentent jusqu'à mesurer exactement la distance annoncée, et leur relief donne le dénivelé annoncé : un recalcul depuis la page Système retrouve les mêmes valeurs.</span></li>
+        <li><span><strong>Des photos dessinées à la volée</strong>, en portrait et en paysage, pour que l'affiche et le livre aient de quoi se mettre en page.</span></li>
+        <li><span><strong>Hors ligne.</strong> Ni tuiles, ni géocodage, ni interrogation d'altitude : le carnet de démonstration s'installe dans un train. <code>npm run demo -- --clean</code> le retire.</span></li>
+      </ul>
     </div>
   </article>
 
-  <div class="stats-grid">
-    <div class="stat-card feature">
-      <div class="sc-icon">🗄️</div>
-      <div class="sc-num">Zéro base de données</div>
-      <div class="sc-lbl">Chez vous, pas chez nous</div>
-      <div class="sc-sub">Vos étapes sont un fichier JSON, vos photos un dossier. Rien à administrer, rien à migrer.</div>
+  <div class="row g-3">
+    <div class="col-12">
+      <div class="stat-card feature text-center p-4">
+        <div class="fs-3 lh-1">🗄️</div>
+        <div class="sc-num mt-2">Zéro base de données</div>
+        <div class="sc-lbl mt-2">Chez vous, pas chez nous</div>
+        <div class="sc-sub mt-1">Vos étapes sont un fichier JSON, vos photos un dossier. Rien à administrer, rien à migrer.</div>
+      </div>
     </div>
-    <div class="stat-card"><div class="sc-icon">🔑</div><div class="sc-num">3</div><div class="sc-lbl">rôles</div><div class="sc-sub">Publier, lire en famille, et un accès facultatif pour un enfant qui écrit ses propres étapes.</div></div>
-    <div class="stat-card"><div class="sc-icon">🖥️</div><div class="sc-num">200 Mo</div><div class="sc-lbl">de serveur</div><div class="sc-sub">Node 20 sur le plus petit VPS. Nginx, Let's Encrypt, PM2 : la marche à suivre est dans le dépôt.</div></div>
+    <div class="col-12 col-sm-6">
+      <div class="stat-card text-center p-4 h-100">
+        <div class="fs-4 lh-1">🔑</div>
+        <div class="sc-num mt-2">3</div>
+        <div class="sc-lbl mt-2">rôles</div>
+        <div class="sc-sub mt-1">Publier, lire en famille, et un accès facultatif pour un enfant qui écrit ses propres étapes.</div>
+      </div>
+    </div>
+    <div class="col-12 col-sm-6">
+      <div class="stat-card text-center p-4 h-100">
+        <div class="fs-4 lh-1">🖥️</div>
+        <div class="sc-num mt-2">200 Mo</div>
+        <div class="sc-lbl mt-2">de serveur</div>
+        <div class="sc-sub mt-1">Node 20 sur le plus petit VPS. Nginx, Let's Encrypt, PM2 : la marche à suivre est dans le dépôt.</div>
+      </div>
+    </div>
   </div>
 
-  <div class="sys-cards">
-    <div class="sys-card">
-      <span class="sys-card-icon">💾</span>
-      <span class="sys-card-body">
-        <span class="sys-card-title">Sauvegarde en un clic</span>
-        <span class="sys-card-desc">Une archive ZIP complète — étapes et médias — se télécharge depuis le site, et se réinjecte de la même façon.</span>
+  <div class="list-group gap-2">
+    <div class="list-group-item d-flex gap-3 align-items-start rounded-3 py-3">
+      <span class="fs-4 lh-sm">💾</span>
+      <span>
+        <span class="d-block fw-bold">Sauvegarde en un clic</span>
+        <span class="d-block sc-sub mt-1">Une archive ZIP complète — étapes et médias — se télécharge depuis le site, et se réinjecte de la même façon.</span>
       </span>
     </div>
-    <div class="sys-card">
-      <span class="sys-card-icon">🔒</span>
-      <span class="sys-card-body">
-        <span class="sys-card-title">Les précautions d'usage</span>
-        <span class="sys-card-desc">En-têtes Helmet, jeton CSRF sur chaque formulaire, échappement des saisies, cookie de session httpOnly et secure, connexion limitée à dix essais par quart d'heure.</span>
+    <div class="list-group-item d-flex gap-3 align-items-start rounded-3 py-3">
+      <span class="fs-4 lh-sm">🔒</span>
+      <span>
+        <span class="d-block fw-bold">Les précautions d'usage</span>
+        <span class="d-block sc-sub mt-1">En-têtes Helmet, jeton CSRF sur chaque formulaire, échappement des saisies, cookie de session <code>httpOnly</code> et <code>secure</code>, connexion limitée à dix essais par quart d'heure.</span>
       </span>
     </div>
-    <div class="sys-card">
-      <span class="sys-card-icon">📐</span>
-      <span class="sys-card-body">
-        <span class="sys-card-title">Rattrapage a posteriori</span>
-        <span class="sys-card-desc">Ajouté une trace après coup ? Le recalcul reprend les distances et détecte les pays traversés, avec l'avancement affiché en direct.</span>
+    <div class="list-group-item d-flex gap-3 align-items-start rounded-3 py-3">
+      <span class="fs-4 lh-sm">📐</span>
+      <span>
+        <span class="d-block fw-bold">Rattrapage a posteriori</span>
+        <span class="d-block sc-sub mt-1">Ajouté une trace après coup ? Le recalcul reprend les distances et détecte les pays traversés, avec l'avancement affiché en direct.</span>
       </span>
     </div>
   </div>
 
   <article class="card" id="telecharger">
-    <div class="card-head">
-      <span class="card-icon">⬇️</span>
+    <div class="card-body pb-0 d-flex align-items-center gap-2">
+      <span class="card-head-icon">⬇️</span>
       <div>
-        <span class="card-kicker">C'est à vous</span>
-        <h2>Prendre le projet et l'installer chez soi</h2>
+        <span class="kicker">C'est à vous</span>
+        <h2 class="card-title mt-1 mb-0">Prendre le projet et l'installer chez soi</h2>
       </div>
     </div>
     <div class="card-body">
-      <div class="card-text">
-        <p>Le code est sur GitHub, l'installation pas à pas est dans le README : Node, Nginx,
-        Let's Encrypt, PM2, et le fichier <code>.env</code> à remplir. Comptez une soirée pour
-        avoir un carnet en ligne à votre nom.</p>
+      <p class="card-text">Le code est sur GitHub, l'installation pas à pas est dans le README :
+        Node, Nginx, Let's Encrypt, PM2, et le fichier <code>.env</code> à remplir. Comptez une
+        soirée pour avoir un carnet en ligne à votre nom.</p>
+      <div class="row g-2 mt-3">
+        <div class="col-12 col-sm-7"><a class="btn btn-carnet w-100" href="https://github.com/tmilefr/velo-journal/archive/refs/heads/main.zip">⬇️ Télécharger l'archive ZIP</a></div>
+        <div class="col-12 col-sm-5"><a class="btn btn-soft w-100" href="https://github.com/tmilefr/velo-journal#readme">📘 Lire l'installation</a></div>
       </div>
-      <div class="btn-row">
-        <a class="btn-submit" href="https://github.com/tmilefr/velo-journal/archive/refs/heads/main.zip">⬇️ Télécharger l'archive ZIP</a>
-        <a class="btn-second" href="https://github.com/tmilefr/velo-journal#readme">📘 Lire l'installation</a>
-      </div>
-      <div class="clone">git clone https://github.com/tmilefr/velo-journal.git</div>
+      <div class="clone mt-2">git clone https://github.com/tmilefr/velo-journal.git</div>
     </div>
   </article>
 
-  <p class="stats-note">Velo Journal est un projet personnel, publié tel quel. Le dépôt ne porte
-  pas encore de fichier de licence : à ajouter avant de le diffuser largement.</p>
+  <p class="bg-mist border rounded-3 text-center text-soft small mb-0 px-3 py-3">Velo Journal est un
+    projet personnel, publié tel quel. Le dépôt ne porte pas encore de fichier de licence : à ajouter
+    avant de le diffuser largement.</p>
 
+</div>
+</div>
 </main>
 
-<div class="foot">
-  <p>Fait pour un voyage, gardé pour les suivants.</p>
-  <nav class="foot-links">
-    <a href="https://github.com/tmilefr/velo-journal">Le dépôt</a>
-    <a href="https://github.com/tmilefr/velo-journal/archive/refs/heads/main.zip">Archive ZIP</a>
-    <a href="https://github.com/tmilefr/velo-journal#readme">Installation</a>
-    <a href="https://github.com/tmilefr/velo-journal/tree/main/demo">Carnet de démonstration</a>
-  </nav>
-</div>
+<footer class="bg-white border-top py-4 text-center">
+  <div class="container">
+    <p class="text-soft small mb-3">Fait pour un voyage, gardé pour les suivants.</p>
+    <nav class="d-flex flex-wrap gap-2 justify-content-center">
+      <a class="btn btn-soft btn-sm" href="https://github.com/tmilefr/velo-journal">Le dépôt</a>
+      <a class="btn btn-soft btn-sm" href="https://github.com/tmilefr/velo-journal/archive/refs/heads/main.zip">Archive ZIP</a>
+      <a class="btn btn-soft btn-sm" href="https://github.com/tmilefr/velo-journal#readme">Installation</a>
+      <a class="btn btn-soft btn-sm" href="https://github.com/tmilefr/velo-journal/tree/main/demo">Carnet de démonstration</a>
+    </nav>
+  </div>
+</footer>
 
 <a class="fab" href="#telecharger" aria-label="Aller au téléchargement">⬇</a>
 
+<script src="vendor/bootstrap.min.js"></script>
 <script>
-// ── Menu mobile — même comportement que le carnet ─────────
-(function () {
-  var h = document.getElementById('hamburger');
-  var m = document.getElementById('mobileMenu');
-  if (!h || !m) return;
-  h.addEventListener('click', function (e) {
-    e.stopPropagation();
-    var open = m.classList.toggle('open');
-    h.classList.toggle('open', open);
-    h.setAttribute('aria-expanded', open ? 'true' : 'false');
-  });
-  m.addEventListener('click', function (e) {
-    if (e.target.tagName === 'A') { m.classList.remove('open'); h.classList.remove('open'); }
-  });
-  document.addEventListener('click', function (e) {
-    if (!h.contains(e.target) && !m.contains(e.target)) { m.classList.remove('open'); h.classList.remove('open'); }
-  });
-})();
-
 // ── Profil altimétrique du voyage de démonstration ────────
 // Les points viennent des traces GPX du carnet de démo : distance cumulée
 // (km) et altitude (m), un point tous les ~5 km.
@@ -540,9 +497,9 @@ const MARKS = [
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
 
-    const line = readVar('--accent')     || '#e07a3a';
-    const rule = readVar('--sand')       || '#cce8e8';
-    const soft = readVar('--ink-light')  || '#5a8080';
+    const line = readVar('--accent')    || '#e07a3a';
+    const rule = readVar('--sand')      || '#cce8e8';
+    const soft = readVar('--ink-light') || '#5a8080';
 
     const padTop = 14, padBottom = 20;
     const maxKm = PROFILE[PROFILE.length - 1][0], maxEle = 1750;
@@ -606,6 +563,14 @@ const MARKS = [
   let tid;
   window.addEventListener('resize', () => { clearTimeout(tid); tid = setTimeout(draw, 120); });
 })();
+
+// Le menu déroulant se referme après un clic sur une ancre (Bootstrap Collapse)
+document.querySelectorAll('#mainNav .nav-link').forEach(a => {
+  a.addEventListener('click', () => {
+    const nav = document.getElementById('mainNav');
+    if (nav.classList.contains('show')) bootstrap.Collapse.getOrCreateInstance(nav).hide();
+  });
+});
 </script>
 </body>
 </html>
