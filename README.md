@@ -17,6 +17,32 @@ Journal de voyage vélo auto-hébergé. Postez vos étapes depuis votre téléph
 
 ---
 
+## Essayer en deux minutes (carnet de démonstration)
+
+Un voyage complet est fourni pour découvrir toutes les pages sans rien saisir :
+**Nancy → Venise**, 1 546 km à vélo, 355 km de train, 5 pays, 29 publications,
+85 photos, 20 traces GPX, 62 commentaires et 6 910 € de dépenses.
+
+```bash
+npm install
+npm run demo        # fabrique le carnet de démonstration
+npm start           # http://localhost:3000
+```
+
+Mots de passe par défaut : `famille2024` (page famille), `velo2024` (admin).
+Le carnet est fabriqué **hors ligne** : ni tuiles, ni géocodage, ni API
+d'altitude — les traces GPX et les photos sont dessinées par le script.
+
+| Commande | Effet |
+|---|---|
+| `npm run demo` | installe le carnet (refuse d'écraser un carnet existant) |
+| `npm run demo -- --force` | écrase le carnet, après l'avoir sauvegardé à côté |
+| `npm run demo -- --clean` | retire le carnet de démo et ses fichiers |
+
+Détails, contenu du voyage et façon d'en écrire un autre : [`demo/README.md`](demo/README.md).
+
+---
+
 ## Installation sur VPS (Ubuntu/Debian)
 
 ### 1. Installer Node.js

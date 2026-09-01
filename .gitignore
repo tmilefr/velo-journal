@@ -147,6 +147,7 @@ vite.config.ts.timestamp-*
 /public/uploads
 package-lock.json
 data/posts.json
+data/posts.avant-demo-*.json
 data/subscribers.json
 data/settings.json
 data/mail.log
