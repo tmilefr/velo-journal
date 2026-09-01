@@ -14,7 +14,14 @@ const { CANVAS_KIT } = require('./canvasKit');
 // place qui ne recouvre ni le tracé, ni un point d'étape, ni une autre photo.
 // Les fils sont donc courts, les vignettes suivent le voyage en quinconce, et
 // elles occupent les contrées que le parcours ne traverse pas. Leur taille est
-// la plus grande où tout le monde trouve encore sa place.
+// la plus grande où tout le monde trouve encore sa place — à moins qu'un
+// format de papier n'ait été demandé (réglage « Format photo », de 3 à
+// 10,5 cm) : toutes les vignettes le prennent alors, et l'on garde celles qui
+// trouvent une place.
+//
+// Le tracé, lui, est plus fin ici que sur la page Carte (TRACE_K) : une
+// affiche se regarde de près, et un trait léger laisse voir le relief, les
+// frontières et les villes qu'il traverse.
 //
 // Deux fonds au choix :
 //   • épuré  → frontières/littoraux (/public/geo/countries-50m.json, Natural
@@ -54,7 +61,7 @@ function renderAffiche(stages, isStrictAdmin = false) {
       <div class="form-card" style="margin-bottom:16px">
         <a href="/settings" class="sys-back">← Système</a>
         <h2 style="margin-bottom:6px">🖼️ Affiche du voyage</h2>
-        <p style="font-size:14px;color:var(--ink-light);line-height:1.6;margin:0">Une carte A3 du voyage : les traces GPX sur un fond au choix — épuré (frontières, littoraux, villes et relief ombré) ou la carte OpenStreetMap de la page Carte — et la photo favorite de <strong>chaque étape</strong> posée au plus près de son point d'arrivée. Les vignettes sont aussi grandes que la feuille le permet : elles se serrent le long du voyage sans jamais recouvrir le tracé, et gagnent les contrées que le parcours ne traverse pas. À imprimer et encadrer.</p>
+        <p style="font-size:14px;color:var(--ink-light);line-height:1.6;margin:0">Une carte A3 du voyage : les traces GPX sur un fond au choix — épuré (frontières, littoraux, villes et relief ombré) ou la carte OpenStreetMap de la page Carte — et la photo favorite de <strong>chaque étape</strong> posée au plus près de son point d'arrivée. Les vignettes sont par défaut aussi grandes que la feuille le permet : elles se serrent le long du voyage sans jamais recouvrir le tracé, et gagnent les contrées que le parcours ne traverse pas. Le réglage <strong>Format photo</strong> impose au besoin une taille de papier — de 3 à 10,5 cm — et toutes les photos l'adoptent. À imprimer et encadrer.</p>
       </div>
       ${emptyState
         ? `<div class="form-card"><p style="font-size:14px;color:var(--ink-light);margin:0">Aucune étape localisée pour le moment. Ajoutez des étapes avec un fichier <code>.gpx</code> ou des coordonnées GPS pour composer l'affiche.</p></div>`
@@ -81,6 +88,16 @@ function renderAffiche(stages, isStrictAdmin = false) {
              </label>
              <label class="aff-field"><input type="checkbox" id="affCities" checked> Villes</label>
              <label class="aff-field"><input type="checkbox" id="affPhotos" checked> Photos</label>
+             <label class="aff-field">Format photo
+               <select id="affPhotoSize">
+                 <option value="auto" selected>au plus grand</option>
+                 <option value="xs">très petites · 3 cm</option>
+                 <option value="s">petites · 4,5 cm</option>
+                 <option value="m">moyennes · 6 cm</option>
+                 <option value="l">grandes · 8 cm</option>
+                 <option value="xl">très grandes · 10,5 cm</option>
+               </select>
+             </label>
              <label class="aff-field"><input type="checkbox" id="affStats"> Statistiques détaillées</label>
              <label class="aff-field"><input type="checkbox" id="affProfile" checked> Profil altimétrique</label>
              <button class="aff-btn primary" id="affDownload" disabled>⬇️ PNG 300 dpi</button>
@@ -129,6 +146,7 @@ function renderAffiche(stages, isStrictAdmin = false) {
         profile: document.getElementById('affProfile'),
         cities:  document.getElementById('affCities'),
         photos:  document.getElementById('affPhotos'),
+        photoSize: document.getElementById('affPhotoSize'),
         stats:   document.getElementById('affStats'),
         dl300:   document.getElementById('affDownload'),
         dl150:   document.getElementById('affDownload150'),
@@ -153,6 +171,7 @@ function renderAffiche(stages, isStrictAdmin = false) {
           profile: el.profile.checked,
           cities:  el.cities.checked,
           photos:  el.photos.checked,
+          photoSize: el.photoSize.value,
           stats:   el.stats.checked
         };
       }
@@ -236,7 +255,36 @@ ${CANVAS_KIT}
       // « safe » sert seulement à ajuster le tracé : une marge tout autour,
       // pour que le voyage ne colle pas aux bords de la feuille.
       var TILE_SIZES=[560,500,450,410,380,340,300,268,240,214,192,172,154,138,124,112,100,90,82,74];
+      var TILE_RATIO  = 0.9;    // hauteur d'une vignette, en part de sa largeur
       var TRACE_INSET = 0.06;   // marge laissée autour du tracé, en part du cadre
+
+      // ── Finesse du tracé ────────────────────────────────
+      // La page Carte se lit à l'écran, du bout du doigt : son trait est large
+      // à dessein. Une affiche encadrée se regarde de près, et le même trait y
+      // devient un ruban qui écrase le relief, les frontières et les noms de
+      // villes qu'il traverse. On le rend donc plus fin ici — sans toucher aux
+      // épaisseurs communes de routeKit, que la carte et le livre gardent —, ce
+      // qui découvre du même coup un peu de carte et laisse les vignettes se
+      // serrer plus près du voyage.
+      var TRACE_K = 0.7;   // part de l'épaisseur commune, sur l'affiche
+      function affRouteScale(mapW){ return routeScale(mapW)*TRACE_K; }
+
+      // ── Format des photos ───────────────────────────────
+      // Par défaut l'affiche cherche la plus grande taille où toutes les
+      // étapes trouvent leur place : c'est le meilleur remplissage, mais il
+      // dépend du nombre d'étapes et de la forme du voyage — deux carnets
+      // n'ont pas les mêmes vignettes. Qui préfère un format décidé d'avance
+      // (des photos assez grandes pour se regarder de près, ou au contraire de
+      // petites vignettes qui laissent voir la carte) le choisit ici, en
+      // centimètres de papier. La feuille est dessinée à 150 dpi : un
+      // millimètre imprimé vaut donc 150/25,4 points de canvas, quelle que
+      // soit l'orientation.
+      var MM = 150/25.4;
+      var PHOTO_MM = { xs:30, s:45, m:60, l:80, xl:105 };
+      function tileWidthFor(size){
+        var mm = PHOTO_MM[size];
+        return mm ? Math.round(mm*MM) : 0;    // 0 → taille automatique
+      }
 
       function layout(o, count, ratio){
         var S = SHEET[o.orient];
@@ -245,12 +293,16 @@ ${CANVAS_KIT}
         var n = Math.max(1, count||1);
         var padX=inner.w*TRACE_INSET, padY=inner.h*TRACE_INSET;
 
-        // Taille de départ : ce que n vignettes peuvent occuper si elles se
-        // partagent la moitié de la feuille. placeTiles part de là et essaie
-        // plus grand tant que tout le monde trouve sa place.
-        var est=Math.sqrt(inner.w*inner.h*0.5/(n*0.9));
-        var TW=TILE_SIZES[TILE_SIZES.length-1];
-        for(var i=0;i<TILE_SIZES.length;i++){ if(TILE_SIZES[i]<=est){ TW=TILE_SIZES[i]; break; } }
+        // Le format demandé, s'il y en a un. Sinon une taille de départ : ce
+        // que n vignettes peuvent occuper si elles se partagent la moitié de
+        // la feuille — placeTiles part de là et essaie plus grand tant que
+        // tout le monde trouve sa place.
+        var TW=tileWidthFor(o && o.photoSize);
+        if(!TW){
+          var est=Math.sqrt(inner.w*inner.h*0.5/(n*TILE_RATIO));
+          TW=TILE_SIZES[TILE_SIZES.length-1];
+          for(var i=0;i<TILE_SIZES.length;i++){ if(TILE_SIZES[i]<=est){ TW=TILE_SIZES[i]; break; } }
+        }
 
         return {
           sheet:S, M:M,
@@ -260,7 +312,7 @@ ${CANVAS_KIT}
           map:{ x:inner.x, y:inner.y, w:inner.w, h:inner.h },
           safe:{ x:inner.x+padX, y:inner.y+padY, w:inner.w-2*padX, h:inner.h-2*padY },
           slots:[],                       // rempli par placeTiles, au moment du rendu
-          tile:{ w:TW, h:Math.round(TW*0.9) }
+          tile:{ w:TW, h:Math.round(TW*TILE_RATIO) }
         };
       }
 
@@ -470,7 +522,7 @@ ${CANVAS_KIT}
       // ne recouvre ni le tracé, ni un point d'étape, ni une autre photo, ni
       // la légende. Les fils deviennent courts, et les contrées que le voyage
       // ne traverse pas se remplissent de grandes photos.
-      var TRACE_PAD = 16;    // marge gardée autour du tracé
+      var TRACE_PAD = 12;    // marge gardée autour du tracé (il est fin, cf. TRACE_K)
       var DOT_PAD   = 26;    // ... et autour d'un point d'étape
       var TILE_GAP  = 10;    // écart entre deux vignettes
       var GROW_MAX  = 1.7;   // agrandissement maximal d'une vignette isolée
@@ -622,28 +674,43 @@ ${CANVAS_KIT}
           return null;
         }
 
-        // La plus grande taille où tout le monde trouve sa place
+        // Une taille imposée par le réglage, sinon la plus grande où tout le
+        // monde trouve sa place.
         var reach=Math.max(L.inner.w, L.inner.h)*0.75;
+        var fixed=tileWidthFor(o && o.photoSize);
         var best=null;
-        for(var ti=0; ti<TILE_SIZES.length; ti++){
-          var TW=TILE_SIZES[ti], TH=Math.round(TW*0.9);
-          if(TW*TH*live.length > L.inner.w*L.inner.h*0.62) continue;   // manifestement trop
-          var placed=[], ok=true;
-          for(var i=0;i<order.length;i++){
-            var pos=spot(placed, order[i].pt, TW, TH, reach);
-            if(!pos){ ok=false; break; }
-            placed.push({ x:pos.x, y:pos.y, w:TW, h:TH, stage:order[i].stage, num:order[i].num, pt:order[i].pt });
-          }
-          if(ok){ best={ tiles:placed, TW:TW, TH:TH }; break; }
-        }
-        if(!best){
-          // Feuille saturée : on garde ce qui rentre, à la plus petite taille.
-          var TWm=TILE_SIZES[TILE_SIZES.length-1], THm=Math.round(TWm*0.9), kept=[];
+        if(fixed){
+          // Format choisi : toutes les vignettes à la même taille, posées
+          // comme les autres au plus près de leur étape. Un grand format ne
+          // rentre pas toujours pour toutes — on garde alors celles qui
+          // trouvent une place plutôt que de rapetisser le choix de l'auteur.
+          var TWf=fixed, THf=Math.round(TWf*TILE_RATIO), keptF=[];
           order.forEach(function(it){
-            var pos=spot(kept, it.pt, TWm, THm, reach);
-            if(pos) kept.push({ x:pos.x, y:pos.y, w:TWm, h:THm, stage:it.stage, num:it.num, pt:it.pt });
+            var pos=spot(keptF, it.pt, TWf, THf, reach);
+            if(pos) keptF.push({ x:pos.x, y:pos.y, w:TWf, h:THf, stage:it.stage, num:it.num, pt:it.pt });
           });
-          best={ tiles:kept, TW:TWm, TH:THm };
+          best={ tiles:keptF, TW:TWf, TH:THf };
+        } else {
+          for(var ti=0; ti<TILE_SIZES.length; ti++){
+            var TW=TILE_SIZES[ti], TH=Math.round(TW*TILE_RATIO);
+            if(TW*TH*live.length > L.inner.w*L.inner.h*0.62) continue;   // manifestement trop
+            var placed=[], ok=true;
+            for(var i=0;i<order.length;i++){
+              var pos=spot(placed, order[i].pt, TW, TH, reach);
+              if(!pos){ ok=false; break; }
+              placed.push({ x:pos.x, y:pos.y, w:TW, h:TH, stage:order[i].stage, num:order[i].num, pt:order[i].pt });
+            }
+            if(ok){ best={ tiles:placed, TW:TW, TH:TH }; break; }
+          }
+          if(!best){
+            // Feuille saturée : on garde ce qui rentre, à la plus petite taille.
+            var TWm=TILE_SIZES[TILE_SIZES.length-1], THm=Math.round(TWm*TILE_RATIO), kept=[];
+            order.forEach(function(it){
+              var pos=spot(kept, it.pt, TWm, THm, reach);
+              if(pos) kept.push({ x:pos.x, y:pos.y, w:TWm, h:THm, stage:it.stage, num:it.num, pt:it.pt });
+            });
+            best={ tiles:kept, TW:TWm, TH:THm };
+          }
         }
 
         // Rapprochement : chaque photo retente sa chance sans elle-même dans le
@@ -669,8 +736,9 @@ ${CANVAS_KIT}
         }
 
         // Une photo au large peut encore grandir : par petits pas et pour
-        // toutes à la fois, pour qu'elles restent de tailles comparables.
-        var tiles=best.tiles, grew=true, round=0;
+        // toutes à la fois, pour qu'elles restent de tailles comparables. Un
+        // format demandé, lui, est tenu au millimètre : on n'y touche pas.
+        var tiles=best.tiles, grew=!fixed, round=0;
         while(grew && round++<20){
           grew=false;
           tiles.forEach(function(s){
@@ -797,7 +865,7 @@ ${CANVAS_KIT}
         // le même tracé, par les mêmes fonctions, que la page Carte et le
         // livre photo.
         drawRoute(g, proj, STAGES, tracks, {
-          scale: routeScale(map.w), color: C.track, halo: C.trackHalo
+          scale: affRouteScale(map.w), color: C.track, halo: C.trackHalo
         });
 
         // Villes, puis points d'étape par-dessus. Le fond OSM porte déjà ses
@@ -927,7 +995,7 @@ ${CANVAS_KIT}
         g.fillText(frNum(kmBar)+' km', bx, by+18);
 
         // Trace, puis raccords : les mêmes traits que sur la carte
-        var kL=routeScale(L.map.w);
+        var kL=affRouteScale(L.map.w);
         var ty=y+ (relief?66:62);
         g.strokeStyle=C.track; g.lineWidth=ROUTE.wTrack*kL; g.lineCap='round';
         g.beginPath(); g.moveTo(bx,ty); g.lineTo(bx+34,ty); g.stroke();
@@ -1133,6 +1201,7 @@ ${CANVAS_KIT}
         // Sur fond OSM, relief et villes viennent des tuiles : les réglages
         // du fond épuré n'ont plus de prise.
         [el.relief,el.quality,el.cities].forEach(function(c){ c.disabled = o.fond==='osm'; });
+        el.photoSize.disabled = !o.photos;
 
         var chain=Promise.resolve();
 
@@ -1146,8 +1215,11 @@ ${CANVAS_KIT}
 
         // Photos : réduites au double de la vignette, pour rester nettes à
         // l'export 300 dpi sans garder les originaux en mémoire. Chaque étape a
-        // la sienne — les emplacements, eux, ne sont connus qu'au dessin.
-        var want=Math.min(860, Math.round(L.tile.w*2*GROW_MAX));
+        // la sienne — les emplacements, eux, ne sont connus qu'au dessin. En
+        // taille automatique il faut prévoir large, les vignettes isolées
+        // pouvant encore grandir ; un format demandé ne bougera pas.
+        var grow=tileWidthFor(o.photoSize) ? 1 : GROW_MAX;
+        var want=Math.min(860, Math.round(L.tile.w*2*grow));
         var need=(o.photos ? STAGES : []).map(function(s){ return s.photo; })
                   .filter(function(u){ return u && !(imgs[u] && imgs[u].want>=want*0.98) && imgs[u]!==null; });
         if(need.length){
@@ -1196,9 +1268,13 @@ ${CANVAS_KIT}
 
         chain.then(function(){
           var res=render(el.canvas,1,o);
+          var tail = res.placed<STAGES.length
+            ? ' (sur '+STAGES.length+' étapes — '
+              + (tileWidthFor(o.photoSize) ? 'format trop grand pour les poser toutes)'
+                                           : 'trop pour une seule feuille)')
+            : ' — toutes les étapes';
           var msg=(o.photos
-                ? res.placed+' vignette'+(res.placed>1?'s':'')
-                  + (res.placed<STAGES.length ? ' (sur '+STAGES.length+' étapes — trop pour une seule feuille)' : ' — toutes les étapes')
+                ? res.placed+' vignette'+(res.placed>1?'s':'') + tail
                 : 'carte seule, sans photos')
                 + ' · ' + tracks.filter(function(t){ return t.pts.length>1; }).length+' trace'+(tracks.length>1?'s':'')+' GPX'
                 + ' · A3 ' + (o.orient==='p'?'portrait':'paysage');
@@ -1259,7 +1335,7 @@ ${CANVAS_KIT}
         });
       });
 
-      [el.orient,el.quality,el.fond].forEach(function(s){ s.addEventListener('change', refresh); });
+      [el.orient,el.quality,el.fond,el.photoSize].forEach(function(s){ s.addEventListener('change', refresh); });
       [el.relief,el.profile,el.cities,el.photos,el.stats].forEach(function(c){ c.addEventListener('change', refresh); });
 
       // ── Démarrage ───────────────────────────────────────
