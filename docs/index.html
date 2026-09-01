@@ -7,441 +7,521 @@
 <meta name="description" content="Un carnet de voyage à vélo auto-hébergé : vous postez l'étape du soir depuis le téléphone, votre famille la lit dans la minute. Sans base de données, sans compte, sans mouchard.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap">
 <style>
-/* ── Jetons ────────────────────────────────────────────────
-   Les couleurs viennent du carnet lui-même : le fond de carte
-   de l'affiche (papier olive), l'encre bleu-vert de l'interface,
-   et l'orange de la trace GPX — qui ne sert qu'à ça. */
+/* ══════════════════════════════════════════════════════════
+   Cette page reprend la feuille de style du carnet lui-même :
+   mêmes jetons de couleur, mêmes polices, mêmes composants
+   (en-tête, bandeau de chiffres, cartes, pastilles, cartes
+   Système, bouton flottant). Le site ressemble à l'application
+   parce que c'est la même identité, pas une imitation.
+   Comme le carnet, il n'existe qu'en clair.
+   ══════════════════════════════════════════════════════════ */
 :root {
-  --paper:    #f2f0e2;
-  --card:     #fbfaf3;
-  --ink:      #14302e;
-  --ink-soft: #5c7a75;
-  --sea:      #1f6f6c;
-  --sea-deep: #0f3a38;
-  --trace:    #c9572c;
-  --rule:     #d6d4bd;
-  --shadow:   0 1px 2px rgba(20,48,46,.05), 0 12px 32px -18px rgba(20,48,46,.35);
-  --maxw: 1080px;
-  color-scheme: light dark;
+  --ocean: #2a7a7a;
+  --ocean-mid: #3a9090;
+  --teal: #4aabab;
+  --teal-light: #7ecece;
+  --emerald: #2d7a5a;
+  --emerald-mid: #3a9e72;
+  --emerald-light: #a0dfc0;
+  --sage: #e8f7f4;
+  --mist: #f0fafa;
+  --cream: #fdfffe;
+  --warm-white: #f5fdfc;
+  --sand: #cce8e8;
+  --ink: #1a3a3a;
+  --ink-mid: #2d5555;
+  --ink-light: #5a8080;
+  --accent: #e07a3a;
+  --accent-light: #fdebd8;
+  color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --paper:    #0e1e1d;
-    --card:     #16302d;
-    --ink:      #e8f0ea;
-    --ink-soft: #8fa9a2;
-    --sea:      #6cc4bb;
-    --sea-deep: #bfe4de;
-    --trace:    #e5865c;
-    --rule:     #27423e;
-    --shadow:   0 1px 2px rgba(0,0,0,.3), 0 16px 40px -20px rgba(0,0,0,.8);
-  }
-}
-:root[data-theme="dark"] {
-  --paper:    #0e1e1d;
-  --card:     #16302d;
-  --ink:      #e8f0ea;
-  --ink-soft: #8fa9a2;
-  --sea:      #6cc4bb;
-  --sea-deep: #bfe4de;
-  --trace:    #e5865c;
-  --rule:     #27423e;
-  --shadow:   0 1px 2px rgba(0,0,0,.3), 0 16px 40px -20px rgba(0,0,0,.8);
-}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{font-family:'DM Sans',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--warm-white);color:var(--ink);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased;}
+a{color:inherit;text-decoration:none}
+img{display:block;max-width:100%}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
 
-* { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
-body {
-  margin: 0;
-  background: var(--paper);
-  color: var(--ink);
-  font-family: 'DM Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  font-size: 17px;
-  line-height: 1.62;
-  font-weight: 400;
-  -webkit-font-smoothing: antialiased;
-}
-img { max-width: 100%; display: block; }
-a { color: var(--sea); text-decoration-color: color-mix(in srgb, var(--sea) 35%, transparent); text-underline-offset: 3px; }
-a:hover { text-decoration-color: currentColor; }
-:focus-visible { outline: 2px solid var(--trace); outline-offset: 3px; border-radius: 3px; }
+/* ── EN-TÊTE ─────────────────────────────────────── */
+.header{background:#ffffff;border-bottom:2px solid var(--sand);color:var(--ink);padding:0;position:sticky;top:0;z-index:10;overflow:visible;box-shadow:0 2px 12px rgba(42,122,122,0.10);}
+.header-inner{position:relative;display:flex;align-items:center;gap:12px;padding:14px 20px;max-width:1180px;margin:0 auto;}
+.header-title-block{flex:1;min-width:0}
+.wordmark{display:block;font-family:'Playfair Display',Georgia,serif;font-size:26px;font-weight:700;color:var(--ocean);line-height:1.05;letter-spacing:-0.01em;}
+.wordmark .bike{font-size:22px;margin-right:2px}
+.header-sub{font-size:11px;color:var(--teal);font-weight:500;letter-spacing:0.08em;text-transform:uppercase;margin-top:2px;display:block;}
+.header-nav{display:flex;align-items:center;gap:4px;flex-shrink:0;}
+.header-nav a{color:var(--ink-mid);font-size:12px;font-weight:600;padding:6px 12px;border-radius:20px;border:1.5px solid var(--sand);background:var(--mist);transition:all .2s;white-space:nowrap;}
+.header-nav a:hover,.header-nav a.active{background:var(--sage);color:var(--ocean);border-color:var(--teal-light);}
+.hamburger{display:none;flex-direction:column;justify-content:center;align-items:center;gap:5px;width:40px;height:40px;border-radius:10px;border:1.5px solid var(--sand);background:var(--mist);cursor:pointer;flex-shrink:0;}
+.hamburger span{display:block;width:18px;height:2px;background:var(--ocean);border-radius:2px;transition:all .25s;}
+.hamburger.open span:nth-child(1){transform:translateY(7px) rotate(45deg)}
+.hamburger.open span:nth-child(2){opacity:0;transform:scaleX(0)}
+.hamburger.open span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
+.mobile-menu{display:none;position:absolute;top:100%;right:0;left:0;background:#ffffff;border-top:1px solid var(--sand);border-bottom:2px solid var(--teal-light);z-index:200;flex-direction:column;padding:10px 14px 14px;gap:5px;box-shadow:0 8px 24px rgba(42,122,122,0.12);}
+.mobile-menu.open{display:flex}
+.mobile-menu a{color:var(--ink-mid);font-size:14px;font-weight:500;padding:10px 14px;border-radius:10px;border:1px solid var(--sand);background:var(--mist);display:flex;align-items:center;gap:8px;}
+.mobile-menu a:hover{background:var(--sage);border-color:var(--teal-light)}
+@media(max-width:820px){.header-nav{display:none}.hamburger{display:flex}}
+@media(min-width:821px){.mobile-menu{display:none!important}}
 
-h1, h2, h3 { font-family: 'Playfair Display', Georgia, 'Times New Roman', serif; font-weight: 700; line-height: 1.12; text-wrap: balance; margin: 0; }
-h1 { font-size: clamp(2.6rem, 6.4vw, 4.4rem); letter-spacing: -0.015em; }
-h2 { font-size: clamp(1.7rem, 3.4vw, 2.5rem); }
-h3 { font-size: 1.16rem; font-family: 'DM Sans', sans-serif; font-weight: 500; letter-spacing: -0.005em; }
-p  { margin: 0; max-width: 64ch; }
+/* ── BANDEAU DE CHIFFRES ─────────────────────────── */
+.stats-bar{position:relative;background:var(--ocean);border-bottom:1px solid rgba(255,255,255,0.08);padding:14px 20px;display:flex;gap:0;overflow:hidden;}
+.stats-bike{position:absolute;inset:0;opacity:0.09;background-image:url("img/bike.png");background-size:360px auto;background-repeat:repeat-x;background-position:center bottom;pointer-events:none;}
+.stats-bar-inner{position:relative;display:grid;grid-template-columns:repeat(4,1fr);width:100%;max-width:1180px;margin:0 auto;}
+.stat{text-align:center;flex:1;position:relative;}
+.stat:not(:last-child)::after{content:'';position:absolute;right:0;top:20%;height:60%;width:1px;background:rgba(255,255,255,0.12);}
+.stat-num{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:#fff;line-height:1;}
+.stat-lbl{font-size:10px;color:rgba(255,255,255,0.62);text-transform:uppercase;letter-spacing:0.1em;margin-top:3px;}
+@media(max-width:560px){.stats-bar-inner{grid-template-columns:repeat(2,1fr);row-gap:14px}.stat::after{display:none}.stat-num{font-size:19px}.stat-lbl{font-size:9px;letter-spacing:.06em}}
 
-.eyebrow {
-  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: .72rem; font-weight: 500; letter-spacing: .16em; text-transform: uppercase;
-  color: var(--ink-soft); margin: 0;
-}
-.lede { font-size: clamp(1.06rem, 1.8vw, 1.25rem); color: var(--ink-soft); font-weight: 300; }
+/* ── LE FIL ──────────────────────────────────────── */
+.feed{max-width:760px;margin:0 auto;padding:26px 14px 96px;display:flex;flex-direction:column;gap:20px;}
+.page-hero{text-align:center;margin:8px 0 2px;}
+.page-hero h1{font-family:'Playfair Display',serif;font-size:clamp(26px,5vw,38px);color:var(--ocean);font-weight:700;line-height:1.2;text-wrap:balance;}
+.page-hero p{font-size:15px;color:var(--ink-light);margin-top:10px;max-width:56ch;margin-inline:auto;line-height:1.7;}
 
-.wrap { width: 100%; max-width: var(--maxw); margin-inline: auto; padding-inline: 24px; }
+/* ── CARTES (comme les étapes du journal) ────────── */
+.card{background:#fff;border-radius:18px;overflow:hidden;border:1px solid rgba(0,0,0,0.06);box-shadow:0 2px 12px rgba(10,61,98,0.07), 0 1px 3px rgba(0,0,0,0.04);transition:box-shadow .2s, transform .2s;}
+.card:hover{box-shadow:0 8px 28px rgba(10,61,98,0.12), 0 2px 6px rgba(0,0,0,0.06);transform:translateY(-1px);}
+.card-head{display:flex;align-items:center;gap:10px;padding:16px 18px 0;}
+.card-icon{font-family:'Playfair Display',serif;font-size:30px;line-height:1;min-width:42px;text-align:center;}
+.card-kicker{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:var(--teal);display:block;}
+.card-head h2{font-family:'Playfair Display',serif;font-size:20px;font-weight:700;line-height:1.3;color:var(--ink);margin-top:2px;}
+.card-cover{display:block;width:100%;margin:14px 0 0;background:var(--mist);border-top:1px solid var(--sand);border-bottom:1px solid var(--sand);}
+.card-cover img{width:100%;height:auto}
+.card-cover-cap{display:block;font-size:11px;color:var(--ink-light);background:var(--mist);padding:7px 14px;text-align:center;line-height:1.5;border-bottom:1px solid var(--sand);}
+.card-body{padding:16px 18px 20px}
+.card-badges{display:flex;align-items:center;gap:6px;margin-bottom:12px;flex-wrap:wrap;}
+.pill-loc{font-size:12px;background:var(--sage);color:var(--emerald);padding:4px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:4px;font-weight:600;}
+.pill-km{font-size:12px;background:var(--accent-light);color:var(--accent);padding:4px 10px;border-radius:20px;font-weight:700;display:inline-flex;align-items:center;gap:3px;}
+.pill-dp{font-size:12px;background:var(--mist);color:var(--ocean-mid);padding:4px 10px;border-radius:20px;font-weight:600;display:inline-flex;align-items:center;gap:3px;}
+.card-text{font-size:14.5px;color:var(--ink-mid);line-height:1.75;}
+.card-text p{margin:0 0 10px}
+.card-text p:last-child{margin-bottom:0}
+.card-text b,.card-text strong{color:var(--ink);font-weight:600}
+.card-text ul{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:10px}
+.card-text li{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:start}
+.card-text li::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--teal-light);margin-top:.62em}
+.card-text code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.85em;background:var(--mist);border:1px solid var(--sand);padding:1px 6px;border-radius:6px;color:var(--ocean)}
+.card-quote{margin:12px 0 0;padding:8px 14px;border-left:3px solid var(--teal-light);background:var(--mist);border-radius:0 8px 8px 0;color:var(--ink-mid);font-style:italic;font-size:14px}
 
-/* ── Ouverture ──────────────────────────────────────────── */
-.hero { padding: clamp(48px, 9vw, 104px) 0 0; }
-.hero-inner { display: flex; flex-direction: column; gap: 26px; }
-.hero h1 span { color: var(--sea); }
-.hero-lede { max-width: 58ch; }
+/* ── CHIFFRES EN CARTES (comme la page Statistiques) ── */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;}
+.stat-card{background:#fff;border:1px solid var(--sand);border-radius:16px;padding:18px 16px;text-align:center;box-shadow:0 2px 12px rgba(10,61,98,0.06);}
+.stat-card.feature{grid-column:1/-1;background:linear-gradient(135deg,var(--ocean),var(--emerald));border:none;color:#fff;}
+.stat-card .sc-icon{font-size:24px;line-height:1;}
+.stat-card .sc-num{font-family:'Playfair Display',serif;font-size:30px;font-weight:700;color:var(--ocean);line-height:1.1;margin-top:6px;}
+.stat-card.feature .sc-num{color:#fff;font-size:34px;}
+.stat-card .sc-lbl{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--ink-light);margin-top:6px;font-weight:600;}
+.stat-card.feature .sc-lbl{color:rgba(255,255,255,0.85);}
+.stat-card .sc-sub{font-size:12px;color:var(--ink-light);margin-top:4px;line-height:1.5}
+.stat-card.feature .sc-sub{color:rgba(255,255,255,0.9);}
+.stats-note{font-size:12px;color:var(--ink-light);text-align:center;line-height:1.6;background:var(--mist);border:1px solid var(--sand);border-radius:12px;padding:12px 16px;}
 
-.cta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 6px; }
-.btn {
-  display: inline-flex; align-items: center; gap: 10px;
-  padding: 13px 22px; border-radius: 999px;
-  font-weight: 500; font-size: .97rem; text-decoration: none;
-  border: 1.5px solid transparent; transition: transform .16s ease, box-shadow .16s ease, background .16s ease;
-}
-.btn-primary { background: var(--trace); color: #fffaf6; box-shadow: 0 10px 24px -14px var(--trace); }
-.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 16px 30px -14px var(--trace); }
-.btn-ghost { border-color: var(--rule); color: var(--ink); background: transparent; }
-.btn-ghost:hover { background: var(--card); border-color: var(--sea); }
-.btn svg { flex: none; }
+/* ── CARTES SYSTÈME ──────────────────────────────── */
+.sys-cards{display:flex;flex-direction:column;gap:10px}
+.sys-card{display:flex;align-items:flex-start;gap:12px;background:#fff;border:1px solid var(--sand);border-radius:14px;padding:14px 16px;box-shadow:0 2px 12px rgba(10,61,98,0.06);transition:transform .15s,box-shadow .15s,border-color .15s;}
+.sys-card:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(10,61,98,0.12);border-color:var(--teal-light);}
+.sys-card-icon{font-size:22px;line-height:1.3;flex-shrink:0;}
+.sys-card-body{flex:1;min-width:0}
+.sys-card-title{display:block;font-size:15px;font-weight:700;color:var(--ink);}
+.sys-card-desc{display:block;font-size:13px;color:var(--ink-light);line-height:1.55;margin-top:3px;}
 
-.clone {
-  font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: .82rem;
-  color: var(--ink-soft); background: color-mix(in srgb, var(--card) 70%, transparent);
-  border: 1px solid var(--rule); border-radius: 8px; padding: 9px 13px;
-  overflow-x: auto; white-space: nowrap; max-width: 100%;
-}
+/* ── BOUTONS ─────────────────────────────────────── */
+.btn-submit{display:inline-flex;align-items:center;justify-content:center;gap:9px;width:100%;background:linear-gradient(135deg, var(--ocean-mid) 0%, var(--teal) 50%, var(--emerald) 100%);color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;box-shadow:0 4px 14px rgba(10,61,98,0.3);transition:opacity .15s, transform .15s;font-family:inherit;}
+.btn-submit:hover{opacity:.92;transform:translateY(-1px)}
+.btn-second{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;background:var(--mist);color:var(--ocean-mid);border:1.5px solid var(--teal-light);border-radius:12px;padding:12px;font-size:14px;font-weight:600;transition:background .15s;font-family:inherit;}
+.btn-second:hover{background:var(--sage);border-color:var(--teal)}
+.btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.btn-row>*{flex:1;min-width:200px}
+.fab{position:fixed;bottom:24px;right:24px;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg, var(--ocean-mid), var(--emerald));color:#fff;font-size:24px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(10,61,98,0.4);z-index:100;transition:transform .2s, box-shadow .2s;}
+.fab:hover{transform:scale(1.08);box-shadow:0 8px 28px rgba(10,61,98,0.5)}
 
-/* ── Chiffres ──────────────────────────────────────────── */
-.facts {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
-  background: var(--rule); border: 1px solid var(--rule); border-radius: 12px; overflow: hidden;
-  margin-top: 8px;
-}
-.fact { background: var(--paper); padding: 18px 20px; }
-.fact b {
-  display: block; font-family: 'Playfair Display', Georgia, serif; font-weight: 700;
-  font-size: 1.7rem; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--ink);
-}
-.fact span { font-family: 'IBM Plex Mono', monospace; font-size: .68rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-soft); }
-@media (max-width: 720px) { .facts { grid-template-columns: repeat(2, 1fr); } }
+/* ── TERMINAL & PROFIL ───────────────────────────── */
+.shell{background:var(--ink);color:#dff2ee;border-radius:12px;padding:16px 18px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;line-height:1.95;white-space:pre;overflow-x:auto;margin-top:14px;}
+.shell .p{color:var(--accent);font-weight:600}
+.shell .c{color:var(--teal-light);opacity:.75}
+.elev{margin-top:14px;background:var(--mist);border:1px solid var(--sand);border-radius:12px;padding:12px 14px 10px;}
+.elev-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--ink-light);font-weight:600;margin-bottom:4px;}
+#profile{width:100%;height:120px;display:block}
+.elev-stats{display:flex;gap:0;margin-top:14px;border-top:1px solid var(--sand);padding-top:12px;}
+.elev-stat{flex:1;text-align:center;position:relative;}
+.elev-stat:not(:last-child)::after{content:'';position:absolute;right:0;top:15%;height:70%;width:1px;background:var(--sand);}
+.elev-stat-num{font-family:'Playfair Display',serif;font-size:19px;font-weight:700;color:var(--ocean-mid);line-height:1;}
+.elev-stat-lbl{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--ink-light);margin-top:4px;}
+.clone{margin-top:10px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;color:var(--ink-light);background:var(--mist);border:1px solid var(--sand);border-radius:10px;padding:9px 12px;overflow-x:auto;white-space:nowrap;}
 
-/* ── L'affiche, en ouverture ───────────────────────────── */
-.hero-figure { margin-top: clamp(34px, 5vw, 56px); }
-.hero-figure img { width: 100%; border-radius: 10px; border: 1px solid var(--rule); box-shadow: var(--shadow); }
-figcaption {
-  font-family: 'IBM Plex Mono', monospace; font-size: .74rem; color: var(--ink-soft);
-  margin-top: 10px; line-height: 1.55; max-width: 78ch;
-}
+/* ── DEUX IMAGES CÔTE À CÔTE ─────────────────────── */
+.duo{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.duo figure{background:var(--mist);border:1px solid var(--sand);border-radius:12px;overflow:hidden}
+.duo figcaption{font-size:11px;color:var(--ink-light);padding:7px 10px;text-align:center;line-height:1.45}
+@media(max-width:560px){.duo{grid-template-columns:1fr}}
 
-/* ── Le profil du voyage, en séparateur ────────────────── */
-.profile-band { border: 1px solid var(--rule); border-radius: 12px; background: color-mix(in srgb, var(--card) 60%, transparent); margin: 26px 0 0; }
-.profile-band .wrap { padding: 20px 24px; max-width: none; }
-.profile-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 6px; }
-#profile { width: 100%; height: 132px; display: block; }
-.profile-scale { display: flex; justify-content: space-between; font-family: 'IBM Plex Mono', monospace; font-size: .68rem; color: var(--ink-soft); }
+/* ── PIED ────────────────────────────────────────── */
+.foot{border-top:1px solid var(--sand);background:#fff;padding:28px 14px 40px;text-align:center;}
+.foot p{font-size:13px;color:var(--ink-light);max-width:60ch;margin:0 auto 12px;line-height:1.7}
+.foot-links{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.foot-links a{font-size:12px;font-weight:600;color:var(--ink-mid);padding:6px 12px;border-radius:20px;border:1.5px solid var(--sand);background:var(--mist);transition:all .2s}
+.foot-links a:hover{background:var(--sage);color:var(--ocean);border-color:var(--teal-light)}
 
-/* ── Sections ──────────────────────────────────────────── */
-section.band { padding: clamp(56px, 8vw, 96px) 0; }
-section.band + section.band { border-top: 1px solid var(--rule); }
-.sec-head { display: flex; flex-direction: column; gap: 12px; margin-bottom: 34px; max-width: 62ch; }
-
-.split { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(28px, 4vw, 52px); align-items: center; }
-.split.reverse .split-media { order: -1; }
-@media (max-width: 860px) { .split, .split.reverse .split-media { grid-template-columns: 1fr; order: 0; } }
-.split-media img { border-radius: 10px; border: 1px solid var(--rule); box-shadow: var(--shadow); }
-.split-text { display: flex; flex-direction: column; gap: 16px; }
-
-.notes { display: flex; flex-direction: column; gap: 14px; margin: 0; padding: 0; list-style: none; }
-.notes li { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start; color: var(--ink-soft); }
-.notes li::before {
-  content: ""; width: 7px; height: 7px; border-radius: 50%; margin-top: .55em;
-  background: var(--trace); flex: none;
-}
-.notes b { color: var(--ink); font-weight: 500; }
-
-.cards.two { grid-template-columns: repeat(2, 1fr); }
-@media (max-width: 720px) { .cards.two { grid-template-columns: 1fr; } }
-.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 18px; }
-.card {
-  background: var(--card); border: 1px solid var(--rule); border-radius: 12px;
-  padding: 22px 24px; display: flex; flex-direction: column; gap: 9px;
-}
-.card p { font-size: .95rem; color: var(--ink-soft); }
-.card .tag { font-family: 'IBM Plex Mono', monospace; font-size: .68rem; letter-spacing: .1em; text-transform: uppercase; color: var(--trace); }
-
-.duo { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 34px; }
-@media (max-width: 720px) { .duo { grid-template-columns: 1fr; } }
-.duo img { border-radius: 10px; border: 1px solid var(--rule); box-shadow: var(--shadow); }
-
-/* ── Bloc terminal ─────────────────────────────────────── */
-.terminal {
-  background: var(--sea-deep); color: #dbeeea; border-radius: 12px; padding: 24px 26px;
-  font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: .87rem; line-height: 1.95;
-  white-space: pre; overflow-x: auto; border: 1px solid color-mix(in srgb, var(--sea) 40%, transparent);
-}
-:root[data-theme="dark"] .terminal, :root:not([data-theme="light"]) .terminal { color: #0e1e1d; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .terminal { background: #bfe4de; border-color: #8fbfb8; } }
-:root[data-theme="dark"] .terminal { background: #bfe4de; border-color: #8fbfb8; }
-.terminal .c { opacity: .78; }
-.terminal .p { color: var(--trace); }
-:root[data-theme="dark"] .terminal .p { color: #a8402a; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .terminal .p { color: #a8402a; } }
-
-.steps { margin-top: 30px; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 22px; }
-.step { display: flex; flex-direction: column; gap: 8px; padding-top: 16px; border-top: 2px solid var(--trace); }
-.step p { font-size: .93rem; color: var(--ink-soft); }
-.step code, p code, li code {
-  font-family: 'IBM Plex Mono', monospace; font-size: .85em;
-  background: color-mix(in srgb, var(--sea) 10%, transparent); padding: 1px 6px; border-radius: 5px;
-}
-
-/* ── Pied ──────────────────────────────────────────────── */
-footer { border-top: 1px solid var(--rule); padding: 44px 0 64px; }
-.foot-in { display: flex; flex-wrap: wrap; gap: 18px 40px; justify-content: space-between; align-items: flex-start; }
-footer p { font-size: .88rem; color: var(--ink-soft); max-width: 46ch; }
-.foot-links { display: flex; flex-direction: column; gap: 7px; font-size: .9rem; }
-
-@media (prefers-reduced-motion: reduce) {
-  * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
-}
+@media (prefers-reduced-motion: reduce){*{animation-duration:.001ms!important;transition-duration:.001ms!important}}
 </style>
 </head>
 <body>
 
-<header class="hero">
-  <div class="wrap hero-inner">
-    <p class="eyebrow">Carnet de voyage à vélo · à héberger soi-même</p>
-    <h1>Le soir, vous postez l'étape.<br><span>La maison la lit dans la minute.</span></h1>
-    <p class="lede hero-lede">
-      Un site de voyage tenu depuis le guidon : titre, récit, photos, position GPS et trace du
-      jour, envoyés du téléphone sous la tente. Vos proches suivent sur une page qui leur est
-      réservée, commentent, s'abonnent aux nouvelles. Tout tourne sur votre serveur, dans des
-      fichiers JSON. Pas de base de données, pas de compte à créer, pas de mouchard.
-    </p>
-
-    <div class="cta-row">
-      <a class="btn btn-primary" href="https://github.com/tmilefr/velo-journal/archive/refs/heads/main.zip">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 1.8v9M4.4 7.4 8 11l3.6-3.6M2.2 13.2h11.6"/></svg>
-        Télécharger le projet
-      </a>
-      <a class="btn btn-ghost" href="https://github.com/tmilefr/velo-journal">Voir le code sur GitHub</a>
+<div class="header">
+  <div class="header-inner">
+    <div class="header-title-block">
+      <a href="#haut" class="wordmark"><span class="bike">🚲</span> Velo Journal</a>
+      <span class="header-sub">Carnet de voyage à vélo, auto-hébergé</span>
     </div>
-    <div class="clone">git clone https://github.com/tmilefr/velo-journal.git</div>
-
-    <div class="facts">
-      <div class="fact"><b>0</b><span>base de données</span></div>
-      <div class="fact"><b>7</b><span>dépendances npm</span></div>
-      <div class="fact"><b>11 148</b><span>lignes de JavaScript</span></div>
-      <div class="fact"><b>2 min</b><span>pour l'essayer</span></div>
-    </div>
-
-    <figure class="hero-figure">
-      <img src="img/affiche.jpg" width="1800" height="1275" alt="L'affiche A3 du voyage : la trace orange de Nancy à Venise sur un fond de carte épuré, une photo de chaque étape disposée tout autour du cadre et reliée par un fil à son point d'arrivée, avec le profil altimétrique en bas.">
-      <figcaption>L'affiche A3 du voyage, dessinée par le carnet à partir des traces GPX et de la photo favorite de chaque étape. Ici, le voyage de démonstration fourni avec le projet.</figcaption>
-    </figure>
+    <nav class="header-nav">
+      <a href="#carnet">📖 Le carnet</a>
+      <a href="#chiffres">📊 Les chiffres</a>
+      <a href="#proches">💬 Les proches</a>
+      <a href="#retour">🖼️ Après le retour</a>
+      <a href="#demo">🎒 La démo</a>
+      <a href="#telecharger" class="active">⬇️ Télécharger</a>
+    </nav>
+    <button class="hamburger" id="hamburger" aria-label="Menu" aria-expanded="false"><span></span><span></span><span></span></button>
   </div>
-</header>
+  <nav class="mobile-menu" id="mobileMenu">
+    <a href="#carnet">📖 Le carnet</a>
+    <a href="#chiffres">📊 Les chiffres</a>
+    <a href="#proches">💬 Les proches</a>
+    <a href="#retour">🖼️ Après le retour</a>
+    <a href="#demo">🎒 La démo</a>
+    <a href="#telecharger">⬇️ Télécharger</a>
+  </nav>
+</div>
 
+<div class="stats-bar">
+  <div class="stats-bike" aria-hidden="true"></div>
+  <div class="stats-bar-inner">
+    <div class="stat"><div class="stat-num">0</div><div class="stat-lbl">base de données</div></div>
+    <div class="stat"><div class="stat-num">7</div><div class="stat-lbl">dépendances</div></div>
+    <div class="stat"><div class="stat-num">11 148</div><div class="stat-lbl">lignes de js</div></div>
+    <div class="stat"><div class="stat-num">2 min</div><div class="stat-lbl">pour l'essayer</div></div>
+  </div>
+</div>
 
-<section class="band">
-  <div class="wrap">
-    <div class="sec-head">
-      <p class="eyebrow">Depuis le guidon</p>
-      <h2>Publier une étape prend deux minutes, sous la pluie</h2>
-      <p class="lede">La page de saisie est faite pour un téléphone tenu d'une main : le mot de passe
-      est retenu trente jours, la position se prend d'un bouton, les photos partent en lot.</p>
+<main class="feed" id="haut">
+
+  <div class="page-hero">
+    <h1>Le soir, vous postez l'étape.<br>La maison la lit dans la minute.</h1>
+    <p>Un carnet de voyage à vélo tenu depuis le guidon, hébergé chez vous. Vos proches
+    suivent sur une page qui leur est réservée, commentent, s'abonnent aux nouvelles.
+    Pas de base de données, pas de compte à créer, pas de mouchard.</p>
+  </div>
+
+  <article class="card">
+    <div class="card-head">
+      <span class="card-icon">🚲</span>
+      <div>
+        <span class="card-kicker">Ce que ça donne</span>
+        <h2>Un mois de selle, de Nancy à Venise</h2>
+      </div>
     </div>
-    <div class="split">
-      <div class="split-text">
-        <ul class="notes">
+    <div class="card-cover">
+      <img src="img/affiche.jpg" width="1800" height="1275" alt="L'affiche A3 du voyage : la trace orange de Nancy à Venise sur un fond de carte épuré, une photo de chaque étape disposée tout autour du cadre et reliée par un fil à son point d'arrivée, avec le profil altimétrique en bas.">
+    </div>
+    <span class="card-cover-cap">L'affiche A3 dessinée par le carnet, à partir des traces GPX et de la photo favorite de chaque étape</span>
+    <div class="card-body">
+      <div class="card-badges">
+        <span class="pill-loc">📍 5 pays</span>
+        <span class="pill-km">🚴 1 546 km</span>
+        <span class="pill-dp">⛰️ 9 450 m D+</span>
+      </div>
+      <div class="card-text">
+        <p>Titre, récit, photos, position GPS et trace du jour, envoyés du téléphone sous la
+        tente. Le carnet fait le reste : la carte, les statistiques, les notifications, et —
+        au retour — l'affiche, le livre photo et le diplôme.</p>
+        <p>Tout tourne sur votre serveur, dans des fichiers JSON. <b>Le voyage ci-dessus est
+        le carnet de démonstration fourni avec le projet</b> : une commande, et vous l'avez
+        sous les yeux.</p>
+      </div>
+      <div class="btn-row">
+        <a class="btn-submit" href="https://github.com/tmilefr/velo-journal/archive/refs/heads/main.zip">⬇️ Télécharger le projet</a>
+        <a class="btn-second" href="https://github.com/tmilefr/velo-journal">Voir le code sur GitHub</a>
+      </div>
+      <div class="clone">git clone https://github.com/tmilefr/velo-journal.git</div>
+    </div>
+  </article>
+
+  <article class="card" id="carnet">
+    <div class="card-head">
+      <span class="card-icon">📖</span>
+      <div>
+        <span class="card-kicker">Depuis le guidon</span>
+        <h2>Publier une étape prend deux minutes, sous la pluie</h2>
+      </div>
+    </div>
+    <div class="card-cover">
+      <img src="img/journal.jpg" width="1100" height="739" alt="La page famille : une étape avec sa date, son lieu, sa distance, son dénivelé, sa photo et son récit.">
+    </div>
+    <span class="card-cover-cap">La page famille — une étape, ses chiffres du jour, sa photo et son récit</span>
+    <div class="card-body">
+      <div class="card-text">
+        <p>La page de saisie est faite pour un téléphone tenu d'une main : le mot de passe est
+        retenu trente jours, la position se prend d'un bouton, les photos partent en lot.</p>
+        <ul>
           <li><span><b>Titre, récit, photos.</b> Jusqu'à dix médias par étape, redimensionnés à l'arrivée. Une photo mise en avant, une sélection pour le livre.</span></li>
           <li><span><b>La trace fait le calcul.</b> Déposez le GPX : distance, dénivelé et point d'arrivée en sont déduits, ainsi que les pays et régions traversés — au prorata quand l'étape passe une frontière.</span></li>
           <li><span><b>Les jours sans vélo comptent aussi.</b> Repos, étape à cheval sur deux journées, transfert en train : chacun est rangé à sa place et n'abîme pas les moyennes.</span></li>
           <li><span><b>Ce qui reste privé le reste.</b> Une étape peut n'être visible que de vous, et chaque étape porte une note d'intendance que personne d'autre ne lit.</span></li>
         </ul>
       </div>
-      <div class="split-media">
-        <img src="img/journal.jpg" width="1100" height="739" alt="La page famille : une étape avec sa date, son lieu, sa distance, son dénivelé, sa photo et son récit.">
-      </div>
     </div>
-  </div>
-</section>
+  </article>
 
-<section class="band">
-  <div class="wrap">
-    <div class="sec-head">
-      <p class="eyebrow">Ce que la trace raconte</p>
-      <h2>Les chiffres du voyage, sans tableur</h2>
-      <p class="lede">Deux pages réservées à l'administrateur. L'une compte les kilomètres, l'autre
-      les euros — et aucune des deux ne demande de saisir quoi que ce soit en double.</p>
-    </div>
-    <div class="split reverse">
-      <div class="split-media">
-        <img src="img/stats.jpg" width="1100" height="739" alt="La page Distances : la répartition du kilométrage par pays, drapeau par drapeau, puis par région, chaque ligne dépliable sur le détail des étapes.">
+  <article class="card" id="chiffres">
+    <div class="card-head">
+      <span class="card-icon">📊</span>
+      <div>
+        <span class="card-kicker">Ce que la trace raconte</span>
+        <h2>Les chiffres du voyage, sans tableur</h2>
       </div>
-      <div class="split-text">
-        <ul class="notes">
-          <li><span><b>Distances.</b> Jours roulés et jours de repos, moyennes, records, distance mois par mois, et le trajet total vélo + train.</span></li>
+    </div>
+    <div class="card-cover">
+      <img src="img/stats.jpg" width="1100" height="739" alt="La page Distances : la répartition du kilométrage par pays, drapeau par drapeau, puis par région, chaque ligne dépliable sur le détail des étapes.">
+    </div>
+    <span class="card-cover-cap">📏 Distances — le kilométrage pays par pays, puis région par région</span>
+    <div class="card-body">
+      <div class="card-text">
+        <ul>
+          <li><span><b>Jours roulés, jours de repos.</b> Moyennes, records, distance mois par mois, et le trajet total vélo + train — les kilomètres de rail comptés à part, pour ne pas gonfler les moyennes.</span></li>
           <li><span><b>Par pays et par région.</b> Neuf régions dans cinq pays sur le voyage de démonstration, cinq étapes à cheval sur une frontière comptées des deux côtés.</span></li>
-          <li><span><b>Finances.</b> Restaurant, hébergement (hôtel ou camping), nourriture, divers ; réparti par personne ; mois par mois. Les achats de préparation entrent dans le budget, pas dans les kilomètres.</span></li>
         </ul>
       </div>
     </div>
-    <div class="duo">
+  </article>
+
+  <article class="card">
+    <div class="card-head">
+      <span class="card-icon">💶</span>
+      <div>
+        <span class="card-kicker">L'autre compteur</span>
+        <h2>Le budget se tient tout seul</h2>
+      </div>
+    </div>
+    <div class="card-cover">
       <img src="img/finances.jpg" width="1100" height="739" alt="La page Finances : total dépensé, moyenne mensuelle et répartition par catégorie, chaque ligne dépliable sur le détail des dépenses.">
+    </div>
+    <span class="card-cover-cap">💶 Finances — par catégorie, par personne, mois par mois</span>
+    <div class="card-body">
+      <div class="card-badges">
+        <span class="pill-loc">🍽️ Restaurant</span>
+        <span class="pill-loc">🏨 Hébergement</span>
+        <span class="pill-loc">🛒 Nourriture</span>
+        <span class="pill-loc">🧳 Divers</span>
+      </div>
+      <div class="card-text">
+        <p>Les dépenses se saisissent sur l'étape du jour, en même temps que le récit. Hôtel et
+        camping se distinguent, chaque ligne dit qui a payé, et les achats de préparation entrent
+        dans le budget sans entrer dans les kilomètres.</p>
+      </div>
+    </div>
+  </article>
+
+  <article class="card" id="proches">
+    <div class="card-head">
+      <span class="card-icon">💬</span>
+      <div>
+        <span class="card-kicker">Ceux qui suivent</span>
+        <h2>Une page à partager, et rien à installer pour eux</h2>
+      </div>
+    </div>
+    <div class="card-cover">
       <img src="img/commentaires.jpg" width="1100" height="739" alt="La page Commentaires : tous les messages du carnet sur une page, avec une pastille par prénom indiquant le nombre de messages.">
     </div>
-  </div>
-</section>
+    <span class="card-cover-cap">💬 Commentaires — tout le carnet sur une page, filtrable par personne</span>
+    <div class="card-body">
+      <div class="card-text">
+        <ul>
+          <li><span><b>Un mot de Mamie, chaque soir.</b> Prénom et message, avec des réponses en fil. Le lien du filtre par personne se partage tel quel.</span></li>
+          <li><span><b>Un e-mail à chaque étape.</b> Inscription à double confirmation, désabonnement en un clic, validation à la main si le courriel se perd. De votre côté, une alerte dès qu'un commentaire arrive.</span></li>
+          <li><span><b>Un flux RSS.</b> Pour ceux qui vivent dans Feedly ou NetNewsWire et n'ont pas envie de changer d'habitude.</span></li>
+        </ul>
+        <p class="card-quote">« BRAVO !!! On a suivi toute l'année sur la carte de la classe. Merci pour les photos de chaque pays. » — un des 62 commentaires du carnet de démonstration</p>
+      </div>
+    </div>
+  </article>
 
-<section class="band">
-  <div class="wrap">
-    <div class="sec-head">
-      <p class="eyebrow">Ceux qui suivent</p>
-      <h2>Une page à partager, et rien à installer pour eux</h2>
-    </div>
-    <div class="cards">
-      <div class="card">
-        <span class="tag">Commentaires</span>
-        <h3>Un mot de Mamie, chaque soir</h3>
-        <p>Prénom et message, avec des réponses en fil. Une page rassemble tout le carnet, filtrable par personne — et le lien du filtre se partage tel quel.</p>
-      </div>
-      <div class="card">
-        <span class="tag">Abonnements</span>
-        <h3>Un e-mail à chaque étape</h3>
-        <p>Inscription à double confirmation, désabonnement en un clic, validation à la main si le courriel se perd. De votre côté, une alerte dès qu'un commentaire arrive.</p>
-      </div>
-      <div class="card">
-        <span class="tag">Flux RSS</span>
-        <h3>Pour les lecteurs équipés</h3>
-        <p>Le carnet publie un flux : ceux qui vivent dans Feedly ou NetNewsWire n'ont rien à changer à leurs habitudes.</p>
+  <article class="card" id="retour">
+    <div class="card-head">
+      <span class="card-icon">🖼️</span>
+      <div>
+        <span class="card-kicker">Après le retour</span>
+        <h2>Le voyage sort de l'écran</h2>
       </div>
     </div>
-  </div>
-</section>
-
-<section class="band">
-  <div class="wrap">
-    <div class="sec-head">
-      <p class="eyebrow">Après le retour</p>
-      <h2>Le voyage sort de l'écran</h2>
-      <p class="lede">Trois pièces imprimables, dessinées par le carnet à partir de vos propres
-      étapes : une affiche à encadrer, un livre à relier, un diplôme à offrir. Aperçu, impression
-      et export PNG sont la même image, dessinée sur un canvas.</p>
+    <div class="card-cover">
+      <img src="img/diplome.jpg" width="1300" height="921" alt="Le diplôme A4 paysage de Margot : 987 km, 14 jours de vélo, 70,5 km/jour de moyenne, 6 023 m de dénivelé, ses records, ses badges et la frise de ses journées.">
     </div>
-    <div class="split">
-      <div class="split-text">
-        <ul class="notes">
+    <span class="card-cover-cap">🏅 Le diplôme d'un compagnon de route monté en selle en chemin</span>
+    <div class="card-body">
+      <div class="card-text">
+        <p>Trois pièces imprimables, dessinées par le carnet à partir de vos propres étapes.
+        Aperçu, impression et export PNG sont la même image, dessinée sur un canvas : rien ne
+        peut déborder d'un cadre.</p>
+        <ul>
           <li><span><b>L'affiche A3.</b> Les traces sur un fond épuré ou les tuiles OpenStreetMap, la photo favorite de chaque étape posée au plus près de son point d'arrivée, reliée par un fil.</span></li>
-          <li><span><b>Le livre photo.</b> Une page A4 par étape : titre, chiffres du jour, récit et collage. Chaque photo garde sa forme, rien n'est rogné. La carte fait la couverture, le profil la quatrième.</span></li>
-          <li><span><b>Le diplôme.</b> Pour le compagnon de route monté en selle en chemin : ses kilomètres à lui, comptés depuis sa première étape, ses records, ses badges, et les mêmes chiffres traduits à hauteur d'enfant.</span></li>
+          <li><span><b>Le livre photo.</b> Une page A4 par étape : titre, chiffres du jour, récit et collage. Chaque photo garde sa forme, rien n'est rogné.</span></li>
+          <li><span><b>Le diplôme.</b> Il retrouve l'étape des retrouvailles par son nom de lieu — Nuremberg, Nürnberg — et ne compte qu'à partir de la première journée de vélo du compagnon.</span></li>
         </ul>
       </div>
-      <div class="split-media">
-        <img src="img/livre.jpg" width="700" height="990" alt="La couverture du livre photo : le titre du voyage, les dates, et la carte du parcours avec la trace du départ à l'arrivée.">
+      <div class="duo">
+        <figure>
+          <img src="img/livre.jpg" width="700" height="990" alt="La couverture du livre photo : le titre du voyage, les dates, et la carte du parcours avec la trace du départ à l'arrivée.">
+          <figcaption>La couverture du livre : le tracé sur une vraie carte</figcaption>
+        </figure>
+        <figure>
+          <img src="img/journal.jpg" width="1100" height="739" alt="Une page du carnet, telle qu'elle est reprise dans le livre photo.">
+          <figcaption>Chaque étape devient une page A4</figcaption>
+        </figure>
       </div>
     </div>
-    <figure class="hero-figure">
-      <img src="img/diplome.jpg" width="1300" height="921" alt="Le diplôme A4 paysage de Margot : 987 km, 14 jours de vélo, 70,5 km/jour de moyenne, 6 023 m de dénivelé, ses records, ses badges et la frise de ses journées.">
-      <figcaption>Le diplôme se remplit tout seul : il retrouve l'étape des retrouvailles par son nom de lieu — Nuremberg, Nürnberg — et ne compte qu'à partir de la première journée de vélo du compagnon.</figcaption>
-    </figure>
-  </div>
-</section>
+  </article>
 
-<section class="band">
-  <div class="wrap">
-    <div class="sec-head">
-      <p class="eyebrow">Essayer</p>
-      <h2>Un voyage de démonstration est fourni</h2>
-      <p class="lede">Pour voir le carnet plein plutôt que vide : <b>Nancy → Venise</b>, un mois de
-      selle fabriqué de toutes pièces par un script. Toutes les captures de cette page en sortent.</p>
+  <article class="card" id="demo">
+    <div class="card-head">
+      <span class="card-icon">🎒</span>
+      <div>
+        <span class="card-kicker">Essayer</span>
+        <h2>Un voyage de démonstration est fourni</h2>
+      </div>
     </div>
-    <div class="terminal"><span class="p">$</span> git clone https://github.com/tmilefr/velo-journal.git
+    <div class="card-body">
+      <div class="card-text">
+        <p>Pour voir le carnet plein plutôt que vide : <b>Nancy → Venise</b>, un mois de selle
+        fabriqué de toutes pièces par un script. Toutes les images de cette page en sortent.</p>
+      </div>
+      <div class="shell"><span class="p">$</span> git clone https://github.com/tmilefr/velo-journal.git
 <span class="p">$</span> cd velo-journal &amp;&amp; npm install
 <span class="p">$</span> npm run demo      <span class="c"># fabrique le carnet de démonstration</span>
 <span class="p">$</span> npm start         <span class="c"># http://localhost:3000</span></div>
-<div class="profile-band inside">
-  <div class="wrap">
-    <div class="profile-head">
-      <p class="eyebrow">Profil du voyage de démonstration</p>
-      <p class="eyebrow">1 546 km · 9 450 m D+ · 5 pays</p>
+      <div class="elev">
+        <div class="elev-head"><span>Profil du voyage de démonstration</span><span>Nancy → Venise</span></div>
+        <canvas id="profile" role="img" aria-label="Profil altimétrique du voyage de démonstration : plat jusqu'à Vienne, puis le pic du col du Vršič à 1 611 mètres avant la descente sur l'Adriatique."></canvas>
+        <div class="elev-stats">
+          <div class="elev-stat"><div class="elev-stat-num">29</div><div class="elev-stat-lbl">publications</div></div>
+          <div class="elev-stat"><div class="elev-stat-num">20</div><div class="elev-stat-lbl">traces GPX</div></div>
+          <div class="elev-stat"><div class="elev-stat-num">85</div><div class="elev-stat-lbl">photos</div></div>
+          <div class="elev-stat"><div class="elev-stat-num">62</div><div class="elev-stat-lbl">commentaires</div></div>
+        </div>
+      </div>
+      <div class="card-text">
+        <ul>
+          <li><span><b>Des traces calées sur les chiffres.</b> Elles serpentent jusqu'à mesurer exactement la distance annoncée, et leur relief donne le dénivelé annoncé : un recalcul depuis la page Système retrouve les mêmes valeurs.</span></li>
+          <li><span><b>Des photos dessinées à la volée</b>, en portrait et en paysage, pour que l'affiche et le livre aient de quoi se mettre en page.</span></li>
+          <li><span><b>Hors ligne.</b> Ni tuiles, ni géocodage, ni interrogation d'altitude : le carnet de démonstration s'installe dans un train. <code>npm run demo -- --clean</code> le retire.</span></li>
+        </ul>
+      </div>
     </div>
-    <canvas id="profile" aria-label="Profil altimétrique du voyage de démonstration, de Nancy à Venise : plat jusqu'à Vienne, puis le pic du col du Vršič à 1 611 mètres avant la descente sur l'Adriatique." role="img"></canvas>
-    <div class="profile-scale"><span>0 km</span><span>1 534 km</span></div>
+  </article>
+
+  <div class="stats-grid">
+    <div class="stat-card feature">
+      <div class="sc-icon">🗄️</div>
+      <div class="sc-num">Zéro base de données</div>
+      <div class="sc-lbl">Chez vous, pas chez nous</div>
+      <div class="sc-sub">Vos étapes sont un fichier JSON, vos photos un dossier. Rien à administrer, rien à migrer.</div>
+    </div>
+    <div class="stat-card"><div class="sc-icon">🔑</div><div class="sc-num">3</div><div class="sc-lbl">rôles</div><div class="sc-sub">Publier, lire en famille, et un accès facultatif pour un enfant qui écrit ses propres étapes.</div></div>
+    <div class="stat-card"><div class="sc-icon">🖥️</div><div class="sc-num">200 Mo</div><div class="sc-lbl">de serveur</div><div class="sc-sub">Node 20 sur le plus petit VPS. Nginx, Let's Encrypt, PM2 : la marche à suivre est dans le dépôt.</div></div>
   </div>
+
+  <div class="sys-cards">
+    <div class="sys-card">
+      <span class="sys-card-icon">💾</span>
+      <span class="sys-card-body">
+        <span class="sys-card-title">Sauvegarde en un clic</span>
+        <span class="sys-card-desc">Une archive ZIP complète — étapes et médias — se télécharge depuis le site, et se réinjecte de la même façon.</span>
+      </span>
+    </div>
+    <div class="sys-card">
+      <span class="sys-card-icon">🔒</span>
+      <span class="sys-card-body">
+        <span class="sys-card-title">Les précautions d'usage</span>
+        <span class="sys-card-desc">En-têtes Helmet, jeton CSRF sur chaque formulaire, échappement des saisies, cookie de session httpOnly et secure, connexion limitée à dix essais par quart d'heure.</span>
+      </span>
+    </div>
+    <div class="sys-card">
+      <span class="sys-card-icon">📐</span>
+      <span class="sys-card-body">
+        <span class="sys-card-title">Rattrapage a posteriori</span>
+        <span class="sys-card-desc">Ajouté une trace après coup ? Le recalcul reprend les distances et détecte les pays traversés, avec l'avancement affiché en direct.</span>
+      </span>
+    </div>
+  </div>
+
+  <article class="card" id="telecharger">
+    <div class="card-head">
+      <span class="card-icon">⬇️</span>
+      <div>
+        <span class="card-kicker">C'est à vous</span>
+        <h2>Prendre le projet et l'installer chez soi</h2>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="card-text">
+        <p>Le code est sur GitHub, l'installation pas à pas est dans le README : Node, Nginx,
+        Let's Encrypt, PM2, et le fichier <code>.env</code> à remplir. Comptez une soirée pour
+        avoir un carnet en ligne à votre nom.</p>
+      </div>
+      <div class="btn-row">
+        <a class="btn-submit" href="https://github.com/tmilefr/velo-journal/archive/refs/heads/main.zip">⬇️ Télécharger l'archive ZIP</a>
+        <a class="btn-second" href="https://github.com/tmilefr/velo-journal#readme">📘 Lire l'installation</a>
+      </div>
+      <div class="clone">git clone https://github.com/tmilefr/velo-journal.git</div>
+    </div>
+  </article>
+
+  <p class="stats-note">Velo Journal est un projet personnel, publié tel quel. Le dépôt ne porte
+  pas encore de fichier de licence : à ajouter avant de le diffuser largement.</p>
+
+</main>
+
+<div class="foot">
+  <p>Fait pour un voyage, gardé pour les suivants.</p>
+  <nav class="foot-links">
+    <a href="https://github.com/tmilefr/velo-journal">Le dépôt</a>
+    <a href="https://github.com/tmilefr/velo-journal/archive/refs/heads/main.zip">Archive ZIP</a>
+    <a href="https://github.com/tmilefr/velo-journal#readme">Installation</a>
+    <a href="https://github.com/tmilefr/velo-journal/tree/main/demo">Carnet de démonstration</a>
+  </nav>
 </div>
-    <div class="steps">
-      <div class="step">
-        <h3>29 publications</h3>
-        <p>3 articles de préparation et 26 étapes, avec jours de repos, étape sur deux jours et transfert en train.</p>
-      </div>
-      <div class="step">
-        <h3>20 traces GPX</h3>
-        <p>Fabriquées à partir de points de passage réels : elles serpentent jusqu'à mesurer exactement la distance annoncée, et leur relief donne le dénivelé annoncé.</p>
-      </div>
-      <div class="step">
-        <h3>85 photos</h3>
-        <p>Dessinées à la volée, en portrait et en paysage, pour que l'affiche et le livre aient de quoi se mettre en page.</p>
-      </div>
-      <div class="step">
-        <h3>Hors ligne</h3>
-        <p>Ni tuiles, ni géocodage, ni interrogation d'altitude : le carnet de démonstration s'installe dans un train. <code>npm run demo -- --clean</code> le retire.</p>
-      </div>
-    </div>
-  </div>
-</section>
 
-<section class="band">
-  <div class="wrap">
-    <div class="sec-head">
-      <p class="eyebrow">Chez vous</p>
-      <h2>Vos étapes restent des fichiers, sur votre machine</h2>
-    </div>
-    <div class="cards two">
-      <div class="card">
-        <span class="tag">Stockage</span>
-        <h3>Un JSON et un dossier de photos</h3>
-        <p>Aucune base à administrer, à migrer ou à sauvegarder de travers. Une archive ZIP complète se télécharge depuis le site, et se réinjecte de la même façon.</p>
-      </div>
-      <div class="card">
-        <span class="tag">Accès</span>
-        <h3>Deux mots de passe, trois rôles</h3>
-        <p>Un pour publier, un pour la page famille, un troisième facultatif pour un enfant qui écrit ses propres étapes. Rien de public par défaut.</p>
-      </div>
-      <div class="card">
-        <span class="tag">Défense</span>
-        <h3>Les précautions d'usage</h3>
-        <p>En-têtes Helmet, jeton CSRF sur chaque formulaire, échappement des saisies, cookie de session <code>httpOnly</code> et <code>secure</code>, connexion limitée à dix essais par quart d'heure.</p>
-      </div>
-      <div class="card">
-        <span class="tag">Serveur</span>
-        <h3>Node 20 et 200 Mo</h3>
-        <p>Le plus petit VPS suffit. Nginx en façade, Let's Encrypt pour le certificat, PM2 pour le garder allumé — la marche à suivre complète est dans le dépôt.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<footer>
-  <div class="wrap foot-in">
-    <p>
-      Velo Journal est un projet personnel, publié tel quel. Le dépôt ne porte pas encore de
-      fichier de licence : à ajouter avant de le diffuser largement.
-    </p>
-    <nav class="foot-links">
-      <a href="https://github.com/tmilefr/velo-journal">Le dépôt</a>
-      <a href="https://github.com/tmilefr/velo-journal/archive/refs/heads/main.zip">Télécharger l'archive ZIP</a>
-      <a href="https://github.com/tmilefr/velo-journal#readme">Installation pas à pas</a>
-      <a href="https://github.com/tmilefr/velo-journal/tree/main/demo">Le carnet de démonstration</a>
-    </nav>
-  </div>
-</footer>
+<a class="fab" href="#telecharger" aria-label="Aller au téléchargement">⬇</a>
 
 <script>
+// ── Menu mobile — même comportement que le carnet ─────────
+(function () {
+  var h = document.getElementById('hamburger');
+  var m = document.getElementById('mobileMenu');
+  if (!h || !m) return;
+  h.addEventListener('click', function (e) {
+    e.stopPropagation();
+    var open = m.classList.toggle('open');
+    h.classList.toggle('open', open);
+    h.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  m.addEventListener('click', function (e) {
+    if (e.target.tagName === 'A') { m.classList.remove('open'); h.classList.remove('open'); }
+  });
+  document.addEventListener('click', function (e) {
+    if (!h.contains(e.target) && !m.contains(e.target)) { m.classList.remove('open'); h.classList.remove('open'); }
+  });
+})();
+
 // ── Profil altimétrique du voyage de démonstration ────────
 // Les points viennent des traces GPX du carnet de démo : distance cumulée
 // (km) et altitude (m), un point tous les ~5 km.
 const PROFILE = [[0,215],[4.1,218],[8.4,217],[12.6,218],[16.9,226],[21.2,233],[25.4,233],[29.7,234],[34,239],[38.3,243],[42.6,244],[46.9,246],[51.1,254],[55.4,259],[59.6,259],[63.9,258],[68.1,264],[72.4,255],[76.7,240],[81,225],[85.2,212],[89.5,201],[93.4,189],[99,184],[105.1,184],[111.3,180],[117.4,174],[123.6,163],[129.7,162],[135.7,158],[141.6,148],[145.9,138],[151.1,141],[156.2,141],[161.4,135],[166.5,134],[171.7,136],[176.9,134],[182.1,129],[187.3,129],[192.6,127],[197.8,125],[203,122],[207.9,122],[213.1,120],[218.3,116],[223.4,117],[228.6,120],[233.1,126],[238.9,141],[244.8,151],[250.8,161],[256.8,178],[262.7,205],[268.4,210],[274.3,224],[280.2,239],[286.1,246],[292.2,248],[298.3,220],[304.2,203],[310.1,195],[316,182],[321.9,172],[326.4,153],[333.2,187],[340.1,186],[347,201],[353.9,223],[360.8,224],[368.4,245],[375.3,254],[382.3,282],[389.3,289],[395,311],[400.1,320],[406.1,341],[412,363],[417.8,376],[423.6,394],[429.4,413],[435.1,416],[441.1,411],[447.1,409],[453.1,417],[459.1,429],[465,429],[470.4,423],[474.7,426],[479.7,423],[484.7,416],[489.8,423],[494.8,416],[499.9,411],[505,419],[509.8,400],[515,390],[520.1,387],[525.3,376],[530.5,362],[535.6,360],[540.6,349],[545.7,328],[550.7,325],[555.8,315],[560,312],[564.5,319],[569.2,348],[574,348],[578.8,376],[583.5,375],[588.2,403],[592.9,401],[597.6,427],[602.3,415],[606.9,414],[611.6,406],[616.3,400],[620.9,395],[625.6,390],[630.3,383],[634.9,376],[639.6,371],[644.3,358],[649,360],[653.7,342],[658.4,349],[663,331],[668.4,335],[674.4,335],[680.3,333],[686.2,330],[692.1,328],[698.1,324],[704.1,322],[710.1,322],[716,322],[720.6,320],[725.9,321],[731,316],[736.1,316],[741.2,318],[746.4,312],[751.6,312],[756.6,317],[761.9,314],[767.2,306],[772.4,304],[777.6,310],[782.8,309],[788,303],[793.5,300],[798.6,303],[803.7,300],[808.8,293],[813.9,293],[817.9,288],[822.7,303],[827.7,308],[832.7,309],[837.7,312],[842.8,305],[847.8,301],[852.8,306],[857.8,299],[862.7,299],[867.6,295],[872.5,292],[877.4,293],[882.4,281],[887.4,283],[892.4,281],[897.3,277],[902.3,279],[907.2,266],[912.2,265],[916.3,261],[921,265],[925.7,252],[930.3,258],[935,246],[939.7,250],[944.4,242],[949.1,243],[953.8,237],[958.6,238],[963.2,232],[968,232],[972.7,226],[977.4,227],[982.1,220],[986.8,222],[991.5,216],[996.3,219],[1001.1,214],[1005.2,211],[1010.3,207],[1015.7,209],[1021.1,207],[1026.5,206],[1031.9,200],[1037.4,193],[1042.7,194],[1048.6,192],[1054,186],[1059.4,189],[1065,187],[1070.6,188],[1076.1,184],[1082,183],[1087.4,182],[1092.8,175],[1098.1,174],[1103.5,174],[1108.8,172],[1114.2,175],[1118.9,510],[1126.7,531],[1134.9,551],[1143,587],[1151.3,784],[1159.8,841],[1165.3,845],[1171.8,1322],[1179.4,1280],[1186.7,615],[1194.1,564],[1201.1,531],[1208.1,467],[1212.1,413],[1218.6,328],[1225,264],[1231.9,224],[1238.2,224],[1244.5,206],[1249.6,199],[1256.2,166],[1262.9,149],[1269.6,109],[1276.9,112],[1283.6,94],[1290.3,95],[1296.5,86],[1301.8,86],[1307.4,66],[1312.9,50],[1318.4,26],[1324.8,19],[1330.2,16],[1335.6,22],[1341.1,9],[1346.5,12],[1352,10],[1357.5,22],[1361.4,20],[1365.9,16],[1370.5,18],[1375,14],[1379.6,12],[1384.1,11],[1388.6,8],[1393.3,9],[1397.9,4],[1402.6,6],[1407.3,2],[1412.5,3],[1417.1,2],[1421.7,5],[1426.2,3],[1430.8,2],[1435.4,5],[1440,3],[1444.6,4],[1449.2,3],[1453.8,5],[1458.3,6],[1462.1,3],[1466.4,4],[1470.8,4],[1475.1,2],[1479.5,1],[1483.6,3],[1488,3],[1492.3,1],[1496.7,2],[1501.1,4],[1505.5,2],[1509.8,1],[1514.2,3],[1518.5,3],[1522.9,1],[1527.3,3],[1531.7,3],[1533.8,3]];
 const MARKS = [
-  [0, 'Nancy'], [144, 'Strasbourg'], [559, 'Nuremberg'],
+  [144, 'Strasbourg'], [559, 'Nuremberg'],
   [817, 'Passau'], [1117, 'Vienne'], [1188, 'Vršič'], [1534, 'Venise'],
 ];
 
@@ -451,7 +531,6 @@ const MARKS = [
   const ctx = cv.getContext('2d');
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   let progress = reduce ? 1 : 0;
-
   const readVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
   function draw() {
@@ -461,31 +540,27 @@ const MARKS = [
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
 
-    const trace = readVar('--trace') || '#c9572c';
-    const rule  = readVar('--rule')  || '#d6d4bd';
-    const soft  = readVar('--ink-soft') || '#5c7a75';
+    const line = readVar('--accent')     || '#e07a3a';
+    const rule = readVar('--sand')       || '#cce8e8';
+    const soft = readVar('--ink-light')  || '#5a8080';
 
-    const padTop = 16, padBottom = 22;
-    const maxKm  = PROFILE[PROFILE.length - 1][0];
-    const maxEle = 1700;
+    const padTop = 14, padBottom = 20;
+    const maxKm = PROFILE[PROFILE.length - 1][0], maxEle = 1750;
     const x = km => (km / maxKm) * w;
     const y = ele => padTop + (1 - ele / maxEle) * (h - padTop - padBottom);
 
-    // ligne de sol
     ctx.strokeStyle = rule; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(0, h - padBottom + .5); ctx.lineTo(w, h - padBottom + .5); ctx.stroke();
 
-    // repères de lieux
-    ctx.font = '500 10px "IBM Plex Mono", monospace';
+    ctx.font = '600 9px "DM Sans", sans-serif';
     ctx.fillStyle = soft; ctx.textAlign = 'center';
     MARKS.forEach(([km, name]) => {
       const px = x(km);
       ctx.strokeStyle = rule;
-      ctx.beginPath(); ctx.moveTo(px, padTop - 8); ctx.lineTo(px, h - padBottom); ctx.stroke();
-      ctx.fillText(name, Math.min(w - 26, Math.max(26, px)), h - 7);
+      ctx.beginPath(); ctx.moveTo(px, padTop - 6); ctx.lineTo(px, h - padBottom); ctx.stroke();
+      ctx.fillText(name, Math.min(w - 24, Math.max(24, px)), h - 6);
     });
 
-    // le tracé, révélé de gauche à droite
     const cut = maxKm * progress;
     const pts = PROFILE.filter(p => p[0] <= cut);
     if (pts.length < 2) return;
@@ -495,16 +570,15 @@ const MARKS = [
     pts.forEach(p => ctx.lineTo(x(p[0]), y(p[1])));
     ctx.lineTo(x(pts[pts.length - 1][0]), h - padBottom);
     ctx.closePath();
-    ctx.fillStyle = trace; ctx.globalAlpha = .13; ctx.fill(); ctx.globalAlpha = 1;
+    ctx.fillStyle = line; ctx.globalAlpha = .14; ctx.fill(); ctx.globalAlpha = 1;
 
     ctx.beginPath();
     pts.forEach((p, i) => i ? ctx.lineTo(x(p[0]), y(p[1])) : ctx.moveTo(x(p[0]), y(p[1])));
-    ctx.strokeStyle = trace; ctx.lineWidth = 1.8; ctx.lineJoin = 'round'; ctx.stroke();
+    ctx.strokeStyle = line; ctx.lineWidth = 1.8; ctx.lineJoin = 'round'; ctx.stroke();
 
-    // le point qui avance
     const last = pts[pts.length - 1];
     ctx.beginPath(); ctx.arc(x(last[0]), y(last[1]), 3.2, 0, Math.PI * 2);
-    ctx.fillStyle = trace; ctx.fill();
+    ctx.fillStyle = line; ctx.fill();
   }
 
   let started = false;
@@ -521,16 +595,16 @@ const MARKS = [
   }
 
   draw();
-  if (reduce) { /* pas d'animation */ }
-  else if ('IntersectionObserver' in window) {
-    new IntersectionObserver((es, o) => {
-      es.forEach(e => { if (e.isIntersecting) { ride(); o.disconnect(); } });
-    }, { threshold: .35 }).observe(cv);
-  } else ride();
+  if (!reduce) {
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver((es, o) => {
+        es.forEach(e => { if (e.isIntersecting) { ride(); o.disconnect(); } });
+      }, { threshold: .35 }).observe(cv);
+    } else ride();
+  }
 
   let tid;
   window.addEventListener('resize', () => { clearTimeout(tid); tid = setTimeout(draw, 120); });
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', draw);
 })();
 </script>
 </body>
