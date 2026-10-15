@@ -140,7 +140,6 @@ const CANVAS_KIT = ROUTE_KIT + `
       // et rien n'est téléchargé deux fois. L'attribut crossOrigin est
       // indispensable : sans lui le canvas serait « teinté » par les tuiles et
       // l'export PNG deviendrait impossible.
-      var TILE_HOSTS = ['a','b','c'];
       var TILE_MAX   = 360;   // plafond de politesse pour les serveurs d'OpenStreetMap
       var tiles = {};         // tuiles déjà chargées, par z/x/y
 
@@ -185,7 +184,7 @@ const CANVAS_KIT = ROUTE_KIT + `
             im.crossOrigin='anonymous';
             im.onload =function(){ tiles[key]=im;   t.img=im;   res(); };
             im.onerror=function(){ tiles[key]=null; t.img=null; res(); };
-            im.src='https://'+TILE_HOSTS[(t.x+t.y)%3]+'.tile.openstreetmap.org/'+z+'/'+t.x+'/'+t.y+'.png';
+            im.src='https://tile.openstreetmap.org/'+z+'/'+t.x+'/'+t.y+'.png';
           }).then(function(){
             if(onProgress) onProgress(++done, list.length);
             return worker();
