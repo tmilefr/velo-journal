@@ -18,6 +18,7 @@ const { renderLivre } = require('../views/livre');
 const { renderDiplome } = require('../views/diplome');
 const { diplomaData, parseHonours, DEFAULT_HONOURS } = require('../services/diploma');
 const { reliefGrid } = require('../services/relief');
+const { buildLivreDocx } = require('../services/livreDocx');
 
 const router = express.Router();
 
@@ -164,8 +165,8 @@ router.get('/affiche', requireAuth, (req, res) => {
 // Génère (côté client, sur canvas) un livre A4 : le tracé en couverture, une
 // page par étape — récit et collage de ses photos — et le profil altimétrique
 // en quatrième de couverture.
-router.get('/livre', requireAuth, (req, res) => {
-  const stages = readPosts()
+function livreStages() {
+  return readPosts()
     .filter(p => p.type !== 'preparation')
     .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
     .map(p => ({
@@ -183,8 +184,28 @@ router.get('/livre', requireAuth, (req, res) => {
       // par l'auteur ouvre le collage.
       photos:   orderPhotos(p),
     }));
-  res.send(renderLivre(stages, !!req.session.auth));
+}
+
+router.get('/livre', requireAuth, (req, res) => {
+  res.send(renderLivre(livreStages(), !!req.session.auth));
 });
+
+// Même livre au format Word : A4 paysage, le texte d'une étape sur une page,
+// ses photos sur la suivante.
+router.get('/livre.docx', requireAuth, async (req, res) => {
+  try {
+    const maxPhotos = Math.max(1, parseInt(req.query.photos, 10) || 99);
+    const buf = await buildLivreDocx(livreStages(), { maxPhotos });
+    res.setHeader('Content-Disposition', 'attachment; filename="livre-photo.docx"');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.send(buf);
+  } catch(e) {
+    console.error('[livre.docx]', e);
+    res.status(500).send('Impossible de générer le livre Word.');
+  }
+});
+
+
 
 // Photos d'une étape pour le livre, sans les vidéos. Si l'auteur en a retenu
 // (bouton 📖 du formulaire), ce sont celles-là, dans l'ordre du carnet ; sinon

@@ -75,6 +75,7 @@ function renderLivre(stages, isStrictAdmin = false) {
              <label class="liv-field"><input type="checkbox" id="livText" checked> Récit des étapes</label>
              <button class="liv-btn primary" id="livPrint" disabled>🖨️ Imprimer / PDF</button>
              <button class="liv-btn" id="livPng" disabled>⬇️ Pages en PNG</button>
+             <a class="liv-btn" id="livDocx" href="/livre.docx" style="text-decoration:none">📄 Word (paysage)</a>
              <span class="liv-status" id="livStatus">Chargement…</span>
            </div>
            <div class="liv-pages" id="livPages"></div>`}
@@ -94,6 +95,8 @@ ${CANVAS_KIT}
         sea:'#dceaef', land:'#eef0e4', border:'#9fb2ad', coast:'#4c7a80',
         track:'#e07a3a', card:'#ffffff', shadow:'rgba(26,58,58,0.20)'
       };
+      var dx=document.getElementById('livDocx'), ph=document.getElementById('livPhotos');
+      if(dx&&ph) ph.addEventListener('change', function(){ dx.href='/livre.docx?photos='+ph.value; });
       var THUMB = 520;         // les photos sont réduites à cette taille
 
       var el = {
