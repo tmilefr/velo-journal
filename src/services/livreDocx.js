@@ -65,7 +65,7 @@ function text(t, opts = {}) {
 // TRIP_START / TRIP_END sont des villes (« Paris → Rome »), pas des dates :
 // les dates du voyage viennent de la première et de la dernière étape.
 // Trois tirages éparpillés en bas de page, tirés au début, au milieu et à la fin.
-async function coverPage(stages, photosByStage) {
+async function coverPage(stages, picks) {
   const day = s => { try { return s && s.date ? formatDateShort(s.date) : ''; } catch(e) { return ''; } };
   const d1 = day(stages[0]), d2 = day(stages[stages.length - 1]);
   const route = [TRIP_START, TRIP_END].filter(Boolean).join('  →  ');
@@ -74,10 +74,6 @@ async function coverPage(stages, photosByStage) {
   const line = (t, size, before, extra = {}) => new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before },
     children: [text(t, { size, color: SOFT, ...extra })] });
 
-  const withPhotos = photosByStage.map((p, i) => ({ p, i })).filter(x => x.p.length);
-  const picks = [0, Math.floor((withPhotos.length - 1) / 2), withPhotos.length - 1]
-    .filter((v, i, arr) => withPhotos.length && arr.indexOf(v) === i)
-    .map(i => ({ ...withPhotos[i].p[0], caption: '' }));
   const anchorRuns = [];
   if (picks.length) {
     const { runs } = await placePolaroids(picks, { x: MARGIN, y: 7000, w: BOX_W, h: PAGE_H - MARGIN - 7000 - 100 },
@@ -152,20 +148,35 @@ async function photoPage(photos, caption, seed) {
 // stages : même forme que celle de la route /livre ; maxPhotos plafonne le
 // nombre de photos par étape.
 async function buildLivreDocx(stages, { maxPhotos = 99 } = {}) {
-  // Photos de chaque étape, chargées une fois (la couverture en réutilise)
-  const loadedByStage = [];
-  for (const s of stages) {
-    const urls = (s.photos || []).slice(0, maxPhotos);
-    const all = await Promise.all(urls.map(loadPhoto));
-    loadedByStage.push(all
-      .map((p, i) => p && { ...p, caption: String((s.captions || [])[i] || '').trim() })
-      .filter(Boolean));
-  }
+  // Mémoire : le livre se compose étape par étape, et seules les photos de
+  // l'étape en cours sont en mémoire (un livre entier d'un coup fait tomber
+  // un petit serveur). sharp n'a besoin ni de cache ni de plusieurs fils.
+  if (sharp) { sharp.cache(false); sharp.concurrency(1); }
+  const photosOf = s => (s.photos || []).slice(0, maxPhotos);
+  const loadStage = async s => {
+    const urls = photosOf(s), out = [];
+    for (let i = 0; i < urls.length; i++) {
+      const p = await loadPhoto(urls[i]);
+      if (p) out.push({ ...p, caption: String((s.captions || [])[i] || '').trim() });
+    }
+    return out;
+  };
 
-  const kids = [...await coverPage(stages, loadedByStage)];
+  // Couverture : la première photo du début, du milieu et de la fin du voyage
+  const withPhotos = stages.filter(s => photosOf(s).length);
+  const picks = [];
+  for (const s of [withPhotos[0], withPhotos[Math.floor((withPhotos.length - 1) / 2)], withPhotos[withPhotos.length - 1]]) {
+    if (!s) continue;
+    const p = await loadPhoto(photosOf(s)[0]);
+    if (p && !picks.some(q => q.url === photosOf(s)[0])) picks.push({ ...p, url: photosOf(s)[0], caption: '' });
+  }
+  const kids = [...await coverPage(stages, picks)];
+  picks.length = 0;
+
   for (let n = 0; n < stages.length; n++) {
-    const s = stages[n], loaded = loadedByStage[n];
+    const s = stages[n];
     kids.push(...await textPage(s, n + 1));
+    const loaded = await loadStage(s);
     for (let i = 0; i < loaded.length; i += PHOTOS_PER_PAGE) {
       const caption = [s.title, s.date ? formatDateShort(s.date) : ''].filter(Boolean).join(' — ');
       kids.push(...await photoPage(loaded.slice(i, i + PHOTOS_PER_PAGE), caption, (n + 1) * 31 + i));
