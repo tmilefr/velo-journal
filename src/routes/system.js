@@ -183,6 +183,8 @@ function livreStages() {
       // Les vidéos ne se dessinent pas sur un canvas ; la photo mise en avant
       // par l'auteur ouvre le collage.
       photos:   orderPhotos(p),
+      // Légendes de ces mêmes photos (l'index de p.captions suit p.photos)
+      captions: orderPhotos(p).map(u => (p.captions && p.captions[(p.photos || []).indexOf(u)]) || ''),
     }));
 }
 
