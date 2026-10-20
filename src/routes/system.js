@@ -195,6 +195,7 @@ router.get('/livre', requireAuth, (req, res) => {
 // Même livre au format Word : A4 paysage, le texte d'une étape sur une page,
 // ses photos sur la suivante.
 router.get('/livre.docx', requireAuth, async (req, res) => {
+  req.setTimeout(10 * 60 * 1000);   // un gros livre met plusieurs dizaines de secondes à se composer
   try {
     const maxPhotos = Math.max(1, parseInt(req.query.photos, 10) || 99);
     const buf = await buildLivreDocx(livreStages(), { maxPhotos });
