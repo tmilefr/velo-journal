@@ -11,7 +11,7 @@ const {
 } = require('docx');
 const { PUBLIC_DIR, TRIP_TITLE, TRIP_START, TRIP_END } = require('../config');
 const { formatDateShort } = require('../lib/dates');
-const { placePolaroids, pageDecor } = require('./scrapbook');
+const { placePolaroids, pageDecor, cleanText } = require('./scrapbook');
 let sharp; try { sharp = require('sharp'); } catch(e) { sharp = null; }
 
 // A4 paysage en DXA (1440 = 1 pouce), marges de 1,5 cm
@@ -59,7 +59,7 @@ async function loadPhoto(url) {
 }
 
 function text(t, opts = {}) {
-  return new TextRun({ text: t, font: 'Calibri', color: INK, ...opts });
+  return new TextRun({ text: cleanText(t), font: 'Calibri', color: INK, ...opts });
 }
 
 // TRIP_START / TRIP_END sont des villes (« Paris → Rome »), pas des dates :
@@ -155,13 +155,11 @@ async function buildLivreDocx(stages, { maxPhotos = 99 } = {}) {
   // Photos de chaque étape, chargées une fois (la couverture en réutilise)
   const loadedByStage = [];
   for (const s of stages) {
-    const loaded = [];
     const urls = (s.photos || []).slice(0, maxPhotos);
-    for (let i = 0; i < urls.length; i++) {
-      const p = await loadPhoto(urls[i]);
-      if (p) loaded.push({ ...p, caption: String((s.captions || [])[i] || '').trim() });
-    }
-    loadedByStage.push(loaded);
+    const all = await Promise.all(urls.map(loadPhoto));
+    loadedByStage.push(all
+      .map((p, i) => p && { ...p, caption: String((s.captions || [])[i] || '').trim() })
+      .filter(Boolean));
   }
 
   const kids = [...await coverPage(stages, loadedByStage)];

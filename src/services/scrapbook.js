@@ -22,6 +22,12 @@ function rng(seed) {
   return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
 }
 
+// Word refuse tout le fichier si un texte contient un caractère interdit en
+// XML (contrôles invisibles d'un copier-coller, substituts isolés…).
+const cleanText = t => String(t == null ? '' : t)
+  .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, '')
+  .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '');
+
 const rotate = (x, y, deg) => {
   const a = deg * Math.PI / 180;
   return [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a)];
@@ -31,10 +37,12 @@ const rotate = (x, y, deg) => {
 function floatingImage({ type, data, w, h, cx, cy, angle = 0, z }) {
   return new ImageRun({
     type, data,
-    transformation: { width: Math.round(w / 15), height: Math.round(h / 15), rotation: Math.round(angle * 10) / 10 },
+    // Word écrit l'angle entre 0 et 360°, en entier : par quarts de degré, le calcul
+    // en 60 000e de degré reste exact (sinon « 228000.0000001 » et Word refuse le fichier)
+    transformation: { width: Math.round(w / 15), height: Math.round(h / 15), rotation: ((Math.round(angle * 4) / 4) % 360 + 360) % 360 },
     floating: {
-      horizontalPosition: { relative: HorizontalPositionRelativeFrom.PAGE, offset: EMU(cx - w / 2) },
-      verticalPosition:   { relative: VerticalPositionRelativeFrom.PAGE,   offset: EMU(cy - h / 2) },
+      horizontalPosition: { relative: HorizontalPositionRelativeFrom.PAGE, offset: Math.max(0, EMU(cx - w / 2)) },
+      verticalPosition:   { relative: VerticalPositionRelativeFrom.PAGE,   offset: Math.max(0, EMU(cy - h / 2)) },
       allowOverlap: true, behindDocument: false,
       wrap: { type: TextWrappingType.NONE },
       zIndex: z,
@@ -104,7 +112,7 @@ function captionFrame(text, cx, y, width, font) {
       anchor: { horizontal: FrameAnchorType.PAGE, vertical: FrameAnchorType.PAGE },
       wrap: FrameWrap.NONE,
     },
-    children: [new TextRun({ text, font, size: 20, italics: true, color: '5A8080' })],
+    children: [new TextRun({ text: cleanText(text), font, size: 20, italics: true, color: '5A8080' })],
   });
 }
 
@@ -117,7 +125,7 @@ async function placePolaroids(photos, area, grid, seed, { maxAngle = 5, font = '
   const hasCaption = photos.some(p => p.caption);
   const capH = hasCaption ? 620 : 0;                       // place sous le tirage
   const cellW = area.w / cols, cellH = area.h / rows;
-  const runs = [], captions = [];
+  const runs = [], captions = [], jobs = [];
 
   for (let i = 0; i < photos.length; i++) {
     const ph = photos[i];
@@ -149,22 +157,27 @@ async function placePolaroids(photos, area, grid, seed, { maxAngle = 5, font = '
     const cx = ccx0 + (rand() - 0.5) * slackX * 1.2;
     const cy = ccy0 - capH / 2 + (rand() - 0.5) * slackY * 1.2;
 
-    const img = await polaroidImage(ph, Math.round(dims.pw), Math.round(dims.ph), dims.f, dims.bottom);
-    // L'image est centrée sur la carte : on la pose par son centre, elle pivote autour.
-    runs.push(floatingImage({ type: 'jpg', data: img.data, w: img.w, h: img.h, cx, cy, angle, z: 10 + i }));
-
-    // Ruban : au milieu du bord haut de la carte, de travers
-    if (rand() < 0.8) {
-      const tape = await tapeImage(TAPE_COLORS[Math.floor(rand() * TAPE_COLORS.length)]);
-      const [ox, oy] = rotate(0, -dims.ch / 2 + 40, angle);
-      runs.push(floatingImage({ type: 'png', data: tape.data, w: tape.w, h: tape.h,
-        cx: cx + ox, cy: cy + oy, angle: angle + (rand() - 0.5) * 22, z: 100 + i }));
-    }
+    // Ruban au milieu du bord haut de la carte, de travers (tirage fait ici : même résultat à chaque export)
+    const tapeColor = rand() < 0.8 ? TAPE_COLORS[Math.floor(rand() * TAPE_COLORS.length)] : null;
+    const tapeTilt = (rand() - 0.5) * 22;
+    // Les images se fabriquent en parallèle (sharp travaille hors du thread principal)
+    jobs.push((async () => {
+      const img = await polaroidImage(ph, Math.round(dims.pw), Math.round(dims.ph), dims.f, dims.bottom);
+      const out = [floatingImage({ type: 'jpg', data: img.data, w: img.w, h: img.h, cx, cy, angle, z: 10 + i })];
+      if (tapeColor) {
+        const tape = await tapeImage(tapeColor);
+        const [ox, oy] = rotate(0, -dims.ch / 2 + 40, angle);
+        out.push(floatingImage({ type: 'png', data: tape.data, w: tape.w, h: tape.h,
+          cx: cx + ox, cy: cy + oy, angle: angle + tapeTilt, z: 100 + i }));
+      }
+      return out;
+    })());
     if (ph.caption) {
       const w = Math.min(cellW - 200, Math.max(dims.cw, 3200));
       captions.push(captionFrame(ph.caption, cx, cy + dims.bh / 2 + 70, w, font));
     }
   }
+  for (const out of await Promise.all(jobs)) runs.push(...out);
   return { runs, captions };
 }
 
@@ -179,4 +192,4 @@ async function pageDecor(seed, spec) {
   ];
 }
 
-module.exports = { placePolaroids, pageDecor };
+module.exports = { placePolaroids, pageDecor, cleanText };
