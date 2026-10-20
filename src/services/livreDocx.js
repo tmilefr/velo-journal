@@ -1,27 +1,25 @@
 // ── Livre photo au format Word (.docx), A4 paysage ────────
 // Deux pages par étape : le texte sur la première, les photos sur la
-// suivante (autant de pages de photos que nécessaire, 6 par page).
+// suivante (autant de pages de photos que nécessaire, 6 par page). Les photos
+// sont des tirages posés librement sur la page (voir scrapbook.js).
 const fs   = require('fs');
 const path = require('path');
 const {
-  Document, Packer, Paragraph, TextRun, ImageRun, Table, TableRow, TableCell,
-  AlignmentType, ShadingType, PageOrientation, PageBreak, WidthType, BorderStyle, VerticalAlign,
+  Document, Packer, Paragraph, TextRun,
+  AlignmentType, PageOrientation, BorderStyle,
   Footer, PageNumber,
 } = require('docx');
 const { PUBLIC_DIR, TRIP_TITLE, TRIP_START, TRIP_END } = require('../config');
 const { formatDateShort } = require('../lib/dates');
+const { placePolaroids, pageDecor } = require('./scrapbook');
 let sharp; try { sharp = require('sharp'); } catch(e) { sharp = null; }
 
 // A4 paysage en DXA (1440 = 1 pouce), marges de 1,5 cm
 const PAGE_W = 16838, PAGE_H = 11906, MARGIN = 850;
 const BOX_W = PAGE_W - 2 * MARGIN;          // zone utile, largeur
-const BOX_H = PAGE_H - 2 * MARGIN - 500;    // zone utile, hauteur (pied de page déduit)
-const PX_PER_DXA = 96 / 1440;               // les images se règlent en pixels à 96 dpi
 const PHOTOS_PER_PAGE = 6;
 
 const INK = '1A3A3A', SOFT = '5A8080', ACCENT = 'E07A3A';
-const NO_BORDER = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
-const NO_BORDERS = { top: NO_BORDER, bottom: NO_BORDER, left: NO_BORDER, right: NO_BORDER };
 
 // Du HTML de l'éditeur à des paragraphes de texte (même logique que le livre canvas)
 function textOf(html) {
@@ -66,7 +64,8 @@ function text(t, opts = {}) {
 
 // TRIP_START / TRIP_END sont des villes (« Paris → Rome »), pas des dates :
 // les dates du voyage viennent de la première et de la dernière étape.
-function coverPage(stages) {
+// Trois tirages éparpillés en bas de page, tirés au début, au milieu et à la fin.
+async function coverPage(stages, photosByStage) {
   const day = s => { try { return s && s.date ? formatDateShort(s.date) : ''; } catch(e) { return ''; } };
   const d1 = day(stages[0]), d2 = day(stages[stages.length - 1]);
   const route = [TRIP_START, TRIP_END].filter(Boolean).join('  →  ');
@@ -74,11 +73,22 @@ function coverPage(stages) {
   const dplus = stages.reduce((t, s) => t + (s.dplus || 0), 0);
   const line = (t, size, before, extra = {}) => new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before },
     children: [text(t, { size, color: SOFT, ...extra })] });
+
+  const withPhotos = photosByStage.map((p, i) => ({ p, i })).filter(x => x.p.length);
+  const picks = [0, Math.floor((withPhotos.length - 1) / 2), withPhotos.length - 1]
+    .filter((v, i, arr) => withPhotos.length && arr.indexOf(v) === i)
+    .map(i => ({ ...withPhotos[i].p[0], caption: '' }));
+  const anchorRuns = [];
+  if (picks.length) {
+    const { runs } = await placePolaroids(picks, { x: MARGIN, y: 7000, w: BOX_W, h: PAGE_H - MARGIN - 7000 - 100 },
+      [picks.length, 1], 7, { maxAngle: 7 });
+    anchorRuns.push(...runs);
+  }
   const out = [
-    new Paragraph({ spacing: { before: 2600 }, alignment: AlignmentType.CENTER,
-      children: [text(String(TRIP_TITLE || 'Carnet de voyage'), { size: 96, bold: true })] }),
+    new Paragraph({ spacing: { before: 1400 }, alignment: AlignmentType.CENTER,
+      children: [text(String(TRIP_TITLE || 'Carnet de voyage'), { size: 96, bold: true }), ...anchorRuns] }),
     new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 200 },
-      border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: ACCENT, space: 8 } },
+      border: { bottom: { style: BorderStyle.DASHED, size: 12, color: ACCENT, space: 8 } },
       children: [] }),
   ];
   if (route) out.push(line(route, 44, 400, { color: INK }));
@@ -97,17 +107,19 @@ function statsLine(s) {
   return parts.join('   ·   ');
 }
 
-// Page de texte d'une étape
-function textPage(s) {
+// Page de texte d'une étape : ruban sur le titre, étoile dans le coin
+async function textPage(s, seed) {
+  const decor = await pageDecor(seed, { tapeX: MARGIN + 1700, tapeY: MARGIN - 40, starX: PAGE_W - MARGIN - 700, starY: MARGIN + 650 });
   const kids = [
-    new Paragraph({ spacing: { after: 60 }, children: [text(s.title || 'Étape', { size: 56, bold: true })] }),
+    new Paragraph({ pageBreakBefore: true, spacing: { before: 420, after: 60 },
+      children: [text(s.title || 'Étape', { size: 56, bold: true }), ...decor] }),
   ];
   const meta = [s.date ? formatDateShort(s.date) : '', s.location].filter(Boolean).join('  —  ');
   if (meta) kids.push(new Paragraph({ spacing: { after: 60 }, children: [text(meta, { size: 28, color: SOFT })] }));
   const stats = statsLine(s);
   kids.push(new Paragraph({
     spacing: { after: 280 },
-    border: { bottom: { style: BorderStyle.SINGLE, size: 8, color: ACCENT, space: 6 } },
+    border: { bottom: { style: BorderStyle.DASHED, size: 10, color: ACCENT, space: 6 } },
     children: stats ? [text(stats, { size: 26, bold: true, color: ACCENT })] : [],
   }));
   const paras = textOf(s.body);
@@ -120,90 +132,45 @@ function textPage(s) {
   return kids;
 }
 
-// Page(s) de photos : une table de cellules à hauteur fixe, chaque photo
-// tenant dans sa cellule sans être rognée.
-function photoPage(photos, caption) {
-  const [cols, rows] = gridFor(photos.length);
-  const capH = 400;
-  const cellW = Math.floor(BOX_W / cols);
-  const cellH = Math.floor((BOX_H - capH) / rows);
-  const pad = 80;
-  const frame = 130;   // épaisseur du cadre blanc autour de la photo
-  // Place réservée sous chaque photo pour sa légende (deux lignes au plus)
-  const legH = photos.some(p => p.caption) ? 560 : 0;
-  const maxWpx = Math.floor((cellW - 2 * pad - 2 * frame) * PX_PER_DXA);
-  const maxHpx = Math.floor((cellH - 2 * pad - 2 * frame - legH) * PX_PER_DXA);
-
-  const trs = [];
-  for (let r = 0; r < rows; r++) {
-    const cells = [];
-    for (let c = 0; c < cols; c++) {
-      const ph = photos[r * cols + c];
-      let children = [new Paragraph({ children: [] })];
-      if (ph) {
-        const k = Math.min(maxWpx / ph.w, maxHpx / ph.h);
-        const w = Math.round(ph.w * k), h = Math.round(ph.h * k);
-        const frameW = Math.round(w / PX_PER_DXA) + 2 * frame;
-        // Cadre « tirage photo » : carte blanche, liseré fin et ombre portée
-        // à droite et en dessous, comme sur les pages du livre imprimé.
-        const edge = { style: BorderStyle.SINGLE, size: 4, color: 'D5DEDA' };
-        const shade = { style: BorderStyle.SINGLE, size: 14, color: 'B4C3BE' };
-        children = [
-          new Table({
-            alignment: AlignmentType.CENTER,
-            width: { size: frameW, type: WidthType.DXA }, columnWidths: [frameW],
-            rows: [new TableRow({ children: [new TableCell({
-              width: { size: frameW, type: WidthType.DXA },
-              shading: { type: ShadingType.CLEAR, fill: 'FFFFFF', color: 'auto' },
-              borders: { top: edge, left: edge, bottom: shade, right: shade },
-              margins: { top: frame, bottom: frame, left: frame, right: frame },
-              children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [
-                new ImageRun({ type: 'jpg', data: ph.data, transformation: { width: w, height: h } }),
-              ] })],
-            })] })],
-          }),
-          // Un tableau ne peut pas finir une cellule : ce paragraphe, réduit au minimum, le suit.
-          new Paragraph({ spacing: { before: 0, after: 0, line: 20, lineRule: 'exact' }, children: [new TextRun({ text: '', size: 2 })] }),
-        ];
-        if (ph.caption) {
-          children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 60 },
-            children: [text(ph.caption, { size: 20, italics: true, color: SOFT })] }));
-        }
-      }
-      cells.push(new TableCell({
-        width: { size: cellW, type: WidthType.DXA }, borders: NO_BORDERS,
-        verticalAlign: VerticalAlign.CENTER,
-        margins: { top: pad, bottom: pad, left: pad, right: pad },
-        children,
-      }));
-    }
-    trs.push(new TableRow({ height: { value: cellH, rule: 'exact' }, cantSplit: true, children: cells }));
-  }
+// Page de photos : des tirages posés de guingois (images flottantes) avec
+// leurs rubans adhésifs et leurs légendes. Le premier paragraphe porte les
+// images ; les légendes sont des cadres de texte positionnés sur la page.
+async function photoPage(photos, caption, seed) {
+  const top = MARGIN + 500;
+  const grid = photos.length <= 1 ? [1, 1] : photos.length === 2 ? [2, 1] : photos.length <= 4 ? [2, 2] : [3, 2];
+  const { runs, captions } = await placePolaroids(photos,
+    { x: MARGIN, y: top, w: BOX_W, h: PAGE_H - MARGIN - 300 - top }, grid, seed);
   return [
-    new Paragraph({ spacing: { after: 0 }, children: [text(caption, { size: 22, color: SOFT })] }),
-    new Table({ width: { size: cellW * cols, type: WidthType.DXA },
-      columnWidths: Array(cols).fill(cellW), borders: { ...NO_BORDERS, insideHorizontal: NO_BORDER, insideVertical: NO_BORDER },
-      rows: trs }),
+    new Paragraph({ pageBreakBefore: true, spacing: { after: 0 }, children: [text(caption, { size: 22, color: SOFT }), ...runs] }),
+    ...captions,
+    // Les cadres de légende s'accrochent au paragraphe qui les suit : ce paragraphe
+    // minuscule les garde sur cette page, avant le saut de page suivant.
+    new Paragraph({ spacing: { before: 0, after: 0, line: 20, lineRule: 'exact' }, children: [new TextRun({ text: '', size: 2 })] }),
   ];
 }
-
-const pageBreak = () => new Paragraph({ children: [new PageBreak()] });
 
 // stages : même forme que celle de la route /livre ; maxPhotos plafonne le
 // nombre de photos par étape.
 async function buildLivreDocx(stages, { maxPhotos = 99 } = {}) {
-  const kids = [...coverPage(stages)];
+  // Photos de chaque étape, chargées une fois (la couverture en réutilise)
+  const loadedByStage = [];
   for (const s of stages) {
-    kids.push(pageBreak(), ...textPage(s));
     const loaded = [];
     const urls = (s.photos || []).slice(0, maxPhotos);
     for (let i = 0; i < urls.length; i++) {
       const p = await loadPhoto(urls[i]);
       if (p) loaded.push({ ...p, caption: String((s.captions || [])[i] || '').trim() });
     }
+    loadedByStage.push(loaded);
+  }
+
+  const kids = [...await coverPage(stages, loadedByStage)];
+  for (let n = 0; n < stages.length; n++) {
+    const s = stages[n], loaded = loadedByStage[n];
+    kids.push(...await textPage(s, n + 1));
     for (let i = 0; i < loaded.length; i += PHOTOS_PER_PAGE) {
       const caption = [s.title, s.date ? formatDateShort(s.date) : ''].filter(Boolean).join(' — ');
-      kids.push(pageBreak(), ...photoPage(loaded.slice(i, i + PHOTOS_PER_PAGE), caption));
+      kids.push(...await photoPage(loaded.slice(i, i + PHOTOS_PER_PAGE), caption, (n + 1) * 31 + i));
     }
   }
 
