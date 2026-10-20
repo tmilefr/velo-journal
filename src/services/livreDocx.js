@@ -5,7 +5,7 @@ const fs   = require('fs');
 const path = require('path');
 const {
   Document, Packer, Paragraph, TextRun, ImageRun, Table, TableRow, TableCell,
-  AlignmentType, PageOrientation, PageBreak, WidthType, BorderStyle, VerticalAlign,
+  AlignmentType, ShadingType, PageOrientation, PageBreak, WidthType, BorderStyle, VerticalAlign,
   Footer, PageNumber,
 } = require('docx');
 const { PUBLIC_DIR, TRIP_TITLE, TRIP_START, TRIP_END } = require('../config');
@@ -128,10 +128,11 @@ function photoPage(photos, caption) {
   const cellW = Math.floor(BOX_W / cols);
   const cellH = Math.floor((BOX_H - capH) / rows);
   const pad = 80;
+  const frame = 130;   // épaisseur du cadre blanc autour de la photo
   // Place réservée sous chaque photo pour sa légende (deux lignes au plus)
-  const legH = photos.some(p => p.caption) ? 460 : 0;
-  const maxWpx = Math.floor((cellW - 2 * pad) * PX_PER_DXA);
-  const maxHpx = Math.floor((cellH - 2 * pad - legH) * PX_PER_DXA);
+  const legH = photos.some(p => p.caption) ? 560 : 0;
+  const maxWpx = Math.floor((cellW - 2 * pad - 2 * frame) * PX_PER_DXA);
+  const maxHpx = Math.floor((cellH - 2 * pad - 2 * frame - legH) * PX_PER_DXA);
 
   const trs = [];
   for (let r = 0; r < rows; r++) {
@@ -141,10 +142,29 @@ function photoPage(photos, caption) {
       let children = [new Paragraph({ children: [] })];
       if (ph) {
         const k = Math.min(maxWpx / ph.w, maxHpx / ph.h);
-        children = [new Paragraph({ alignment: AlignmentType.CENTER, children: [
-          new ImageRun({ type: 'jpg', data: ph.data,
-            transformation: { width: Math.round(ph.w * k), height: Math.round(ph.h * k) } }),
-        ] })];
+        const w = Math.round(ph.w * k), h = Math.round(ph.h * k);
+        const frameW = Math.round(w / PX_PER_DXA) + 2 * frame;
+        // Cadre « tirage photo » : carte blanche, liseré fin et ombre portée
+        // à droite et en dessous, comme sur les pages du livre imprimé.
+        const edge = { style: BorderStyle.SINGLE, size: 4, color: 'D5DEDA' };
+        const shade = { style: BorderStyle.SINGLE, size: 14, color: 'B4C3BE' };
+        children = [
+          new Table({
+            alignment: AlignmentType.CENTER,
+            width: { size: frameW, type: WidthType.DXA }, columnWidths: [frameW],
+            rows: [new TableRow({ children: [new TableCell({
+              width: { size: frameW, type: WidthType.DXA },
+              shading: { type: ShadingType.CLEAR, fill: 'FFFFFF', color: 'auto' },
+              borders: { top: edge, left: edge, bottom: shade, right: shade },
+              margins: { top: frame, bottom: frame, left: frame, right: frame },
+              children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [
+                new ImageRun({ type: 'jpg', data: ph.data, transformation: { width: w, height: h } }),
+              ] })],
+            })] })],
+          }),
+          // Un tableau ne peut pas finir une cellule : ce paragraphe, réduit au minimum, le suit.
+          new Paragraph({ spacing: { before: 0, after: 0, line: 20, lineRule: 'exact' }, children: [new TextRun({ text: '', size: 2 })] }),
+        ];
         if (ph.caption) {
           children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 60 },
             children: [text(ph.caption, { size: 20, italics: true, color: SOFT })] }));
@@ -189,6 +209,7 @@ async function buildLivreDocx(stages, { maxPhotos = 99 } = {}) {
 
   const doc = new Document({
     title: String(TRIP_TITLE || 'Livre photo'),
+    background: { color: 'FBFAF6' },
     sections: [{
       properties: { page: {
         size: { width: 11906, height: 16838, orientation: PageOrientation.LANDSCAPE },
