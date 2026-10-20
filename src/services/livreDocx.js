@@ -120,8 +120,10 @@ function photoPage(photos, caption) {
   const cellW = Math.floor(BOX_W / cols);
   const cellH = Math.floor((BOX_H - capH) / rows);
   const pad = 80;
+  // Place réservée sous chaque photo pour sa légende (deux lignes au plus)
+  const legH = photos.some(p => p.caption) ? 460 : 0;
   const maxWpx = Math.floor((cellW - 2 * pad) * PX_PER_DXA);
-  const maxHpx = Math.floor((cellH - 2 * pad) * PX_PER_DXA);
+  const maxHpx = Math.floor((cellH - 2 * pad - legH) * PX_PER_DXA);
 
   const trs = [];
   for (let r = 0; r < rows; r++) {
@@ -135,6 +137,10 @@ function photoPage(photos, caption) {
           new ImageRun({ type: 'jpg', data: ph.data,
             transformation: { width: Math.round(ph.w * k), height: Math.round(ph.h * k) } }),
         ] })];
+        if (ph.caption) {
+          children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 60 },
+            children: [text(ph.caption, { size: 20, italics: true, color: SOFT })] }));
+        }
       }
       cells.push(new TableCell({
         width: { size: cellW, type: WidthType.DXA }, borders: NO_BORDERS,
@@ -162,9 +168,10 @@ async function buildLivreDocx(stages, { maxPhotos = 99 } = {}) {
   for (const s of stages) {
     kids.push(pageBreak(), ...textPage(s));
     const loaded = [];
-    for (const url of (s.photos || []).slice(0, maxPhotos)) {
-      const p = await loadPhoto(url);
-      if (p) loaded.push(p);
+    const urls = (s.photos || []).slice(0, maxPhotos);
+    for (let i = 0; i < urls.length; i++) {
+      const p = await loadPhoto(urls[i]);
+      if (p) loaded.push({ ...p, caption: String((s.captions || [])[i] || '').trim() });
     }
     for (let i = 0; i < loaded.length; i += PHOTOS_PER_PAGE) {
       const caption = [s.title, s.date ? formatDateShort(s.date) : ''].filter(Boolean).join(' — ');
