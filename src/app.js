@@ -36,12 +36,14 @@ app.use(helmet({
       styleSrc:   ["'self'", "'unsafe-inline'", "fonts.googleapis.com", "unpkg.com"],
       fontSrc:    ["'self'", "fonts.gstatic.com"],
       // blob: → aperçus locaux (URL.createObjectURL) des photos/vidéos avant envoi
-      imgSrc:     ["'self'", "data:", "blob:", "*.tile.openstreetmap.org", "nominatim.openstreetmap.org"],
+      imgSrc:     ["'self'", "data:", "blob:", "*.tile.openstreetmap.org", "tile.openstreetmap.org", "nominatim.openstreetmap.org"],
       mediaSrc:   ["'self'", "blob:"],
       connectSrc: ["'self'", "nominatim.openstreetmap.org", "unpkg.com"],
     }
   },
   crossOriginEmbedderPolicy: false,
+  // OSM exige un Referer pour servir les tuiles (sinon 403 « Access blocked »)
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
 }));
 
 // ── Fichiers statiques ────────────────────────────────────

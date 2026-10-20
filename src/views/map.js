@@ -102,7 +102,7 @@ function renderMap(posts, isAdmin = false, isStrictAdmin = false, csrf = '') {
         if (!gpsData.length && !sleepData.length) return;
         const map = L.map('fullmap', { zoomControl: false, scrollWheelZoom: true });
         L.control.zoom({ position: 'bottomright' }).addTo(map);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(map);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(map);
         const pts = gpsData.map(p => [p.lat, p.lon]);
         // Les traces GPX d'abord, toutes ensemble : c'est seulement une fois
         // qu'on les a qu'on sait où le voyage a besoin d'un pointillé — d'une

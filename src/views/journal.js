@@ -76,7 +76,7 @@ function renderPublic(posts, isAdmin = false, csrf = '', isStrictAdmin = false) 
           function onTileLoaded(){loadedTiles++;redraw();if(loadedTiles>=totalTiles){var f=canvas.parentElement.querySelector('.gpx-map-lbl');if(f)f.textContent='🗺️ Trace GPX';}}
           for(var tx=tx0;tx<=tx1;tx++){for(var ty=ty0;ty<=ty1;ty++){
             if(tx<0||ty<0||tx>tileMax||ty>tileMax){loadedTiles++;continue;}
-            (function(tx,ty){var img=new Image();img.crossOrigin='anonymous';img.src='https://'+['a','b','c'][(tx+ty)%3]+'.tile.openstreetmap.org/'+z+'/'+tx+'/'+ty+'.png';
+            (function(tx,ty){var img=new Image();img.crossOrigin='anonymous';img.src='https://tile.openstreetmap.org/'+z+'/'+tx+'/'+ty+'.png';
             img.onload=function(){tiles.push({img:img,tx:tx,ty:ty});onTileLoaded();};img.onerror=function(){onTileLoaded();};})(tx,ty);
           }}
           function redraw(){
