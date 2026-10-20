@@ -5,7 +5,7 @@ const fs   = require('fs');
 const path = require('path');
 const {
   Document, Packer, Paragraph, TextRun, ImageRun, Table, TableRow, TableCell,
-  AlignmentType, PageOrientation, PageBreak, WidthType, BorderStyle, VerticalAlign,
+  AlignmentType, ShadingType, PageOrientation, PageBreak, WidthType, BorderStyle, VerticalAlign,
   Footer, PageNumber,
 } = require('docx');
 const { PUBLIC_DIR, TRIP_TITLE, TRIP_START, TRIP_END } = require('../config');
@@ -64,9 +64,16 @@ function text(t, opts = {}) {
   return new TextRun({ text: t, font: 'Calibri', color: INK, ...opts });
 }
 
-function coverPage() {
-  const dates = [TRIP_START, TRIP_END].filter(Boolean)
-    .map(d => { try { return formatDateShort(d); } catch(e) { return ''; } }).filter(Boolean);
+// TRIP_START / TRIP_END sont des villes (« Paris → Rome »), pas des dates :
+// les dates du voyage viennent de la première et de la dernière étape.
+function coverPage(stages) {
+  const day = s => { try { return s && s.date ? formatDateShort(s.date) : ''; } catch(e) { return ''; } };
+  const d1 = day(stages[0]), d2 = day(stages[stages.length - 1]);
+  const route = [TRIP_START, TRIP_END].filter(Boolean).join('  →  ');
+  const km = stages.reduce((t, s) => t + (s.km || 0), 0);
+  const dplus = stages.reduce((t, s) => t + (s.dplus || 0), 0);
+  const line = (t, size, before, extra = {}) => new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before },
+    children: [text(t, { size, color: SOFT, ...extra })] });
   const out = [
     new Paragraph({ spacing: { before: 2600 }, alignment: AlignmentType.CENTER,
       children: [text(String(TRIP_TITLE || 'Carnet de voyage'), { size: 96, bold: true })] }),
@@ -74,9 +81,10 @@ function coverPage() {
       border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: ACCENT, space: 8 } },
       children: [] }),
   ];
-  if (dates.length) {
-    out.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 400 },
-      children: [text(dates.join('  →  '), { size: 36, color: SOFT })] }));
+  if (route) out.push(line(route, 44, 400, { color: INK }));
+  if (d1 && d2) out.push(line(d1 === d2 ? d1 : `${d1}  →  ${d2}`, 32, 200));
+  if (stages.length) {
+    out.push(line(`${stages.length} étapes   ·   ${Math.round(km).toLocaleString('fr-FR')} km   ·   ${dplus.toLocaleString('fr-FR')} m D+`, 28, 300));
   }
   return out;
 }
@@ -120,10 +128,11 @@ function photoPage(photos, caption) {
   const cellW = Math.floor(BOX_W / cols);
   const cellH = Math.floor((BOX_H - capH) / rows);
   const pad = 80;
+  const frame = 130;   // épaisseur du cadre blanc autour de la photo
   // Place réservée sous chaque photo pour sa légende (deux lignes au plus)
-  const legH = photos.some(p => p.caption) ? 460 : 0;
-  const maxWpx = Math.floor((cellW - 2 * pad) * PX_PER_DXA);
-  const maxHpx = Math.floor((cellH - 2 * pad - legH) * PX_PER_DXA);
+  const legH = photos.some(p => p.caption) ? 560 : 0;
+  const maxWpx = Math.floor((cellW - 2 * pad - 2 * frame) * PX_PER_DXA);
+  const maxHpx = Math.floor((cellH - 2 * pad - 2 * frame - legH) * PX_PER_DXA);
 
   const trs = [];
   for (let r = 0; r < rows; r++) {
@@ -133,10 +142,29 @@ function photoPage(photos, caption) {
       let children = [new Paragraph({ children: [] })];
       if (ph) {
         const k = Math.min(maxWpx / ph.w, maxHpx / ph.h);
-        children = [new Paragraph({ alignment: AlignmentType.CENTER, children: [
-          new ImageRun({ type: 'jpg', data: ph.data,
-            transformation: { width: Math.round(ph.w * k), height: Math.round(ph.h * k) } }),
-        ] })];
+        const w = Math.round(ph.w * k), h = Math.round(ph.h * k);
+        const frameW = Math.round(w / PX_PER_DXA) + 2 * frame;
+        // Cadre « tirage photo » : carte blanche, liseré fin et ombre portée
+        // à droite et en dessous, comme sur les pages du livre imprimé.
+        const edge = { style: BorderStyle.SINGLE, size: 4, color: 'D5DEDA' };
+        const shade = { style: BorderStyle.SINGLE, size: 14, color: 'B4C3BE' };
+        children = [
+          new Table({
+            alignment: AlignmentType.CENTER,
+            width: { size: frameW, type: WidthType.DXA }, columnWidths: [frameW],
+            rows: [new TableRow({ children: [new TableCell({
+              width: { size: frameW, type: WidthType.DXA },
+              shading: { type: ShadingType.CLEAR, fill: 'FFFFFF', color: 'auto' },
+              borders: { top: edge, left: edge, bottom: shade, right: shade },
+              margins: { top: frame, bottom: frame, left: frame, right: frame },
+              children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [
+                new ImageRun({ type: 'jpg', data: ph.data, transformation: { width: w, height: h } }),
+              ] })],
+            })] })],
+          }),
+          // Un tableau ne peut pas finir une cellule : ce paragraphe, réduit au minimum, le suit.
+          new Paragraph({ spacing: { before: 0, after: 0, line: 20, lineRule: 'exact' }, children: [new TextRun({ text: '', size: 2 })] }),
+        ];
         if (ph.caption) {
           children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 60 },
             children: [text(ph.caption, { size: 20, italics: true, color: SOFT })] }));
@@ -164,7 +192,7 @@ const pageBreak = () => new Paragraph({ children: [new PageBreak()] });
 // stages : même forme que celle de la route /livre ; maxPhotos plafonne le
 // nombre de photos par étape.
 async function buildLivreDocx(stages, { maxPhotos = 99 } = {}) {
-  const kids = [...coverPage()];
+  const kids = [...coverPage(stages)];
   for (const s of stages) {
     kids.push(pageBreak(), ...textPage(s));
     const loaded = [];
@@ -181,6 +209,7 @@ async function buildLivreDocx(stages, { maxPhotos = 99 } = {}) {
 
   const doc = new Document({
     title: String(TRIP_TITLE || 'Livre photo'),
+    background: { color: 'FBFAF6' },
     sections: [{
       properties: { page: {
         size: { width: 11906, height: 16838, orientation: PageOrientation.LANDSCAPE },
