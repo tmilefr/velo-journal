@@ -75,7 +75,7 @@ function renderLivre(stages, isStrictAdmin = false) {
              <label class="liv-field"><input type="checkbox" id="livText" checked> Récit des étapes</label>
              <button class="liv-btn primary" id="livPrint" disabled>🖨️ Imprimer / PDF</button>
              <button class="liv-btn" id="livPng" disabled>⬇️ Pages en PNG</button>
-             <a class="liv-btn" id="livDocx" href="/livre.docx" style="text-decoration:none">📄 Word (paysage)</a>
+             <a class="liv-btn" id="livDocx" href="/livre.docx?photos=6" style="text-decoration:none">📄 Word (paysage)</a>
              <span class="liv-status" id="livStatus">Chargement…</span>
            </div>
            <div class="liv-pages" id="livPages"></div>`}

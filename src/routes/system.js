@@ -18,7 +18,7 @@ const { renderLivre } = require('../views/livre');
 const { renderDiplome } = require('../views/diplome');
 const { diplomaData, parseHonours, DEFAULT_HONOURS } = require('../services/diploma');
 const { reliefGrid } = require('../services/relief');
-const { buildLivreDocx } = require('../services/livreDocx');
+const { composeLivreDocx } = require('../services/livreDocxJob');
 
 const router = express.Router();
 
@@ -194,21 +194,25 @@ router.get('/livre', requireAuth, (req, res) => {
 
 // Même livre au format Word : A4 paysage, le texte d'une étape sur une page,
 // ses photos sur la suivante.
+// Un seul export à la fois : le composer demande beaucoup de mémoire, et un
+// second clic pendant l'attente ne doit pas doubler la charge du serveur.
+let livreDocxBusy = false;
 router.get('/livre.docx', requireAuth, async (req, res) => {
-  req.setTimeout(10 * 60 * 1000);   // un gros livre met plusieurs dizaines de secondes à se composer
+  if (livreDocxBusy) return res.status(429).send('Un livre Word est déjà en cours de création : patientez quelques minutes, puis réessayez.');
+  livreDocxBusy = true;
+  req.setTimeout(15 * 60 * 1000);   // un gros livre met plusieurs minutes à se composer
   try {
     const maxPhotos = Math.max(1, parseInt(req.query.photos, 10) || 99);
-    const buf = await buildLivreDocx(livreStages(), { maxPhotos });
-    res.setHeader('Content-Disposition', 'attachment; filename="livre-photo.docx"');
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-    res.send(buf);
+    // La composition se fait dans un processus fils ; le fichier est envoyé puis supprimé.
+    const file = await composeLivreDocx(livreStages(), maxPhotos);
+    res.download(file, 'livre-photo.docx', () => fs.unlink(file, () => {}));
   } catch(e) {
     console.error('[livre.docx]', e);
     res.status(500).send('Impossible de générer le livre Word.');
+  } finally {
+    livreDocxBusy = false;
   }
 });
-
-
 
 // Photos d'une étape pour le livre, sans les vidéos. Si l'auteur en a retenu
 // (bouton 📖 du formulaire), ce sont celles-là, dans l'ordre du carnet ; sinon
